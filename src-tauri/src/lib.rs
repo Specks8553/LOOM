@@ -142,6 +142,149 @@ async fn lock_vault(state: tauri::State<'_, AppState>) -> Result<(), LoomError> 
     Ok(())
 }
 
+/// Validate a Gemini API key and store it in AppState (memory only).
+#[tauri::command]
+async fn validate_and_store_api_key(
+    key: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    if key.trim().is_empty() {
+        return Err(LoomError::Validation("API key cannot be empty.".into()));
+    }
+
+    // Test the key against Gemini API
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+        key.trim()
+    );
+    let resp = reqwest::get(&url)
+        .await
+        .map_err(|e| LoomError::ApiRequest(e.to_string()))?;
+
+    if !resp.status().is_success() {
+        return Err(LoomError::ApiRequest(
+            "Key rejected by Gemini. Check and try again.".into(),
+        ));
+    }
+
+    // Store in memory
+    let mut api_guard = state.api_key.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock api key: {}", e))
+    })?;
+    *api_guard = Some(key.trim().to_string());
+
+    log::info!("API key validated and stored in memory");
+    Ok(())
+}
+
+/// Save the API key from AppState to the active world's settings table.
+#[tauri::command]
+async fn save_api_key_to_db(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let api_key = {
+        let guard = state.api_key.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock api key: {}", e))
+        })?;
+        guard.clone().ok_or(LoomError::ApiKeyMissing)?
+    };
+
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('api_key', ?1)",
+        rusqlite::params![api_key],
+    )?;
+
+    log::info!("API key persisted to world database");
+    Ok(())
+}
+
+/// Generate a recovery file JSON string.
+#[tauri::command]
+async fn generate_recovery_file() -> Result<String, LoomError> {
+    let app_config = config::read_app_config()?;
+    let recovery = serde_json::json!({
+        "loom_recovery_version": 1,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "pbkdf2_salt_hex": app_config.pbkdf2_salt_hex,
+        "pbkdf2_iterations": app_config.pbkdf2_iterations,
+        "pbkdf2_algorithm": "HMAC-SHA256",
+        "warning": "This file does NOT contain your password or encryption key."
+    });
+    Ok(serde_json::to_string_pretty(&recovery)?)
+}
+
+/// Restore app_config.json from a recovery file.
+/// User must provide a new password to re-derive the key.
+#[tauri::command]
+async fn restore_app_config(
+    recovery_json: String,
+    password: String,
+) -> Result<(), LoomError> {
+    if password.len() < 8 {
+        return Err(LoomError::Validation(
+            "Password must be at least 8 characters.".into(),
+        ));
+    }
+
+    let recovery: serde_json::Value = serde_json::from_str(&recovery_json)
+        .map_err(|e| LoomError::ConfigCorrupted(format!("Invalid recovery file: {}", e)))?;
+
+    let salt_hex = recovery["pbkdf2_salt_hex"]
+        .as_str()
+        .ok_or_else(|| LoomError::ConfigCorrupted("Missing pbkdf2_salt_hex".into()))?;
+    let iterations = recovery["pbkdf2_iterations"]
+        .as_u64()
+        .ok_or_else(|| LoomError::ConfigCorrupted("Missing pbkdf2_iterations".into()))?
+        as u32;
+
+    let salt = hex::decode(salt_hex)?;
+    let key = crypto::derive_key(&password, &salt, iterations);
+    let sentinel = crypto::create_sentinel(&key)?;
+
+    // Scan for existing world directories
+    let data_dir = config::app_data_dir()?;
+    let worlds_dir = data_dir.join("worlds");
+    let mut world_entries = Vec::new();
+
+    if worlds_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&worlds_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let world_id = entry.file_name().to_string_lossy().to_string();
+                    let meta_path = entry.path().join("world_meta.json");
+                    if meta_path.exists() {
+                        world_entries.push(config::WorldEntry {
+                            id: world_id.clone(),
+                            dir: format!("worlds/{}", world_id),
+                            deleted_at: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    let active_id = world_entries.first().map(|e| e.id.clone());
+
+    let new_config = config::AppConfig {
+        version: 1,
+        pbkdf2_salt_hex: salt_hex.to_string(),
+        pbkdf2_iterations: iterations,
+        key_check: sentinel,
+        active_world_id: active_id,
+        worlds: world_entries,
+    };
+
+    config::write_app_config_atomic(&new_config)?;
+    log::info!("App config restored from recovery file");
+    Ok(())
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -161,6 +304,10 @@ pub fn run() {
             list_worlds,
             unlock_vault,
             lock_vault,
+            validate_and_store_api_key,
+            save_api_key_to_db,
+            generate_recovery_file,
+            restore_app_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

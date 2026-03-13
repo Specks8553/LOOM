@@ -42,14 +42,5 @@
     "copyright": "Copyright © 2026",
     "category": "Productivity"
   },
-  "plugins": {
-    "dialog": {},
-    "fs": {
-      "scope": {
-        "allow": ["$APPDATA/**", "$RESOURCE/**"]
-      }
-    },
-    "shell": {},
-    "process": {}
-  }
+  "plugins": {}
 }
