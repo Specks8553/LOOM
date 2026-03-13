@@ -1,28 +1,7 @@
 import { create } from "zustand";
+import type { WorldMeta, VaultItemMeta } from "../lib/types";
 
-interface WorldMeta {
-  id: string;
-  name: string;
-  tags: string[];
-  cover_image: string | null;
-  accent_color: string;
-  created_at: string;
-  modified_at: string;
-  deleted_at: string | null;
-}
-
-interface VaultItemMeta {
-  id: string;
-  parent_id: string | null;
-  item_type: string;
-  item_subtype: string | null;
-  name: string;
-  description: string | null;
-  sort_order: number;
-  created_at: string;
-  modified_at: string;
-  deleted_at: string | null;
-}
+export type { WorldMeta, VaultItemMeta };
 
 interface VaultStore {
   worlds: WorldMeta[];
@@ -31,15 +10,19 @@ interface VaultStore {
   trashItems: VaultItemMeta[];
   expandedPaths: Set<string>;
   filterQuery: string;
+  selectedItems: Set<string>;
   setWorlds: (w: WorldMeta[]) => void;
   setActiveWorldId: (id: string | null) => void;
   setItems: (items: VaultItemMeta[]) => void;
   setTrashItems: (items: VaultItemMeta[]) => void;
   setFilterQuery: (q: string) => void;
+  toggleExpanded: (id: string) => void;
+  toggleSelected: (id: string) => void;
+  clearSelection: () => void;
   clearVault: () => void;
 }
 
-export const useVaultStore = create<VaultStore>((set) => {
+export const useVaultStore = create<VaultStore>((set, get) => {
   // Restore expanded paths from localStorage
   let savedPaths: Set<string> = new Set();
   try {
@@ -56,18 +39,44 @@ export const useVaultStore = create<VaultStore>((set) => {
     trashItems: [],
     expandedPaths: savedPaths,
     filterQuery: "",
+    selectedItems: new Set(),
 
     setWorlds: (w) => set({ worlds: w }),
     setActiveWorldId: (id) => set({ activeWorldId: id }),
     setItems: (items) => set({ items }),
     setTrashItems: (items) => set({ trashItems: items }),
     setFilterQuery: (q) => set({ filterQuery: q }),
+
+    toggleExpanded: (id) => {
+      const expanded = new Set(get().expandedPaths);
+      if (expanded.has(id)) {
+        expanded.delete(id);
+      } else {
+        expanded.add(id);
+      }
+      localStorage.setItem("vault_expanded_paths", JSON.stringify([...expanded]));
+      set({ expandedPaths: expanded });
+    },
+
+    toggleSelected: (id) => {
+      const selected = new Set(get().selectedItems);
+      if (selected.has(id)) {
+        selected.delete(id);
+      } else {
+        selected.add(id);
+      }
+      set({ selectedItems: selected });
+    },
+
+    clearSelection: () => set({ selectedItems: new Set() }),
+
     clearVault: () =>
       set({
         items: [],
         trashItems: [],
         activeWorldId: null,
         filterQuery: "",
+        selectedItems: new Set(),
       }),
   };
 });

@@ -1,22 +1,50 @@
 import { useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Lock } from "lucide-react";
+import { Lock, ChevronDown } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
+import { WorldPickerModal } from "../modals/WorldPickerModal";
+import { lockVault, listWorlds, vaultListItems } from "../../lib/tauriApi";
 
 /**
- * Placeholder Workspace — Phase 2.
- * Shows a simple top bar with Lock button and a centered message.
+ * Placeholder Workspace — Phase 2 / 4A.
+ * Shows a top bar with world name + Lock button and a centered message.
  * Will be replaced with the full 3-pane layout in Phase 5.
  */
 export function Workspace() {
   const setAppPhase = useUiStore((s) => s.setAppPhase);
+  const setWorldPickerOpen = useUiStore((s) => s.setWorldPickerOpen);
+  const activeWorldId = useVaultStore((s) => s.activeWorldId);
+  const worlds = useVaultStore((s) => s.worlds);
+  const setWorlds = useVaultStore((s) => s.setWorlds);
+  const setItems = useVaultStore((s) => s.setItems);
+  const setActiveWorldId = useVaultStore((s) => s.setActiveWorldId);
+
+  const activeWorld = worlds.find((w) => w.id === activeWorldId);
+
+  // Load worlds + items on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const w = await listWorlds();
+        setWorlds(w);
+        if (w.length > 0) {
+          const currentId = activeWorldId ?? w[0].id;
+          setActiveWorldId(currentId);
+          const items = await vaultListItems();
+          setItems(items);
+        }
+      } catch (e) {
+        console.error("Failed to load worlds on mount:", e);
+      }
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLock = useCallback(async () => {
     try {
-      await invoke("lock_vault");
+      await lockVault();
     } catch (e) {
       console.error("Failed to lock vault:", e);
     }
@@ -46,16 +74,31 @@ export function Workspace() {
           backgroundColor: "var(--color-bg-pane)",
         }}
       >
-        <span
-          className="tracking-[0.12em] font-semibold"
+        <button
+          onClick={() => setWorldPickerOpen(true)}
+          className="flex items-center gap-1.5 transition-colors duration-150"
           style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "4px 8px",
+            borderRadius: "4px",
             fontSize: "12px",
-            color: "var(--color-text-muted)",
-            letterSpacing: "0.12em",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            letterSpacing: "0.04em",
           }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+          title="Switch World"
         >
-          LOOM
-        </span>
+          {activeWorld?.name ?? "LOOM"}
+          <ChevronDown size={12} style={{ color: "var(--color-text-muted)" }} />
+        </button>
         <button
           onClick={handleLock}
           className="flex items-center gap-1.5 transition-colors duration-150"
@@ -93,7 +136,7 @@ export function Workspace() {
               fontWeight: 500,
             }}
           >
-            Workspace
+            {activeWorld?.name ?? "Workspace"}
           </p>
           <p
             style={{
@@ -105,6 +148,8 @@ export function Workspace() {
           </p>
         </div>
       </div>
+
+      <WorldPickerModal />
     </div>
   );
 }

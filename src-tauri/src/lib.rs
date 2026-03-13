@@ -3,10 +3,12 @@ mod crypto;
 mod db;
 mod error;
 mod state;
+mod vault;
 mod world;
 
 use error::LoomError;
 use state::AppState;
+use vault::VaultItemMeta;
 use world::WorldMeta;
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -18,14 +20,26 @@ async fn check_app_config() -> Result<bool, LoomError> {
 }
 
 /// Create a new app_config.json from a master password.
+/// Stores the derived master key in AppState so create_world can use it.
 #[tauri::command]
-async fn create_app_config(password: String) -> Result<(), LoomError> {
+async fn create_app_config(
+    password: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
     if password.len() < 8 {
         return Err(LoomError::Validation(
             "Password must be at least 8 characters.".into(),
         ));
     }
-    config::create_app_config(&password)
+    let key = config::create_app_config(&password)?;
+
+    // Store master key in AppState for subsequent commands (create_world, etc.)
+    let mut key_guard = state.master_key.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock master key: {}", e))
+    })?;
+    *key_guard = Some(key);
+
+    Ok(())
 }
 
 /// Create a new world.
@@ -285,6 +299,182 @@ async fn restore_app_config(
     Ok(())
 }
 
+// ─── World Management Commands ────────────────────────────────────────────────
+
+/// Switch to a different world.
+#[tauri::command]
+async fn switch_world(
+    world_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<WorldMeta, LoomError> {
+    world::switch_world(&state, &world_id)
+}
+
+/// Rename a world.
+#[tauri::command]
+async fn rename_world(world_id: String, name: String) -> Result<(), LoomError> {
+    if name.len() < 2 {
+        return Err(LoomError::Validation("World name must be at least 2 characters.".into()));
+    }
+    if name.len() > 80 {
+        return Err(LoomError::Validation("World name must be at most 80 characters.".into()));
+    }
+    world::rename_world(&world_id, &name)
+}
+
+/// Soft-delete a world.
+#[tauri::command]
+async fn delete_world(world_id: String) -> Result<(), LoomError> {
+    world::delete_world(&world_id)
+}
+
+/// Restore a soft-deleted world.
+#[tauri::command]
+async fn restore_world(world_id: String) -> Result<(), LoomError> {
+    world::restore_world(&world_id)
+}
+
+/// Permanently delete a world.
+#[tauri::command]
+async fn purge_world(world_id: String) -> Result<(), LoomError> {
+    world::purge_world(&world_id)
+}
+
+/// List all soft-deleted worlds.
+#[tauri::command]
+async fn list_deleted_worlds() -> Result<Vec<WorldMeta>, LoomError> {
+    world::list_deleted_worlds()
+}
+
+// ─── Vault Item Commands ──────────────────────────────────────────────────────
+
+/// List all non-deleted vault items in the active world.
+#[tauri::command]
+async fn vault_list_items(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<VaultItemMeta>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::list_items(conn)
+}
+
+/// List all soft-deleted vault items (trash).
+#[tauri::command]
+async fn vault_list_trash(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<VaultItemMeta>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::list_trash(conn)
+}
+
+/// Create a new vault item.
+#[tauri::command]
+async fn vault_create_item(
+    item_type: String,
+    name: String,
+    parent_id: Option<String>,
+    subtype: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<VaultItemMeta, LoomError> {
+    if name.trim().is_empty() {
+        return Err(LoomError::Validation("Item name cannot be empty.".into()));
+    }
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::create_item(conn, &item_type, name.trim(), parent_id.as_deref(), subtype.as_deref())
+}
+
+/// Rename a vault item.
+#[tauri::command]
+async fn vault_rename_item(
+    id: String,
+    name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    if name.trim().is_empty() {
+        return Err(LoomError::Validation("Item name cannot be empty.".into()));
+    }
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::rename_item(conn, &id, name.trim())
+}
+
+/// Move a vault item to a new parent with a new sort order.
+#[tauri::command]
+async fn vault_move_item(
+    id: String,
+    new_parent_id: Option<String>,
+    new_sort_order: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::move_item(conn, &id, new_parent_id.as_deref(), new_sort_order)
+}
+
+/// Soft-delete a vault item.
+#[tauri::command]
+async fn vault_soft_delete(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::soft_delete(conn, &id)
+}
+
+/// Restore a soft-deleted vault item.
+#[tauri::command]
+async fn vault_restore_item(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::restore_item(conn, &id)
+}
+
+/// Permanently delete a vault item.
+#[tauri::command]
+async fn vault_purge_item(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::purge_item(conn, &id)
+}
+
+/// Batch update sort order for vault items.
+#[tauri::command]
+async fn vault_update_sort_order(
+    items: Vec<(String, i64)>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::update_sort_order(conn, &items)
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -308,6 +498,23 @@ pub fn run() {
             save_api_key_to_db,
             generate_recovery_file,
             restore_app_config,
+            // Phase 4A: World management
+            switch_world,
+            rename_world,
+            delete_world,
+            restore_world,
+            purge_world,
+            list_deleted_worlds,
+            // Phase 4A: Vault item CRUD
+            vault_list_items,
+            vault_list_trash,
+            vault_create_item,
+            vault_rename_item,
+            vault_move_item,
+            vault_soft_delete,
+            vault_restore_item,
+            vault_purge_item,
+            vault_update_sort_order,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

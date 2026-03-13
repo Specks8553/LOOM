@@ -74,7 +74,8 @@ pub fn read_app_config() -> Result<AppConfig, LoomError> {
 
 /// Create a new app_config.json from a master password.
 /// Generates fresh salt, derives key, creates sentinel.
-pub fn create_app_config(password: &str) -> Result<(), LoomError> {
+/// Returns the derived key so the caller can store it in AppState.
+pub fn create_app_config(password: &str) -> Result<[u8; 32], LoomError> {
     let data_dir = app_data_dir()?;
     fs::create_dir_all(&data_dir)?;
 
@@ -93,9 +94,7 @@ pub fn create_app_config(password: &str) -> Result<(), LoomError> {
 
     write_app_config_atomic(&config)?;
 
-    // Key is on the stack; it will be zeroed when function returns
-    // (the caller stores the key if needed)
-    Ok(())
+    Ok(key)
 }
 
 /// Write app_config.json atomically (write .tmp then rename).
@@ -120,6 +119,38 @@ pub fn add_world_to_config(entry: WorldEntry) -> Result<(), LoomError> {
     }
 
     config.worlds.push(entry);
+    write_app_config_atomic(&config)?;
+    Ok(())
+}
+
+/// Update the active_world_id in app_config.json.
+pub fn set_active_world_id(id: Option<String>) -> Result<(), LoomError> {
+    let mut config = read_app_config()?;
+    config.active_world_id = id;
+    write_app_config_atomic(&config)?;
+    Ok(())
+}
+
+/// Set or clear the deleted_at field for a world entry in app_config.json.
+pub fn set_world_deleted(world_id: &str, deleted_at: Option<String>) -> Result<(), LoomError> {
+    let mut config = read_app_config()?;
+    let entry = config
+        .worlds
+        .iter_mut()
+        .find(|e| e.id == world_id)
+        .ok_or_else(|| LoomError::WorldNotFound(world_id.to_string()))?;
+    entry.deleted_at = deleted_at;
+    write_app_config_atomic(&config)?;
+    Ok(())
+}
+
+/// Remove a world entry from app_config.json entirely.
+pub fn remove_world_from_config(world_id: &str) -> Result<(), LoomError> {
+    let mut config = read_app_config()?;
+    config.worlds.retain(|e| e.id != world_id);
+    if config.active_world_id.as_deref() == Some(world_id) {
+        config.active_world_id = config.worlds.first().map(|e| e.id.clone());
+    }
     write_app_config_atomic(&config)?;
     Ok(())
 }
