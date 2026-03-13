@@ -4,6 +4,8 @@ import { useUiStore } from "./stores/uiStore";
 import { LockScreen } from "./components/auth/LockScreen";
 import { Workspace } from "./components/layout/Workspace";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
+import { RecoveryScreen } from "./components/onboarding/RecoveryScreen";
 
 /**
  * Root component — 3-phase conditional rendering per Doc 11 §2.
@@ -13,6 +15,7 @@ function App() {
   const appPhase = useUiStore((s) => s.appPhase);
   const setAppPhase = useUiStore((s) => s.setAppPhase);
   const [initialized, setInitialized] = useState(false);
+  const [needsRecovery, setNeedsRecovery] = useState(false);
 
   // Mount evaluation: check localStorage + check_app_config
   useEffect(() => {
@@ -31,7 +34,8 @@ function App() {
         // First-ever launch → onboarding
         setAppPhase("onboarding");
       } else if (onboardingDone && !configExists) {
-        // Config lost, worlds intact → recovery (rendered as onboarding for now)
+        // Config lost, worlds intact → recovery screen
+        setNeedsRecovery(true);
         setAppPhase("onboarding");
       } else {
         // Config exists → lock screen
@@ -69,17 +73,10 @@ function App() {
   }
 
   if (appPhase === "onboarding") {
-    // Placeholder for Phase 3
-    return (
-      <div
-        className="flex items-center justify-center h-full w-full"
-        style={{ backgroundColor: "var(--color-bg-base)" }}
-      >
-        <p style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>
-          Onboarding Wizard — Coming in Phase 3
-        </p>
-      </div>
-    );
+    if (needsRecovery) {
+      return <RecoveryScreen />;
+    }
+    return <OnboardingWizard />;
   }
 
   if (appPhase === "locked") {
