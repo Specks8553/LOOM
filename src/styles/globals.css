@@ -1,34 +1,78 @@
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-bg-base: #0d0d0d;
-  --color-bg-elevated: #161616;
-  --color-bg-surface: #1a1a1a;
-  --color-bg-hover: #222222;
-  --color-bg-active: #2a2a2a;
+@layer base {
+  :root {
+    /* Base Neutrals (Fixed) — Doc 02 §2.1 */
+    --color-bg-base:        #0d0d0d;
+    --color-bg-pane:        #111111;
+    --color-bg-theater:     #0a0a0a;
+    --color-bg-elevated:    #1a1a1a;
+    --color-bg-hover:       #222222;
+    --color-bg-active:      #2a2a2a;
 
-  --color-border: #2a2a2a;
-  --color-border-subtle: #1f1f1f;
+    --color-border:         #2a2a2a;
+    --color-border-subtle:  #1f1f1f;
 
-  --color-text-primary: #e8e8e8;
-  --color-text-secondary: #999999;
-  --color-text-muted: #666666;
-  --color-text-on-accent: #ffffff;
+    --color-text-primary:   #e8e8e8;
+    --color-text-secondary: #888888;
+    --color-text-muted:     #555555;
+    --color-text-inverse:   #0d0d0d;
+    --color-text-on-accent: #ffffff;
 
-  --color-accent: #7c3aed;
-  --color-accent-hover: #6d28d9;
-  --color-accent-subtle: rgba(124, 58, 237, 0.15);
-  --color-accent-text: #a78bfa;
+    /* Accent Color (User-Configurable) — Doc 02 §2.2 */
+    --color-accent:         #7c3aed;
+    --color-accent-hover:   #6d28d9;
+    --color-accent-subtle:  #1e1033;
+    --color-accent-text:    #c4b5fd;
 
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
+    /* Semantic Colors (Fixed) — Doc 02 §2.3 */
+    --color-success:    #10b981;
+    --color-warning:    #f59e0b;
+    --color-error:      #f43f5e;
+    --color-feedback:   #f59e0b;
 
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Lora', Georgia, serif;
-  --font-mono: 'JetBrains Mono', monospace;
+    /* Feature Colors (Default = Accent) — Doc 02 §2.4 */
+    --color-ghostwriter-frame:  var(--color-accent);
+    --color-ghostwriter-diff:   var(--color-accent);
+    --color-checkpoint:         var(--color-accent);
+    --color-accordion:          var(--color-accent);
+
+    /* Message Bubble Colors — Doc 02 §2.5 */
+    --bubble-user-bg: var(--color-accent-subtle);
+    --bubble-ai-bg:   #1a1a1a;
+
+    /* Font Stacks — Doc 02 §3.1 */
+    --font-sans:  "Inter", system-ui, -apple-system, sans-serif;
+    --font-serif: "Lora", "Georgia", serif;
+    --font-mono:  "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    --font-theater-body: var(--font-serif);
+
+    /* shadcn/ui overrides — Doc 02 §2.6 */
+    --background:          10 10 10;
+    --foreground:          232 232 232;
+    --card:                26 26 26;
+    --card-foreground:     232 232 232;
+    --popover:             26 26 26;
+    --popover-foreground:  232 232 232;
+    --primary:             124 58 237;
+    --primary-foreground:  13 13 13;
+    --secondary:           34 34 34;
+    --secondary-foreground:232 232 232;
+    --muted:               34 34 34;
+    --muted-foreground:    136 136 136;
+    --accent:              42 42 42;
+    --accent-foreground:   232 232 232;
+    --destructive:         244 63 94;
+    --destructive-foreground: 13 13 13;
+    --border:              42 42 42;
+    --input:               34 34 34;
+    --ring:                124 58 237;
+    --radius:              0.375rem;
+  }
 }
 
 * {
