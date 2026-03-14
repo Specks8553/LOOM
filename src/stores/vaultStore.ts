@@ -11,6 +11,8 @@ interface VaultStore {
   expandedPaths: Set<string>;
   filterQuery: string;
   selectedItems: Set<string>;
+  pendingRename: string | null;
+  createNewOpen: boolean;
   setWorlds: (w: WorldMeta[]) => void;
   setActiveWorldId: (id: string | null) => void;
   setItems: (items: VaultItemMeta[]) => void;
@@ -19,6 +21,8 @@ interface VaultStore {
   toggleExpanded: (id: string) => void;
   toggleSelected: (id: string) => void;
   clearSelection: () => void;
+  setPendingRename: (id: string | null) => void;
+  setCreateNewOpen: (v: boolean) => void;
   clearVault: () => void;
 }
 
@@ -40,6 +44,8 @@ export const useVaultStore = create<VaultStore>((set, get) => {
     expandedPaths: savedPaths,
     filterQuery: "",
     selectedItems: new Set(),
+    pendingRename: null,
+    createNewOpen: false,
 
     setWorlds: (w) => set({ worlds: w }),
     setActiveWorldId: (id) => set({ activeWorldId: id }),
@@ -69,6 +75,8 @@ export const useVaultStore = create<VaultStore>((set, get) => {
     },
 
     clearSelection: () => set({ selectedItems: new Set() }),
+    setPendingRename: (id) => set({ pendingRename: id }),
+    setCreateNewOpen: (v) => set({ createNewOpen: v }),
 
     clearVault: () =>
       set({

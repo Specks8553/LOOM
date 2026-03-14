@@ -1,27 +1,18 @@
 import { useEffect, useCallback } from "react";
-import { Lock, ChevronDown } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
 import { WorldPickerModal } from "../modals/WorldPickerModal";
+import { LeftPane } from "./LeftPane";
 import { lockVault, listWorlds, vaultListItems } from "../../lib/tauriApi";
 
-/**
- * Placeholder Workspace — Phase 2 / 4A.
- * Shows a top bar with world name + Lock button and a centered message.
- * Will be replaced with the full 3-pane layout in Phase 5.
- */
 export function Workspace() {
   const setAppPhase = useUiStore((s) => s.setAppPhase);
-  const setWorldPickerOpen = useUiStore((s) => s.setWorldPickerOpen);
   const activeWorldId = useVaultStore((s) => s.activeWorldId);
-  const worlds = useVaultStore((s) => s.worlds);
   const setWorlds = useVaultStore((s) => s.setWorlds);
   const setItems = useVaultStore((s) => s.setItems);
   const setActiveWorldId = useVaultStore((s) => s.setActiveWorldId);
-
-  const activeWorld = worlds.find((w) => w.id === activeWorldId);
 
   // Load worlds + items on mount
   useEffect(() => {
@@ -64,69 +55,11 @@ export function Workspace() {
   }, [handleLock]);
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ backgroundColor: "var(--color-bg-base)" }}>
-      {/* Top Bar */}
-      <div
-        className="flex items-center justify-between px-4 shrink-0"
-        style={{
-          height: "40px",
-          borderBottom: "1px solid var(--color-border)",
-          backgroundColor: "var(--color-bg-pane)",
-        }}
-      >
-        <button
-          onClick={() => setWorldPickerOpen(true)}
-          className="flex items-center gap-1.5 transition-colors duration-150"
-          style={{
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            padding: "4px 8px",
-            borderRadius: "4px",
-            fontSize: "12px",
-            fontWeight: 600,
-            color: "var(--color-text-primary)",
-            letterSpacing: "0.04em",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
-          }}
-          title="Switch World"
-        >
-          {activeWorld?.name ?? "LOOM"}
-          <ChevronDown size={12} style={{ color: "var(--color-text-muted)" }} />
-        </button>
-        <button
-          onClick={handleLock}
-          className="flex items-center gap-1.5 transition-colors duration-150"
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-            padding: "4px 8px",
-            borderRadius: "4px",
-            fontSize: "12px",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--color-text-primary)";
-            e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--color-text-muted)";
-            e.currentTarget.style.backgroundColor = "transparent";
-          }}
-          title="Lock (Ctrl+L)"
-        >
-          <Lock size={14} />
-          Lock
-        </button>
-      </div>
+    <div className="flex h-full w-full" style={{ backgroundColor: "var(--color-bg-base)" }}>
+      {/* Navigator */}
+      <LeftPane onLock={handleLock} />
 
-      {/* Placeholder Content */}
+      {/* Main content area — placeholder until Phase 5 */}
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <p
@@ -136,7 +69,7 @@ export function Workspace() {
               fontWeight: 500,
             }}
           >
-            {activeWorld?.name ?? "Workspace"}
+            Select a story to begin writing
           </p>
           <p
             style={{
@@ -144,7 +77,7 @@ export function Workspace() {
               color: "var(--color-text-muted)",
             }}
           >
-            Unlocked successfully. Full layout coming in Phase 5.
+            Choose a story from the navigator, or create a new one.
           </p>
         </div>
       </div>
