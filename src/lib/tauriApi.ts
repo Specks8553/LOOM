@@ -131,11 +131,13 @@ export function sendMessage(
   storyId: string,
   leafId: string | null,
   userContent: UserContent,
+  tempModelId: string,
 ): Promise<StreamDone> {
   return invoke<StreamDone>("send_message", {
     storyId,
     leafId: leafId ?? null,
     userContent,
+    tempModelId,
   });
 }
 

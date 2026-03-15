@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Send, Square, ChevronDown, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { sendMessage, cancelGeneration } from "../../lib/tauriApi";
 import type { UserContent, ChatMessage } from "../../lib/types";
@@ -100,12 +101,14 @@ export function InputArea() {
         activeStoryId,
         currentLeafId,
         userContent,
+        tempModelId,
       );
       // Replace temp messages with real ones
       finalizeStream(tempModelId, result.model_msg);
       setCurrentLeafId(result.model_msg.id);
     } catch (e) {
       console.error("Send failed:", e);
+      toast.error(`Send failed: ${e}`);
       // Remove optimistic messages on failure
       removeMessages([tempUserId, tempModelId]);
       setIsGenerating(false);

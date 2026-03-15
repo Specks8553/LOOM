@@ -142,8 +142,8 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
 pub fn seed_default_settings(conn: &Connection) -> Result<(), LoomError> {
     let defaults = vec![
         ("system_instructions", ""),
-        ("text_model_name", "gemini-2.5-flash-preview"),
-        ("text_model_options", r#"["gemini-2.5-flash-preview","gemini-2.0-flash","gemini-1.5-pro"]"#),
+        ("text_model_name", "gemini-2.5-flash"),
+        ("text_model_options", r#"["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]"#),
         ("accent_color", "#7c3aed"),
         ("body_font", "serif"),
         ("bubble_user_color", ""),
@@ -261,6 +261,16 @@ pub fn migrate_dev_schema(conn: &Connection) -> Result<(), LoomError> {
         }
     }
 
+    // Fix outdated model name from earlier phases
+    conn.execute(
+        "UPDATE settings SET value = 'gemini-2.5-flash' WHERE key = 'text_model_name' AND value = 'gemini-2.5-flash-preview'",
+        [],
+    ).ok();
+    conn.execute(
+        "UPDATE settings SET value = ?1 WHERE key = 'text_model_options' AND value LIKE '%flash-preview%'",
+        rusqlite::params![r#"["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]"#],
+    ).ok();
+
     Ok(())
 }
 
@@ -322,7 +332,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(model, "gemini-2.5-flash-preview");
+        assert_eq!(model, "gemini-2.5-flash");
     }
 
     #[test]

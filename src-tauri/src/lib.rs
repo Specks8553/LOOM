@@ -489,6 +489,7 @@ async fn send_message(
     story_id: String,
     leaf_id: Option<String>,
     user_content: UserContent,
+    temp_model_id: String,
 ) -> Result<StreamDone, LoomError> {
     use tauri::Emitter;
     use tokio::sync::watch;
@@ -543,7 +544,7 @@ async fn send_message(
                 [],
                 |row| row.get(0),
             )
-            .unwrap_or_else(|_| "gemini-2.5-flash-preview".to_string());
+            .unwrap_or_else(|_| "gemini-2.5-flash".to_string());
 
         (user_msg, history, sys_instr, model)
     }; // conn lock dropped here
@@ -564,8 +565,6 @@ async fn send_message(
         })?;
         *tx_guard = Some(cancel_tx);
     }
-
-    let temp_model_id = uuid::Uuid::new_v4().to_string();
 
     let stream_result = gemini::stream_generate(
         &api_key,
