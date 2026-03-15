@@ -18,6 +18,7 @@ interface WorkspaceStore {
   appendStreamDelta: (msgId: string, delta: string) => void;
   finalizeStream: (tempId: string, modelMsg: ChatMessage) => void;
   addOptimisticMessages: (userMsg: ChatMessage, modelPlaceholder: ChatMessage) => void;
+  removeMessages: (ids: string[]) => void;
   clearWorkspace: () => void;
 }
 
@@ -54,6 +55,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   addOptimisticMessages: (userMsg, modelPlaceholder) =>
     set((state) => ({
       messages: [...state.messages, userMsg, modelPlaceholder],
+    })),
+
+  removeMessages: (ids) =>
+    set((state) => ({
+      messages: state.messages.filter((m) => !ids.includes(m.id)),
     })),
 
   clearWorkspace: () =>

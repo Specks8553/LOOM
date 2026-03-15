@@ -16,6 +16,7 @@ export function InputArea() {
   const setStreamingMsgId = useWorkspaceStore((s) => s.setStreamingMsgId);
   const addOptimisticMessages = useWorkspaceStore((s) => s.addOptimisticMessages);
   const finalizeStream = useWorkspaceStore((s) => s.finalizeStream);
+  const removeMessages = useWorkspaceStore((s) => s.removeMessages);
   const setCurrentLeafId = useWorkspaceStore((s) => s.setCurrentLeafId);
 
   const [plotDirection, setPlotDirection] = useState("");
@@ -105,6 +106,8 @@ export function InputArea() {
       setCurrentLeafId(result.model_msg.id);
     } catch (e) {
       console.error("Send failed:", e);
+      // Remove optimistic messages on failure
+      removeMessages([tempUserId, tempModelId]);
       setIsGenerating(false);
       setStreamingMsgId(null);
     }
@@ -116,6 +119,7 @@ export function InputArea() {
     modificators,
     isGenerating,
     addOptimisticMessages,
+    removeMessages,
     setIsGenerating,
     setStreamingMsgId,
     finalizeStream,
