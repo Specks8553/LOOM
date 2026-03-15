@@ -3,7 +3,7 @@
  * Per CLAUDE.md: no raw invoke() scattered through components.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { WorldMeta, VaultItemMeta, UserContent, StoryPayload, StreamDone } from "./types";
+import type { WorldMeta, VaultItemMeta, UserContent, ChatMessage, StoryPayload, StreamDone } from "./types";
 
 // ─── Auth & Config ────────────────────────────────────────────────────────────
 
@@ -154,4 +154,44 @@ export function loadStoryMessages(
 
 export function getStoryLeafId(storyId: string): Promise<string | null> {
   return invoke<string | null>("get_story_leaf_id", { storyId });
+}
+
+// ─── Phase 7: Branching ─────────────────────────────────────────────────────
+
+export function getSiblings(
+  storyId: string,
+  parentId: string | null,
+  currentId: string,
+): Promise<[string[], number]> {
+  return invoke<[string[], number]>("get_siblings", {
+    storyId,
+    parentId: parentId ?? null,
+    currentId,
+  });
+}
+
+export function navigateToSibling(
+  storyId: string,
+  siblingId: string,
+): Promise<StoryPayload> {
+  return invoke<StoryPayload>("navigate_to_sibling", { storyId, siblingId });
+}
+
+export function deleteMessageCmd(
+  storyId: string,
+  messageId: string,
+): Promise<string | null> {
+  return invoke<string | null>("delete_message", { storyId, messageId });
+}
+
+export function undeleteMessage(messageIds: string[]): Promise<void> {
+  return invoke("undelete_message", { messageIds });
+}
+
+export function setStoryLeafId(storyId: string, leafId: string): Promise<void> {
+  return invoke("set_story_leaf_id", { storyId, leafId });
+}
+
+export function getMessage(messageId: string): Promise<ChatMessage> {
+  return invoke<ChatMessage>("get_message", { messageId });
 }

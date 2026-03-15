@@ -195,6 +195,112 @@ pub fn set_story_leaf_id(
     Ok(())
 }
 
+/// Get ordered sibling IDs for a given parent_id — Doc 09 §2.2.
+/// Returns (sibling_ids, current_index) for navigation.
+pub fn get_siblings(
+    conn: &Connection,
+    story_id: &str,
+    parent_id: Option<&str>,
+    current_id: &str,
+) -> Result<(Vec<String>, usize), LoomError> {
+    let siblings: Vec<String> = if let Some(pid) = parent_id {
+        let mut stmt = conn.prepare(
+            "SELECT id FROM messages
+             WHERE story_id = ?1 AND parent_id = ?2 AND deleted_at IS NULL
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![story_id, pid], |row| row.get(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    } else {
+        // Root messages (parent_id IS NULL)
+        let mut stmt = conn.prepare(
+            "SELECT id FROM messages
+             WHERE story_id = ?1 AND parent_id IS NULL AND deleted_at IS NULL
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![story_id], |row| row.get(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let idx = siblings.iter().position(|id| id == current_id).unwrap_or(0);
+    Ok((siblings, idx))
+}
+
+/// Find the deepest leaf reachable from a given message — Doc 09 §7.
+/// Follows first child at each level until a leaf is reached.
+pub fn find_deepest_leaf(conn: &Connection, story_id: &str, msg_id: &str) -> Result<String, LoomError> {
+    let mut current = msg_id.to_string();
+    loop {
+        let child: Option<String> = conn
+            .query_row(
+                "SELECT id FROM messages
+                 WHERE story_id = ?1 AND parent_id = ?2 AND deleted_at IS NULL
+                 ORDER BY created_at ASC LIMIT 1",
+                rusqlite::params![story_id, current],
+                |row| row.get(0),
+            )
+            .ok();
+        match child {
+            Some(c) => current = c,
+            None => return Ok(current),
+        }
+    }
+}
+
+/// Soft-delete a message (set deleted_at). Returns the parent_id.
+pub fn soft_delete_message(conn: &Connection, message_id: &str) -> Result<Option<String>, LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let parent_id: Option<String> = conn.query_row(
+        "SELECT parent_id FROM messages WHERE id = ?1",
+        rusqlite::params![message_id],
+        |row| row.get(0),
+    )?;
+
+    conn.execute(
+        "UPDATE messages SET deleted_at = ?1 WHERE id = ?2",
+        rusqlite::params![now, message_id],
+    )?;
+    Ok(parent_id)
+}
+
+/// Undo soft-delete of a message (clear deleted_at).
+pub fn undelete_message(conn: &Connection, message_id: &str) -> Result<(), LoomError> {
+    conn.execute(
+        "UPDATE messages SET deleted_at = NULL WHERE id = ?1",
+        rusqlite::params![message_id],
+    )?;
+    Ok(())
+}
+
+/// Get a single message by ID.
+pub fn get_message(conn: &Connection, message_id: &str) -> Result<ChatMessage, LoomError> {
+    conn.query_row(
+        "SELECT id, story_id, parent_id, role, content_type, content, token_count,
+                model_name, finish_reason, created_at, deleted_at, user_feedback,
+                ghostwriter_history
+         FROM messages WHERE id = ?1",
+        rusqlite::params![message_id],
+        |row| {
+            Ok(ChatMessage {
+                id: row.get(0)?,
+                story_id: row.get(1)?,
+                parent_id: row.get(2)?,
+                role: row.get(3)?,
+                content_type: row.get(4)?,
+                content: row.get(5)?,
+                token_count: row.get(6)?,
+                model_name: row.get(7)?,
+                finish_reason: row.get(8)?,
+                created_at: row.get(9)?,
+                deleted_at: row.get(10)?,
+                user_feedback: row.get(11)?,
+                ghostwriter_history: row.get::<_, String>(12).unwrap_or_else(|_| "[]".to_string()),
+            })
+        },
+    )
+    .map_err(|_| LoomError::ItemNotFound(format!("Message {} not found", message_id)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

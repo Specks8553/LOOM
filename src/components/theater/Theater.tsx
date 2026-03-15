@@ -2,7 +2,12 @@ import { useEffect, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
-import { getStoryLeafId, loadStoryMessages } from "../../lib/tauriApi";
+import {
+  getStoryLeafId,
+  loadStoryMessages,
+  navigateToSibling,
+  setStoryLeafId,
+} from "../../lib/tauriApi";
 import { UserBubble } from "./UserBubble";
 import { AiBubble } from "./AiBubble";
 import { InputArea } from "./InputArea";
@@ -18,9 +23,11 @@ import type { StreamChunk, StreamDone } from "../../lib/types";
  */
 export function Theater() {
   const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const currentLeafId = useWorkspaceStore((s) => s.currentLeafId);
   const messages = useWorkspaceStore((s) => s.messages);
   const streamingMsgId = useWorkspaceStore((s) => s.streamingMsgId);
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
+  const siblingCounts = useWorkspaceStore((s) => s.siblingCounts);
   const setMessages = useWorkspaceStore((s) => s.setMessages);
   const setSiblingCounts = useWorkspaceStore((s) => s.setSiblingCounts);
   const setCurrentLeafId = useWorkspaceStore((s) => s.setCurrentLeafId);
@@ -40,7 +47,6 @@ export function Theater() {
     try {
       const leafId = await getStoryLeafId(activeStoryId);
       if (!leafId) {
-        // No messages yet
         setMessages([]);
         setSiblingCounts([]);
         setCurrentLeafId(null);
@@ -61,6 +67,43 @@ export function Theater() {
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // Reload the current branch (used after delete, regenerate, edit)
+  const reloadBranch = useCallback(
+    async (newLeafId?: string) => {
+      if (!activeStoryId) return;
+      const leafId = newLeafId ?? (await getStoryLeafId(activeStoryId));
+      if (!leafId) {
+        setMessages([]);
+        setSiblingCounts([]);
+        setCurrentLeafId(null);
+        return;
+      }
+      const payload = await loadStoryMessages(activeStoryId, leafId);
+      setMessages(payload.messages);
+      setSiblingCounts(payload.sibling_counts);
+      setCurrentLeafId(leafId);
+    },
+    [activeStoryId, setMessages, setSiblingCounts, setCurrentLeafId],
+  );
+
+  // Navigate to a sibling branch — Doc 09 §2.2
+  const handleNavigateSibling = useCallback(
+    async (siblingId: string) => {
+      if (!activeStoryId) return;
+      try {
+        const payload = await navigateToSibling(activeStoryId, siblingId);
+        setMessages(payload.messages);
+        setSiblingCounts(payload.sibling_counts);
+        // The new leaf is the last message
+        const newLeaf = payload.messages[payload.messages.length - 1];
+        if (newLeaf) setCurrentLeafId(newLeaf.id);
+      } catch (e) {
+        console.error("Failed to navigate sibling:", e);
+      }
+    },
+    [activeStoryId, setMessages, setSiblingCounts, setCurrentLeafId],
+  );
 
   // Listen for streaming events
   useEffect(() => {
@@ -85,6 +128,15 @@ export function Theater() {
     };
   }, [appendStreamDelta, finalizeStream, setIsGenerating, setStreamingMsgId]);
 
+  // Persist leaf_id on every change — Doc 09 §2.4
+  useEffect(() => {
+    if (activeStoryId && currentLeafId) {
+      setStoryLeafId(activeStoryId, currentLeafId).catch((e) =>
+        console.error("Failed to persist leaf_id:", e),
+      );
+    }
+  }, [activeStoryId, currentLeafId]);
+
   // Auto-scroll to bottom on new messages or streaming content
   useEffect(() => {
     const el = scrollRef.current;
@@ -98,7 +150,15 @@ export function Theater() {
     return sum + Math.ceil(m.content.length / 4);
   }, 0);
 
+  // Build a lookup for sibling counts: parent_id → count
+  const siblingCountMap = new Map<string, number>();
+  for (const sc of siblingCounts) {
+    siblingCountMap.set(sc.parent_id, sc.count);
+  }
+
   if (!activeStoryId) return null;
+
+  const lastMsgIdx = messages.length - 1;
 
   return (
     <div className="flex flex-col h-full">
@@ -149,15 +209,35 @@ export function Theater() {
           className="flex-1 overflow-y-auto"
           style={{ padding: "16px 24px" }}
         >
-          {messages.map((msg) => {
+          {messages.map((msg, idx) => {
+            const isLast = idx === lastMsgIdx;
+            const hasSiblings = msg.parent_id
+              ? (siblingCountMap.get(msg.parent_id) ?? 0) > 1
+              : false;
+
             if (msg.role === "user") {
-              return <UserBubble key={msg.id} message={msg} />;
+              return (
+                <UserBubble
+                  key={msg.id}
+                  message={msg}
+                  isLast={isLast}
+                  hasSiblings={hasSiblings}
+                  onNavigateSibling={handleNavigateSibling}
+                  onReloadBranch={reloadBranch}
+                  storyId={activeStoryId}
+                />
+              );
             }
             return (
               <AiBubble
                 key={msg.id}
                 message={msg}
                 isStreaming={msg.id === streamingMsgId}
+                isLast={isLast}
+                hasSiblings={hasSiblings}
+                onNavigateSibling={handleNavigateSibling}
+                onReloadBranch={reloadBranch}
+                storyId={activeStoryId}
               />
             );
           })}

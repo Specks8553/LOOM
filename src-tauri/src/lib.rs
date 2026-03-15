@@ -675,6 +675,131 @@ async fn get_story_leaf_id(
     messages::get_story_leaf_id(conn, &story_id)
 }
 
+// ─── Phase 7: Branching Commands ─────────────────────────────────────────────
+
+/// Get sibling IDs and current index for a message.
+#[tauri::command]
+async fn get_siblings(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    parent_id: Option<String>,
+    current_id: String,
+) -> Result<(Vec<String>, usize), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    messages::get_siblings(conn, &story_id, parent_id.as_deref(), &current_id)
+}
+
+/// Navigate to a sibling: find the deepest leaf from the sibling and return the full branch.
+#[tauri::command]
+async fn navigate_to_sibling(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    sibling_id: String,
+) -> Result<StoryPayload, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    let leaf_id = messages::find_deepest_leaf(conn, &story_id, &sibling_id)?;
+    messages::set_story_leaf_id(conn, &story_id, &leaf_id)?;
+    messages::load_story_messages(conn, &story_id, &leaf_id)
+}
+
+/// Soft-delete a message pair (AI + its parent user msg if it's the last pair).
+/// Returns the new leaf_id after deletion.
+#[tauri::command]
+async fn delete_message(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    message_id: String,
+) -> Result<Option<String>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    // Get the message to find its parent (user msg)
+    let msg = messages::get_message(conn, &message_id)?;
+    let parent_id = msg.parent_id.clone();
+
+    // Soft-delete the AI message
+    messages::soft_delete_message(conn, &message_id)?;
+
+    // Also soft-delete the parent user message if it has no other non-deleted children
+    if let Some(ref uid) = parent_id {
+        let other_children: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM messages WHERE parent_id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![uid],
+            |row| row.get(0),
+        )?;
+        if other_children == 0 {
+            messages::soft_delete_message(conn, uid)?;
+            // New leaf is the user message's parent
+            let user_msg = messages::get_message(conn, uid)?;
+            if let Some(ref new_leaf) = user_msg.parent_id {
+                messages::set_story_leaf_id(conn, &story_id, new_leaf)?;
+                return Ok(Some(new_leaf.clone()));
+            } else {
+                // Was the root — no messages left
+                return Ok(None);
+            }
+        }
+    }
+
+    // AI message deleted but user message has other children — leaf becomes parent user msg
+    if let Some(ref uid) = parent_id {
+        messages::set_story_leaf_id(conn, &story_id, uid)?;
+        return Ok(Some(uid.clone()));
+    }
+    Ok(None)
+}
+
+/// Undo soft-delete of message(s).
+#[tauri::command]
+async fn undelete_message(
+    state: tauri::State<'_, AppState>,
+    message_ids: Vec<String>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    for id in &message_ids {
+        messages::undelete_message(conn, id)?;
+    }
+    Ok(())
+}
+
+/// Set the leaf ID for a story (exposed for frontend persistence).
+#[tauri::command]
+async fn set_story_leaf_id(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    leaf_id: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    messages::set_story_leaf_id(conn, &story_id, &leaf_id)
+}
+
+/// Get a single message by ID.
+#[tauri::command]
+async fn get_message(
+    state: tauri::State<'_, AppState>,
+    message_id: String,
+) -> Result<ChatMessage, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    messages::get_message(conn, &message_id)
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -720,6 +845,13 @@ pub fn run() {
             cancel_generation,
             load_story_messages,
             get_story_leaf_id,
+            // Phase 7: Branching
+            get_siblings,
+            navigate_to_sibling,
+            delete_message,
+            undelete_message,
+            set_story_leaf_id,
+            get_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");
