@@ -2,11 +2,14 @@ mod config;
 mod crypto;
 mod db;
 mod error;
+mod gemini;
+mod messages;
 mod state;
 mod vault;
 mod world;
 
 use error::LoomError;
+use gemini::{ChatMessage, StoryPayload, StreamDone, UserContent};
 use state::AppState;
 use vault::VaultItemMeta;
 use world::WorldMeta;
@@ -475,6 +478,204 @@ async fn vault_update_sort_order(
     vault::update_sort_order(conn, &items)
 }
 
+// ─── Phase 6: Conversation Commands ──────────────────────────────────────────
+
+/// Send a message: insert user msg, stream AI response, insert model msg.
+/// Doc 09 §5.1–§5.2.
+#[tauri::command]
+async fn send_message(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    story_id: String,
+    leaf_id: Option<String>,
+    user_content: UserContent,
+) -> Result<StreamDone, LoomError> {
+    use tauri::Emitter;
+    use tokio::sync::watch;
+
+    if user_content.plot_direction.trim().is_empty() {
+        return Err(LoomError::Validation("Plot direction cannot be empty.".into()));
+    }
+
+    // Get API key
+    let api_key = {
+        let guard = state.api_key.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock api key: {}", e))
+        })?;
+        guard.clone().ok_or(LoomError::ApiKeyMissing)?
+    };
+
+    // Phase 1: Insert user message + read history (needs conn lock)
+    let (user_msg, history, system_instructions, model_name) = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+        // Insert user message
+        let user_msg = messages::insert_user_message(
+            conn,
+            &story_id,
+            leaf_id.as_deref(),
+            &user_content,
+        )?;
+
+        // Load history (branch from root → user_msg's parent, i.e. leaf_id)
+        let history = if let Some(ref lid) = leaf_id {
+            let payload = messages::load_story_messages(conn, &story_id, lid)?;
+            payload.messages
+        } else {
+            vec![]
+        };
+
+        // Read settings
+        let sys_instr: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'system_instructions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
+
+        let model: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'text_model_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "gemini-2.5-flash-preview".to_string());
+
+        (user_msg, history, sys_instr, model)
+    }; // conn lock dropped here
+
+    // Phase 2: Build request and stream (no conn lock held)
+    let user_turn_text = gemini::build_user_turn_text(&user_content);
+    let request_body = gemini::build_gemini_request(
+        &system_instructions,
+        &history,
+        &user_turn_text,
+    );
+
+    // Create cancellation channel
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    {
+        let mut tx_guard = state.cancel_tx.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock cancel_tx: {}", e))
+        })?;
+        *tx_guard = Some(cancel_tx);
+    }
+
+    let temp_model_id = uuid::Uuid::new_v4().to_string();
+
+    let stream_result = gemini::stream_generate(
+        &api_key,
+        &model_name,
+        &request_body,
+        &app,
+        &temp_model_id,
+        cancel_rx,
+    )
+    .await;
+
+    // Clear cancel handle
+    {
+        let mut tx_guard = state.cancel_tx.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock cancel_tx: {}", e))
+        })?;
+        *tx_guard = None;
+    }
+
+    // Phase 3: Insert model message (needs conn lock again)
+    let (content, token_count, finish_reason) = match stream_result {
+        Ok(result) => (
+            result.content,
+            result.token_count,
+            result.finish_reason.unwrap_or_else(|| "STOP".to_string()),
+        ),
+        Err(LoomError::GenerationCancelled) => {
+            // Save partial content — we don't have the accumulated text here
+            // since the error was returned. Use empty content with ERROR reason.
+            (String::new(), None, "ERROR".to_string())
+        }
+        Err(e) => return Err(e),
+    };
+
+    let model_msg = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+        let model_msg = messages::insert_model_message(
+            conn,
+            &story_id,
+            &user_msg.id,
+            &content,
+            token_count,
+            &model_name,
+            Some(&finish_reason),
+        )?;
+
+        // Persist leaf ID
+        messages::set_story_leaf_id(conn, &story_id, &model_msg.id)?;
+
+        model_msg
+    };
+
+    // Emit stream_done event
+    let done = StreamDone {
+        message_id: temp_model_id,
+        user_msg_id: user_msg.id,
+        model_msg: model_msg.clone(),
+    };
+    let _ = app.emit("stream_done", &done);
+
+    log::info!("Message sent for story {}", story_id);
+    Ok(done)
+}
+
+/// Cancel an active generation.
+#[tauri::command]
+async fn cancel_generation(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let mut tx_guard = state.cancel_tx.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock cancel_tx: {}", e))
+    })?;
+    if let Some(sender) = tx_guard.take() {
+        let _ = sender.send(true);
+        log::info!("Generation cancelled");
+    }
+    Ok(())
+}
+
+/// Load story messages (branch from root → leaf) + sibling counts.
+#[tauri::command]
+async fn load_story_messages(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    leaf_id: String,
+) -> Result<StoryPayload, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    messages::load_story_messages(conn, &story_id, &leaf_id)
+}
+
+/// Get the persisted leaf ID for a story.
+#[tauri::command]
+async fn get_story_leaf_id(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<Option<String>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    messages::get_story_leaf_id(conn, &story_id)
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -515,6 +716,11 @@ pub fn run() {
             vault_restore_item,
             vault_purge_item,
             vault_update_sort_order,
+            // Phase 6: Conversation engine
+            send_message,
+            cancel_generation,
+            load_story_messages,
+            get_story_leaf_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

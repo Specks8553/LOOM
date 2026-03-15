@@ -118,3 +118,63 @@ html, body, #root {
   background: var(--color-accent-subtle);
   color: var(--color-text-primary);
 }
+
+/* AI message markdown content — Doc 02 §5 */
+.ai-message-content p {
+  margin: 0 0 0.75em;
+}
+.ai-message-content p:last-child {
+  margin-bottom: 0;
+}
+.ai-message-content h1,
+.ai-message-content h2,
+.ai-message-content h3 {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.ai-message-content h1 { font-size: 1.3em; }
+.ai-message-content h2 { font-size: 1.15em; }
+.ai-message-content h3 { font-size: 1em; }
+.ai-message-content strong {
+  font-weight: 600;
+}
+.ai-message-content em {
+  font-style: italic;
+}
+.ai-message-content code {
+  background: var(--color-bg-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.ai-message-content pre {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.ai-message-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ai-message-content ul,
+.ai-message-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.ai-message-content li {
+  margin: 0.25em 0;
+}
+.ai-message-content blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 12px;
+  margin: 0.75em 0;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}

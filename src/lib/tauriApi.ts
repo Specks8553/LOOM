@@ -3,7 +3,7 @@
  * Per CLAUDE.md: no raw invoke() scattered through components.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { WorldMeta, VaultItemMeta } from "./types";
+import type { WorldMeta, VaultItemMeta, UserContent, StoryPayload, StreamDone } from "./types";
 
 // ─── Auth & Config ────────────────────────────────────────────────────────────
 
@@ -123,4 +123,33 @@ export function vaultPurgeItem(id: string): Promise<void> {
 
 export function vaultUpdateSortOrder(items: [string, number][]): Promise<void> {
   return invoke("vault_update_sort_order", { items });
+}
+
+// ─── Conversation Engine ─────────────────────────────────────────────────────
+
+export function sendMessage(
+  storyId: string,
+  leafId: string | null,
+  userContent: UserContent,
+): Promise<StreamDone> {
+  return invoke<StreamDone>("send_message", {
+    storyId,
+    leafId: leafId ?? null,
+    userContent,
+  });
+}
+
+export function cancelGeneration(): Promise<void> {
+  return invoke("cancel_generation");
+}
+
+export function loadStoryMessages(
+  storyId: string,
+  leafId: string,
+): Promise<StoryPayload> {
+  return invoke<StoryPayload>("load_story_messages", { storyId, leafId });
+}
+
+export function getStoryLeafId(storyId: string): Promise<string | null> {
+  return invoke<string | null>("get_story_leaf_id", { storyId });
 }

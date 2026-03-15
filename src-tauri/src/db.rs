@@ -40,20 +40,24 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
         CREATE INDEX IF NOT EXISTS idx_items_type    ON items(item_type);
         CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
 
-        -- Conversation messages (DAG structure)
+        -- Conversation messages (DAG structure) — Doc 09 §1.1
         CREATE TABLE IF NOT EXISTS messages (
-            id           TEXT PRIMARY KEY,
-            story_id     TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-            parent_id    TEXT REFERENCES messages(id) ON DELETE SET NULL,
-            role         TEXT NOT NULL CHECK(role IN ('user','model')),
-            content      TEXT NOT NULL DEFAULT '',
-            content_type TEXT NOT NULL DEFAULT 'text' CHECK(content_type IN ('text','image')),
-            token_count  INTEGER,
-            model_name   TEXT,
-            created_at   TEXT NOT NULL,
-            deleted_at   TEXT
+            id                  TEXT PRIMARY KEY,
+            story_id            TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            parent_id           TEXT REFERENCES messages(id) ON DELETE SET NULL,
+            role                TEXT NOT NULL CHECK(role IN ('user','model')),
+            content_type        TEXT NOT NULL DEFAULT 'text'
+                                  CHECK(content_type IN ('json_user','text','blocks')),
+            content             TEXT NOT NULL DEFAULT '',
+            token_count         INTEGER,
+            model_name          TEXT,
+            finish_reason       TEXT CHECK(finish_reason IN ('STOP','MAX_TOKENS','SAFETY','ERROR') OR finish_reason IS NULL),
+            created_at          TEXT NOT NULL,
+            deleted_at          TEXT,
+            user_feedback       TEXT,
+            ghostwriter_history TEXT NOT NULL DEFAULT '[]'
         );
-        CREATE INDEX IF NOT EXISTS idx_messages_story  ON messages(story_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_story  ON messages(story_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
 
         -- Per-story key-value settings

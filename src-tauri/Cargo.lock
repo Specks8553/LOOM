@@ -2126,6 +2126,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "env_logger",
+ "futures-util",
  "hex",
  "hmac",
  "log",

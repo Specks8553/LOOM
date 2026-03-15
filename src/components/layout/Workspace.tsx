@@ -8,7 +8,7 @@ import { LeftPane } from "./LeftPane";
 import { PaneDivider } from "./PaneDivider";
 import { RightPane } from "./RightPane";
 import { NoStorySelected } from "../empty/NoStorySelected";
-import { EmptyStory } from "../empty/EmptyStory";
+import { Theater } from "../theater/Theater";
 import { initViewportWatcher } from "../../lib/viewportWatcher";
 import { PanelRightOpen } from "lucide-react";
 import { lockVault, listWorlds, vaultListItems } from "../../lib/tauriApi";
@@ -121,7 +121,7 @@ export function Workspace() {
 
   // Determine theater content
   const renderTheater = () => {
-    if (activeStoryId) return <EmptyStory />;
+    if (activeStoryId) return <Theater />;
     return <NoStorySelected />;
   };
 

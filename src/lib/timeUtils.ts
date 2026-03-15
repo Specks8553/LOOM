@@ -26,3 +26,9 @@ export function formatRelativeTime(isoString: string): string {
 
   return "over a year ago";
 }
+
+/** Formats an ISO timestamp as a short time string like "2:04 PM". */
+export function formatShortTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
