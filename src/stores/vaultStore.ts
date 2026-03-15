@@ -13,6 +13,8 @@ interface VaultStore {
   selectedItems: Set<string>;
   pendingRename: string | null;
   createNewOpen: boolean;
+  showingTrash: boolean;
+  lastSelectedId: string | null;
   setWorlds: (w: WorldMeta[]) => void;
   setActiveWorldId: (id: string | null) => void;
   setItems: (items: VaultItemMeta[]) => void;
@@ -20,9 +22,13 @@ interface VaultStore {
   setFilterQuery: (q: string) => void;
   toggleExpanded: (id: string) => void;
   toggleSelected: (id: string) => void;
+  setSelectedItems: (ids: Set<string>) => void;
+  selectRange: (fromId: string, toId: string, flatOrder: string[]) => void;
   clearSelection: () => void;
   setPendingRename: (id: string | null) => void;
   setCreateNewOpen: (v: boolean) => void;
+  setShowingTrash: (v: boolean) => void;
+  setLastSelectedId: (id: string | null) => void;
   clearVault: () => void;
 }
 
@@ -46,6 +52,8 @@ export const useVaultStore = create<VaultStore>((set, get) => {
     selectedItems: new Set(),
     pendingRename: null,
     createNewOpen: false,
+    showingTrash: false,
+    lastSelectedId: null,
 
     setWorlds: (w) => set({ worlds: w }),
     setActiveWorldId: (id) => set({ activeWorldId: id }),
@@ -74,9 +82,28 @@ export const useVaultStore = create<VaultStore>((set, get) => {
       set({ selectedItems: selected });
     },
 
-    clearSelection: () => set({ selectedItems: new Set() }),
+    setSelectedItems: (ids) => set({ selectedItems: ids }),
+
+    selectRange: (fromId, toId, flatOrder) => {
+      const fromIdx = flatOrder.indexOf(fromId);
+      const toIdx = flatOrder.indexOf(toId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const start = Math.min(fromIdx, toIdx);
+      const end = Math.max(fromIdx, toIdx);
+      const rangeIds = new Set(flatOrder.slice(start, end + 1));
+      // Merge with existing selection
+      const existing = get().selectedItems;
+      for (const id of existing) {
+        rangeIds.add(id);
+      }
+      set({ selectedItems: rangeIds });
+    },
+
+    clearSelection: () => set({ selectedItems: new Set(), lastSelectedId: null }),
     setPendingRename: (id) => set({ pendingRename: id }),
     setCreateNewOpen: (v) => set({ createNewOpen: v }),
+    setShowingTrash: (v) => set({ showingTrash: v }),
+    setLastSelectedId: (id) => set({ lastSelectedId: id }),
 
     clearVault: () =>
       set({
@@ -85,6 +112,8 @@ export const useVaultStore = create<VaultStore>((set, get) => {
         activeWorldId: null,
         filterQuery: "",
         selectedItems: new Set(),
+        showingTrash: false,
+        lastSelectedId: null,
       }),
   };
 });

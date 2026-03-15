@@ -31,3 +31,9 @@ export const useUiStore = create<UiStore>((set) => ({
   setViewportNarrow: (v) => set({ viewportNarrow: v }),
   setWorldPickerOpen: (v) => set({ worldPickerOpen: v }),
 }));
+
+// Dev-only: expose store for preview debugging (not included in production builds)
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__loom_setPhase = (p: AppPhase) => useUiStore.getState().setAppPhase(p);
+}

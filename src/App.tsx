@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useUiStore } from "./stores/uiStore";
+import { useVaultStore } from "./stores/vaultStore";
 import { LockScreen } from "./components/auth/LockScreen";
 import { Workspace } from "./components/layout/Workspace";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -55,6 +56,15 @@ function App() {
       if (e.ctrlKey && e.key === "l" && appPhase === "workspace") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("loom:lock"));
+        return;
+      }
+
+      // Escape chain: multi-select clear (lower priority than modals)
+      if (e.key === "Escape" && appPhase === "workspace") {
+        const { selectedItems, clearSelection } = useVaultStore.getState();
+        if (selectedItems.size > 0) {
+          clearSelection();
+        }
       }
     };
 

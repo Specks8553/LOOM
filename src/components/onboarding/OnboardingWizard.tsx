@@ -603,7 +603,9 @@ export function OnboardingWizard() {
           // Ignore — key may already be stored from step 3 or test
         }
 
-        await invoke("create_world", { name: worldName.trim(), tags: null });
+        const world = await invoke<{ id: string }>("create_world", { name: worldName.trim(), tags: null });
+        // Open the DB connection for the new world (create_world closes it after init)
+        await invoke("switch_world", { worldId: world.id });
         await invoke("save_api_key_to_db");
 
         // Mark onboarding complete

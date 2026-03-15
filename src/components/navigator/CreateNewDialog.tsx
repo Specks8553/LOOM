@@ -23,6 +23,7 @@ export function CreateNewDialog() {
     setCreateNewOpen(false);
     setActiveSubtype(null);
     setSourceDocName("");
+    setError(null);
   }, [setCreateNewOpen]);
 
   // Determine parent: if a folder is selected, create inside it; otherwise root
@@ -37,9 +38,12 @@ export function CreateNewDialog() {
     return null;
   }, [selectedItems, items]);
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleCreateSimple = useCallback(
     async (type: "Story" | "Folder") => {
       const defaultName = type === "Story" ? "Untitled Story" : "New Folder";
+      setError(null);
       try {
         const created = await vaultCreateItem(type, defaultName, getParentId());
         const refreshed = await vaultListItems();
@@ -49,6 +53,7 @@ export function CreateNewDialog() {
         close();
       } catch (e) {
         console.error(`Failed to create ${type}:`, e);
+        setError(String(e));
       }
     },
     [getParentId, setItems, setPendingRename, close],
@@ -56,6 +61,7 @@ export function CreateNewDialog() {
 
   const handleCreateSourceDoc = useCallback(async () => {
     if (!activeSubtype || !sourceDocName.trim()) return;
+    setError(null);
     try {
       await vaultCreateItem("SourceDocument", sourceDocName.trim(), getParentId(), activeSubtype);
       const refreshed = await vaultListItems();
@@ -63,6 +69,7 @@ export function CreateNewDialog() {
       close();
     } catch (e) {
       console.error("Failed to create source document:", e);
+      setError(String(e));
     }
   }, [activeSubtype, sourceDocName, getParentId, setItems, close]);
 
@@ -301,6 +308,20 @@ export function CreateNewDialog() {
                 Image
               </button>
             </>
+          )}
+
+          {error && (
+            <p
+              style={{
+                fontSize: "12px",
+                color: "var(--color-error)",
+                padding: "4px 12px 4px",
+                lineHeight: 1.4,
+                wordBreak: "break-word",
+              }}
+            >
+              {error}
+            </p>
           )}
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, Plus, Loader2, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
 import { useVaultStore } from "../../stores/vaultStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { WorldMeta } from "../../lib/types";
 import {
   listWorlds,
@@ -179,6 +180,8 @@ export function WorldPickerModal() {
   const setItems = useVaultStore((s) => s.setItems);
   const setWorlds = useVaultStore((s) => s.setWorlds);
 
+  const isGenerating = useWorkspaceStore((s) => s.isGenerating);
+
   const [worlds, setLocalWorlds] = useState<WorldMeta[]>([]);
   const [deletedWorlds, setDeletedWorlds] = useState<WorldMeta[]>([]);
   const [showTrash, setShowTrash] = useState(false);
@@ -186,6 +189,7 @@ export function WorldPickerModal() {
   const [newWorldName, setNewWorldName] = useState("");
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorldMeta | null>(null);
+  const [switchPendingId, setSwitchPendingId] = useState<string | null>(null);
   const newNameRef = useRef<HTMLInputElement>(null);
 
   // Load worlds when modal opens
@@ -214,11 +218,21 @@ export function WorldPickerModal() {
       setOpen(false);
       return;
     }
+    // Confirm if AI generation is in progress
+    if (isGenerating) {
+      setSwitchPendingId(worldId);
+      return;
+    }
+    await performSwitch(worldId);
+  };
+
+  const performSwitch = async (worldId: string) => {
     try {
       await switchWorld(worldId);
       setActiveWorldId(worldId);
       const items = await vaultListItems();
       setItems(items);
+      setSwitchPendingId(null);
       setOpen(false);
     } catch (e) {
       console.error("Failed to switch world:", e);
@@ -280,7 +294,9 @@ export function WorldPickerModal() {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (deleteTarget) {
+        if (switchPendingId) {
+          setSwitchPendingId(null);
+        } else if (deleteTarget) {
           setDeleteTarget(null);
         } else {
           setOpen(false);
@@ -289,7 +305,7 @@ export function WorldPickerModal() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, deleteTarget, setOpen]);
+  }, [open, deleteTarget, switchPendingId, setOpen]);
 
   if (!open) return null;
 
@@ -530,6 +546,62 @@ export function WorldPickerModal() {
           onConfirm={() => handleDelete(deleteTarget)}
           onCancel={() => setDeleteTarget(null)}
         />
+      )}
+
+      {/* Switch-during-generation confirmation */}
+      {switchPendingId && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-[60]"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+        >
+          <div
+            style={{
+              width: "400px",
+              backgroundColor: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "8px",
+              padding: "24px",
+            }}
+          >
+            <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "12px" }}>
+              AI generation in progress
+            </h3>
+            <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "16px", lineHeight: 1.5 }}>
+              Switching worlds will cancel the current generation. Continue?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setSwitchPendingId(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: "6px 14px",
+                  fontSize: "13px",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                  borderRadius: "6px",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => performSwitch(switchPendingId)}
+                style={{
+                  backgroundColor: "var(--color-accent)",
+                  color: "var(--color-text-on-accent)",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "6px 14px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Switch Anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
