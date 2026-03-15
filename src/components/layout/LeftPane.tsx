@@ -2,12 +2,12 @@ import { useCallback } from "react";
 import { Plus, ChevronDown, Lock, Trash2 } from "lucide-react";
 import { useVaultStore } from "../../stores/vaultStore";
 import { useUiStore } from "../../stores/uiStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { vaultListTrash } from "../../lib/tauriApi";
 import { FilterInput } from "../navigator/FilterInput";
 import { VaultTree } from "../navigator/VaultTree";
 import { CreateNewDialog } from "../navigator/CreateNewDialog";
 import { BulkActionBar } from "../navigator/BulkActionBar";
+import { TrashView } from "../theater/TrashView";
 
 interface LeftPaneProps {
   onLock: () => void;
@@ -25,7 +25,6 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
   const selectedItems = useVaultStore((s) => s.selectedItems);
   const clearSelection = useVaultStore((s) => s.clearSelection);
   const setWorldPickerOpen = useUiStore((s) => s.setWorldPickerOpen);
-  const setActiveStoryId = useWorkspaceStore((s) => s.setActiveStoryId);
 
   const activeWorld = worlds.find((w) => w.id === activeWorldId);
 
@@ -36,7 +35,6 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
       return;
     }
     clearSelection();
-    setActiveStoryId(null);
     setShowingTrash(true);
     try {
       const items = await vaultListTrash();
@@ -44,7 +42,7 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
     } catch (e) {
       console.error("Failed to load trash:", e);
     }
-  }, [showingTrash, clearSelection, setActiveStoryId, setShowingTrash, setTrashItems]);
+  }, [showingTrash, clearSelection, setShowingTrash, setTrashItems]);
 
   return (
     <div
@@ -143,16 +141,23 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="pt-2">
-        <FilterInput />
-      </div>
+      {/* Content area: vault tree or trash list */}
+      {showingTrash ? (
+        <TrashView />
+      ) : (
+        <>
+          {/* Filter */}
+          <div className="pt-2">
+            <FilterInput />
+          </div>
 
-      {/* Tree */}
-      <VaultTree onCreateClick={() => setCreateNewOpen(true)} />
+          {/* Tree */}
+          <VaultTree onCreateClick={() => setCreateNewOpen(true)} />
 
-      {/* Bulk action bar (conditional) */}
-      {selectedItems.size >= 2 && <BulkActionBar />}
+          {/* Bulk action bar (conditional) */}
+          {selectedItems.size >= 2 && <BulkActionBar />}
+        </>
+      )}
 
       {/* Trash entry */}
       <button

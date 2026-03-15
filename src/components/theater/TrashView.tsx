@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { BookOpen, Folder, FileText, Image, RotateCcw, Trash2, ArrowLeft } from "lucide-react";
+import { useState, useCallback } from "react";
+import { BookOpen, Folder, FileText, Image, RotateCcw, Trash2 } from "lucide-react";
 import { useVaultStore } from "../../stores/vaultStore";
 import {
   vaultListTrash,
@@ -7,7 +7,6 @@ import {
   vaultRestoreItem,
   vaultPurgeItem,
 } from "../../lib/tauriApi";
-import { formatRelativeTime } from "../../lib/timeUtils";
 import { EmptyTrash } from "../empty/EmptyTrash";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import type { VaultItemMeta } from "../../lib/types";
@@ -16,37 +15,27 @@ function ItemIcon({ type }: { type: VaultItemMeta["item_type"] }) {
   const style = { color: "var(--color-text-muted)" };
   switch (type) {
     case "Story":
-      return <BookOpen size={16} style={style} />;
+      return <BookOpen size={14} style={style} />;
     case "Folder":
-      return <Folder size={16} style={style} />;
+      return <Folder size={14} style={style} />;
     case "SourceDocument":
-      return <FileText size={16} style={style} />;
+      return <FileText size={14} style={style} />;
     case "Image":
-      return <Image size={16} style={style} />;
+      return <Image size={14} style={style} />;
   }
 }
 
+/**
+ * Trash list rendered inside the LeftPane, replacing the vault tree
+ * when showingTrash is true. Compact layout suited for the navigator width.
+ */
 export function TrashView() {
   const trashItems = useVaultStore((s) => s.trashItems);
   const setTrashItems = useVaultStore((s) => s.setTrashItems);
   const setItems = useVaultStore((s) => s.setItems);
-  const setShowingTrash = useVaultStore((s) => s.setShowingTrash);
 
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const confirmRef = useFocusTrap(showEmptyConfirm);
-
-  // Load trash items on mount
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const items = await vaultListTrash();
-        setTrashItems(items);
-      } catch (e) {
-        console.error("Failed to load trash:", e);
-      }
-    };
-    load();
-  }, [setTrashItems]);
 
   const handleRestore = useCallback(
     async (id: string) => {
@@ -80,72 +69,31 @@ export function TrashView() {
   if (trashItems.length === 0) {
     return (
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 shrink-0"
-          style={{
-            height: "48px",
-            borderBottom: "1px solid var(--color-border-subtle)",
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowingTrash(false)}
-              className="flex items-center justify-center transition-colors duration-150"
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                width: "24px",
-                height: "24px",
-                borderRadius: "4px",
-                color: "var(--color-text-muted)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                e.currentTarget.style.color = "var(--color-text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "var(--color-text-muted)";
-              }}
-              title="Back to Vault"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <span style={{ fontSize: "16px", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              Trash
-            </span>
-          </div>
-        </div>
         <EmptyTrash />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col">
-      {/* Header */}
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Empty Trash button */}
       <div
-        className="flex items-center justify-between px-6 shrink-0"
+        className="flex items-center justify-end px-3 shrink-0"
         style={{
-          height: "48px",
+          height: "32px",
           borderBottom: "1px solid var(--color-border-subtle)",
         }}
       >
-        <span style={{ fontSize: "16px", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Trash
-        </span>
         <button
           onClick={() => setShowEmptyConfirm(true)}
-          className="flex items-center gap-1.5 transition-colors duration-150"
+          className="flex items-center gap-1 transition-colors duration-150"
           style={{
             background: "none",
             border: "none",
             cursor: "pointer",
-            padding: "4px 8px",
+            padding: "2px 6px",
             borderRadius: "4px",
-            fontSize: "12px",
+            fontSize: "11px",
             fontFamily: "var(--font-sans)",
             color: "var(--color-error)",
           }}
@@ -156,21 +104,22 @@ export function TrashView() {
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          <Trash2 size={12} />
+          <Trash2 size={11} />
           Empty Trash
         </button>
       </div>
 
       {/* Item list */}
-      <div className="flex-1 overflow-y-auto px-6 py-2">
+      <div className="flex-1 overflow-y-auto py-1">
         {trashItems.map((item) => (
           <div
             key={item.id}
-            className="flex items-center gap-3 transition-colors duration-100"
+            className="flex items-center gap-2 px-3 transition-colors duration-100"
             style={{
-              height: "40px",
-              padding: "0 8px",
+              height: "28px",
               borderRadius: "4px",
+              marginLeft: "4px",
+              marginRight: "4px",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
@@ -186,31 +135,28 @@ export function TrashView() {
             >
               {item.name}
             </span>
-            <span
-              style={{
-                fontSize: "12px",
-                color: "var(--color-text-muted)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {item.deleted_at ? `Deleted ${formatRelativeTime(item.deleted_at)}` : ""}
-            </span>
             <button
               onClick={() => handleRestore(item.id)}
-              className="flex items-center gap-1 shrink-0 transition-colors duration-150"
+              className="flex items-center shrink-0 transition-colors duration-150"
               style={{
                 background: "none",
-                border: "1px solid var(--color-border)",
-                borderRadius: "4px",
-                padding: "3px 8px",
-                fontSize: "12px",
-                fontFamily: "var(--font-sans)",
-                color: "var(--color-text-primary)",
+                border: "none",
                 cursor: "pointer",
+                padding: "2px 4px",
+                borderRadius: "3px",
+                color: "var(--color-text-muted)",
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--color-text-primary)";
+                e.currentTarget.style.backgroundColor = "var(--color-bg-active)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--color-text-muted)";
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+              title={`Restore "${item.name}"`}
             >
               <RotateCcw size={12} />
-              Restore
             </button>
           </div>
         ))}

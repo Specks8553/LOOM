@@ -7,7 +7,6 @@ import { WorldPickerModal } from "../modals/WorldPickerModal";
 import { LeftPane } from "./LeftPane";
 import { PaneDivider } from "./PaneDivider";
 import { RightPane } from "./RightPane";
-import { TrashView } from "../theater/TrashView";
 import { NoStorySelected } from "../empty/NoStorySelected";
 import { EmptyStory } from "../empty/EmptyStory";
 import { initViewportWatcher } from "../../lib/viewportWatcher";
@@ -39,7 +38,6 @@ export function Workspace() {
   const setAppPhase = useUiStore((s) => s.setAppPhase);
   const rightPaneCollapsed = useUiStore((s) => s.rightPaneCollapsed);
   const activeWorldId = useVaultStore((s) => s.activeWorldId);
-  const showingTrash = useVaultStore((s) => s.showingTrash);
   const setWorlds = useVaultStore((s) => s.setWorlds);
   const setItems = useVaultStore((s) => s.setItems);
   const setActiveWorldId = useVaultStore((s) => s.setActiveWorldId);
@@ -123,7 +121,6 @@ export function Workspace() {
 
   // Determine theater content
   const renderTheater = () => {
-    if (showingTrash) return <TrashView />;
     if (activeStoryId) return <EmptyStory />;
     return <NoStorySelected />;
   };
