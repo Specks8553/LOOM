@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Toaster } from "sonner";
 import { useUiStore } from "./stores/uiStore";
 import { useVaultStore } from "./stores/vaultStore";
 import { LockScreen } from "./components/auth/LockScreen";
@@ -97,6 +98,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Workspace />
+      <Toaster position="bottom-right" theme="dark" richColors />
     </ErrorBoundary>
   );
 }

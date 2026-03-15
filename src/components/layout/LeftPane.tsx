@@ -11,9 +11,10 @@ import { BulkActionBar } from "../navigator/BulkActionBar";
 
 interface LeftPaneProps {
   onLock: () => void;
+  style?: React.CSSProperties;
 }
 
-export function LeftPane({ onLock }: LeftPaneProps) {
+export function LeftPane({ onLock, style }: LeftPaneProps) {
   const activeWorldId = useVaultStore((s) => s.activeWorldId);
   const worlds = useVaultStore((s) => s.worlds);
   const setCreateNewOpen = useVaultStore((s) => s.setCreateNewOpen);
@@ -52,6 +53,7 @@ export function LeftPane({ onLock }: LeftPaneProps) {
         width: "260px",
         backgroundColor: "var(--color-bg-pane)",
         borderRight: "1px solid var(--color-border)",
+        ...style,
       }}
     >
       {/* Header: world name + create button */}
