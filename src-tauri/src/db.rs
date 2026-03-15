@@ -13,6 +13,9 @@ pub fn open_world_db(db_path: &std::path::Path, key: &[u8; 32]) -> Result<Connec
     // Verify the connection works by reading the schema
     conn.execute_batch("SELECT count(*) FROM sqlite_master;")?;
 
+    // Run dev-phase migrations for schema changes
+    migrate_dev_schema(&conn)?;
+
     Ok(conn)
 }
 
@@ -204,6 +207,60 @@ pub fn seed_builtin_templates(conn: &Connection) -> Result<(), LoomError> {
             &now,
         ],
     )?;
+    Ok(())
+}
+
+/// Run development-phase schema migrations.
+/// Drops and recreates tables whose schema has changed since prior phases.
+/// Safe to call on every open — only acts if the old schema is detected.
+pub fn migrate_dev_schema(conn: &Connection) -> Result<(), LoomError> {
+    // Check if messages table has the old content_type constraint (Phase 4 schema had 'text','image')
+    let table_sql: Option<String> = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(sql) = table_sql {
+        if sql.contains("'image'") || !sql.contains("'json_user'") {
+            // Old schema — drop and let init_schema recreate it
+            // Messages table should be empty at this development stage
+            log::info!("Migrating messages table to Phase 6 schema");
+            conn.execute_batch(
+                "DROP TABLE IF EXISTS messages;
+                 DROP TABLE IF EXISTS story_settings;"
+            )?;
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS messages (
+                    id                  TEXT PRIMARY KEY,
+                    story_id            TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                    parent_id           TEXT REFERENCES messages(id) ON DELETE SET NULL,
+                    role                TEXT NOT NULL CHECK(role IN ('user','model')),
+                    content_type        TEXT NOT NULL DEFAULT 'text'
+                                          CHECK(content_type IN ('json_user','text','blocks')),
+                    content             TEXT NOT NULL DEFAULT '',
+                    token_count         INTEGER,
+                    model_name          TEXT,
+                    finish_reason       TEXT CHECK(finish_reason IN ('STOP','MAX_TOKENS','SAFETY','ERROR') OR finish_reason IS NULL),
+                    created_at          TEXT NOT NULL,
+                    deleted_at          TEXT,
+                    user_feedback       TEXT,
+                    ghostwriter_history TEXT NOT NULL DEFAULT '[]'
+                );
+                CREATE INDEX IF NOT EXISTS idx_messages_story  ON messages(story_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+                CREATE TABLE IF NOT EXISTS story_settings (
+                    story_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                    key      TEXT NOT NULL,
+                    value    TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (story_id, key)
+                );"
+            )?;
+        }
+    }
+
     Ok(())
 }
 
