@@ -255,6 +255,12 @@ html, body, #root {
   animation: ghostwriter-pulse 2s ease-in-out infinite;
 }
 
+/* Branch Map: active node pulse during generation — Doc 17 §9 */
+@keyframes node-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
 .ghostwriter-diff-changed {
   background-color: color-mix(in srgb, var(--color-ghostwriter-diff) 30%, transparent);
   text-decoration: underline;

@@ -68,8 +68,25 @@ function App() {
         return;
       }
 
-      // Escape chain: multi-select clear (lower priority than modals)
+      // Ctrl+M → Toggle Branch Map
+      if (e.ctrlKey && e.key === "m" && appPhase === "workspace") {
+        e.preventDefault();
+        const uiState = useUiStore.getState();
+        uiState.setBranchMapOpen(!uiState.branchMapOpen);
+        return;
+      }
+
+      // Escape chain — Doc 13 §1.1 priority order:
+      // modal > Branch Map > Feedback > Ghostwriter > Editor > Reader View > multi-select
       if (e.key === "Escape" && appPhase === "workspace") {
+        // Priority 2: Branch Map
+        const uiState = useUiStore.getState();
+        if (uiState.branchMapOpen) {
+          uiState.setBranchMapOpen(false);
+          return;
+        }
+
+        // Lower priority: multi-select clear
         const { selectedItems, clearSelection } = useVaultStore.getState();
         if (selectedItems.size > 0) {
           clearSelection();

@@ -136,6 +136,59 @@ export interface RateLimitStatus {
   reason: string | null;
 }
 
+// ─── Phase 13: Branch Map Types ─────────────────────────────────────────────
+
+export type ModelOrigin = "Normal" | "Ghostwriter" | "Regenerated";
+
+export interface BranchMapNode {
+  user_msg_id: string;
+  model_msg_id: string;
+  excerpt: string;
+  token_count: number | null;
+  created_at: string;
+  is_current_leaf: boolean;
+  user_was_edited: boolean;
+  model_origin: ModelOrigin;
+}
+
+export interface BranchMapEdge {
+  parent_model_msg_id: string;
+  child_user_msg_id: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  story_id: string;
+  after_message_id: string | null;
+  name: string;
+  is_start: boolean;
+  created_at: string;
+  modified_at: string;
+}
+
+export interface AccordionSegmentInfo {
+  id: string;
+  story_id: string;
+  start_msg_id: string;
+  end_msg_id: string;
+  has_summary: boolean;
+  token_count: number | null;
+  created_at: string;
+}
+
+export interface BranchMapData {
+  nodes: BranchMapNode[];
+  edges: BranchMapEdge[];
+  checkpoints: Checkpoint[];
+  accordion_segments: AccordionSegmentInfo[];
+  current_leaf_id: string;
+}
+
+export interface BranchDeletionResult {
+  new_leaf_id: string | null;
+  deleted_ids: string[];
+}
+
 /** Parse user message content from JSON string.
  *  Handles backward-compat for messages created before constraints/output_length. */
 export function parseUserContent(content: string): UserContent {

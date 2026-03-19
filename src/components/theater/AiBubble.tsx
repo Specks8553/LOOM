@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import { AlertTriangle, RefreshCw, Trash2, MessageSquare, RotateCcw } from "lucide-react";
+import { AlertTriangle, RefreshCw, Trash2, MessageSquare, RotateCcw, Map as MapIcon, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 import { marked } from "marked";
 import { formatShortTime } from "../../lib/timeUtils";
@@ -21,6 +21,9 @@ import {
   sendGhostwriterRequest,
   saveGhostwriterEdit,
 } from "../../lib/tauriApi";
+import { useUiStore } from "../../stores/uiStore";
+import { useBranchMapStore } from "../../stores/branchMapStore";
+import { createCheckpointCmd } from "../../lib/tauriApi";
 import type { ChatMessage, UserContent } from "../../lib/types";
 
 interface AiBubbleProps {
@@ -360,7 +363,7 @@ export function AiBubble({
           label: "Undo",
           onClick: async () => {
             try {
-              await undeleteMessage(deletedIds);
+              await undeleteMessage(storyId, deletedIds);
               await setStoryLeafId(storyId, deletedModelId);
               await onReloadBranch(deletedModelId);
             } catch (err) {
@@ -514,6 +517,27 @@ export function AiBubble({
             { label: "Ghostwriter...", icon: RefreshCw, onClick: handleEnterGhostwriter, disabled: isGenerating },
             { label: "Regenerate", icon: RefreshCw, onClick: handleRegenerate, disabled: !isLast || isGenerating },
             { label: "Delete", icon: Trash2, onClick: handleDelete, disabled: !isLast || isGenerating },
+            { label: "", icon: undefined, onClick: () => {}, separator: true },
+            {
+              label: "Show in Branch Map",
+              icon: MapIcon,
+              onClick: () => {
+                useUiStore.getState().setBranchMapOpen(true);
+                useBranchMapStore.getState().setScrollTo(message.id);
+              },
+            },
+            {
+              label: "Add Checkpoint Here",
+              icon: Bookmark,
+              onClick: async () => {
+                try {
+                  await createCheckpointCmd(storyId, message.id, "Checkpoint");
+                  toast("Checkpoint created");
+                } catch (err) {
+                  toast.error(`Failed to create checkpoint: ${err}`);
+                }
+              },
+            },
           ];
           showContextMenu(e, items);
         }}

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { Bookmark } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
 import {
   getStoryLeafId,
+  loadBranchMap,
   loadStoryMessages,
   navigateToSibling,
   setStoryLeafId,
@@ -12,7 +14,7 @@ import { UserBubble } from "./UserBubble";
 import { AiBubble } from "./AiBubble";
 import { InputArea } from "./InputArea";
 import { EmptyStory } from "../empty/EmptyStory";
-import type { StreamChunk, StreamDone } from "../../lib/types";
+import type { Checkpoint, StreamChunk, StreamDone } from "../../lib/types";
 
 /**
  * Theater: message display + input area.
@@ -39,6 +41,7 @@ export function Theater() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
 
   // Load messages when story changes
   const loadMessages = useCallback(async () => {
@@ -66,6 +69,32 @@ export function Theater() {
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // Load checkpoints for Theater dividers
+  useEffect(() => {
+    if (!activeStoryId || !currentLeafId) {
+      setCheckpoints([]);
+      return;
+    }
+    loadBranchMap(activeStoryId).then((data) => {
+      setCheckpoints(data.checkpoints);
+    }).catch(() => {
+      setCheckpoints([]);
+    });
+  }, [activeStoryId, currentLeafId]);
+
+  // Refresh checkpoints when branch map updates
+  useEffect(() => {
+    if (!activeStoryId) return;
+    const unlisten = listen<string>("branch_map_updated", (event) => {
+      if (event.payload === activeStoryId && currentLeafId) {
+        loadBranchMap(activeStoryId).then((data) => {
+          setCheckpoints(data.checkpoints);
+        }).catch(() => {});
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [activeStoryId, currentLeafId]);
 
   // Reload the current branch (used after delete, regenerate, edit)
   const reloadBranch = useCallback(
@@ -192,6 +221,16 @@ export function Theater() {
     siblingCountMap.set(sc.parent_id, sc.count);
   }
 
+  // Build checkpoint lookup: after_message_id → checkpoint
+  const checkpointAfterMap = new Map<string, Checkpoint>();
+  for (const cp of checkpoints) {
+    if (cp.after_message_id) {
+      checkpointAfterMap.set(cp.after_message_id, cp);
+    }
+  }
+  // Start checkpoint (after_message_id is null)
+  const startCheckpoint = checkpoints.find((cp) => cp.is_start);
+
   if (!activeStoryId) return null;
 
   const lastMsgIdx = messages.length - 1;
@@ -245,10 +284,17 @@ export function Theater() {
           className="flex-1 overflow-y-auto"
           style={{ padding: "16px 24px" }}
         >
+          {/* Start checkpoint divider */}
+          {startCheckpoint && messages.length > 0 && (
+            <TheaterCheckpointDivider checkpoint={startCheckpoint} />
+          )}
           {messages.map((msg, idx) => {
             const isLast = idx === lastMsgIdx;
             const parentKey = msg.parent_id ?? "__root__";
             const hasSiblings = (siblingCountMap.get(parentKey) ?? 0) > 1;
+
+            // Check if there's a checkpoint after this message (model messages)
+            const cpAfter = checkpointAfterMap.get(msg.id);
 
             if (msg.role === "user") {
               return (
@@ -261,6 +307,7 @@ export function Theater() {
                     onReloadBranch={reloadBranch}
                     storyId={activeStoryId}
                   />
+                  {cpAfter && <TheaterCheckpointDivider checkpoint={cpAfter} />}
                 </div>
               );
             }
@@ -275,6 +322,7 @@ export function Theater() {
                 onReloadBranch={reloadBranch}
                 storyId={activeStoryId}
               />
+              {cpAfter && <TheaterCheckpointDivider checkpoint={cpAfter} />}
               </div>
             );
           })}
@@ -283,6 +331,24 @@ export function Theater() {
 
       {/* Input area */}
       <InputArea />
+    </div>
+  );
+}
+
+function TheaterCheckpointDivider({ checkpoint }: { checkpoint: Checkpoint }) {
+  return (
+    <div className="flex items-center gap-3 my-4 px-2 select-none">
+      <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
+      <div className="flex items-center gap-1.5">
+        <Bookmark size={12} style={{ color: "var(--color-checkpoint)" }} />
+        <span
+          className="text-[11px] font-medium uppercase tracking-wider"
+          style={{ color: "var(--color-checkpoint)" }}
+        >
+          {checkpoint.name}
+        </span>
+      </div>
+      <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
     </div>
   );
 }

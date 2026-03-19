@@ -71,15 +71,18 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
             PRIMARY KEY (story_id, key)
         );
 
-        -- Branch checkpoints (used by Branch Map + Accordion)
+        -- Branch checkpoints (used by Branch Map + Accordion) — Doc 17 §7.1
         CREATE TABLE IF NOT EXISTS checkpoints (
-            id          TEXT PRIMARY KEY,
-            story_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-            message_id  TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-            name        TEXT NOT NULL,
-            created_at  TEXT NOT NULL
+            id               TEXT PRIMARY KEY,
+            story_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            after_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+            name             TEXT NOT NULL DEFAULT 'Checkpoint',
+            is_start         INTEGER NOT NULL DEFAULT 0,
+            created_at       TEXT NOT NULL,
+            modified_at      TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_checkpoints_story ON checkpoints(story_id);
+        CREATE INDEX IF NOT EXISTS idx_checkpoints_after_msg ON checkpoints(after_message_id);
 
         -- Accordion segment summaries
         CREATE TABLE IF NOT EXISTS accordion_segments (
@@ -298,6 +301,40 @@ pub fn migrate_dev_schema(conn: &Connection) -> Result<(), LoomError> {
             "UPDATE settings SET value = ?1 WHERE key = 'text_model_options' AND value LIKE '%flash-preview%'",
             rusqlite::params![r#"["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]"#],
         ).ok();
+    }
+
+    // Migrate checkpoints table to Phase 13 schema (Doc 17 §7.1)
+    let cp_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='checkpoints'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)))
+        .unwrap_or(false);
+    if cp_exists {
+        let cp_sql: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='checkpoints'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(sql) = cp_sql {
+            if sql.contains("message_id") || !sql.contains("after_message_id") {
+                log::info!("Migrating checkpoints table to Phase 13 schema");
+                conn.execute_batch(
+                    "DROP TABLE IF EXISTS checkpoints;
+                     CREATE TABLE IF NOT EXISTS checkpoints (
+                         id               TEXT PRIMARY KEY,
+                         story_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                         after_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+                         name             TEXT NOT NULL DEFAULT 'Checkpoint',
+                         is_start         INTEGER NOT NULL DEFAULT 0,
+                         created_at       TEXT NOT NULL,
+                         modified_at      TEXT NOT NULL
+                     );
+                     CREATE INDEX IF NOT EXISTS idx_checkpoints_story ON checkpoints(story_id);
+                     CREATE INDEX IF NOT EXISTS idx_checkpoints_after_msg ON checkpoints(after_message_id);"
+                )?;
+            }
+        }
     }
 
     Ok(())

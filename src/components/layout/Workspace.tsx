@@ -16,6 +16,7 @@ import { initViewportWatcher } from "../../lib/viewportWatcher";
 import { PanelRightOpen } from "lucide-react";
 import { lockVault, listWorlds, vaultListItems } from "../../lib/tauriApi";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { BranchMapDrawer } from "../branchmap/BranchMapDrawer";
 
 // localStorage keys
 const LS_LEFT_WIDTH = "left_pane_width";
@@ -232,6 +233,7 @@ export function Workspace() {
 
       <WorldPickerModal />
       <SettingsModal />
+      <BranchMapDrawer />
 
       {/* Lock-during-generation confirmation */}
       {showLockConfirm && (

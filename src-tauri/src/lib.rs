@@ -1,3 +1,4 @@
+mod branch;
 mod config;
 mod crypto;
 mod db;
@@ -9,9 +10,12 @@ mod state;
 mod vault;
 mod world;
 
+use tauri::Emitter;
+
 use error::LoomError;
 use gemini::{ChatMessage, StoryPayload, StreamDone, UserContent};
 use state::AppState;
+use branch::{BranchMapData, BranchDeletionResult, Checkpoint};
 use vault::{VaultItemMeta, VaultItem, Template, ContextDoc};
 use world::WorldMeta;
 
@@ -672,6 +676,7 @@ async fn send_message(
         model_msg: model_msg.clone(),
     };
     let _ = app.emit("stream_done", &done);
+    let _ = app.emit("branch_map_updated", &story_id);
 
     log::info!("Message sent for story {}", story_id);
     Ok(done)
@@ -757,6 +762,7 @@ async fn navigate_to_sibling(
 #[tauri::command]
 async fn delete_message(
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
     story_id: String,
     message_id: String,
 ) -> Result<Option<String>, LoomError> {
@@ -772,8 +778,7 @@ async fn delete_message(
     // Soft-delete the AI message
     messages::soft_delete_message(conn, &message_id)?;
 
-    // Also soft-delete the parent user message if it has no other non-deleted children
-    if let Some(ref uid) = parent_id {
+    let result = if let Some(ref uid) = parent_id {
         let other_children: i64 = conn.query_row(
             "SELECT COUNT(*) FROM messages WHERE parent_id = ?1 AND deleted_at IS NULL",
             rusqlite::params![uid],
@@ -781,30 +786,31 @@ async fn delete_message(
         )?;
         if other_children == 0 {
             messages::soft_delete_message(conn, uid)?;
-            // New leaf is the user message's parent
             let user_msg = messages::get_message(conn, uid)?;
             if let Some(ref new_leaf) = user_msg.parent_id {
                 messages::set_story_leaf_id(conn, &story_id, new_leaf)?;
-                return Ok(Some(new_leaf.clone()));
+                Ok(Some(new_leaf.clone()))
             } else {
-                // Was the root — no messages left
-                return Ok(None);
+                Ok(None)
             }
+        } else {
+            messages::set_story_leaf_id(conn, &story_id, uid)?;
+            Ok(Some(uid.clone()))
         }
-    }
+    } else {
+        Ok(None)
+    };
 
-    // AI message deleted but user message has other children — leaf becomes parent user msg
-    if let Some(ref uid) = parent_id {
-        messages::set_story_leaf_id(conn, &story_id, uid)?;
-        return Ok(Some(uid.clone()));
-    }
-    Ok(None)
+    let _ = app.emit("branch_map_updated", &story_id);
+    result
 }
 
 /// Undo soft-delete of message(s).
 #[tauri::command]
 async fn undelete_message(
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    story_id: String,
     message_ids: Vec<String>,
 ) -> Result<(), LoomError> {
     let conn_guard = state.active_conn.lock().map_err(|e| {
@@ -814,6 +820,7 @@ async fn undelete_message(
     for id in &message_ids {
         messages::undelete_message(conn, id)?;
     }
+    let _ = app.emit("branch_map_updated", &story_id);
     Ok(())
 }
 
@@ -1477,6 +1484,115 @@ Writer's instruction:
 Original message (return this in full with only the selected passage changed):
 {original_message_content}"#;
 
+// ─── Phase 13: Branch Map + Checkpoints ──────────────────────────────────────
+
+/// Load the full branch map data for a story.
+#[tauri::command]
+async fn load_branch_map(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<BranchMapData, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    // Get current leaf_id from story_settings
+    let leaf_id: String = conn
+        .query_row(
+            "SELECT value FROM story_settings WHERE story_id = ?1 AND key = 'leaf_id'",
+            rusqlite::params![&story_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+
+    branch::load_branch_map(conn, &story_id, &leaf_id)
+}
+
+/// Create a checkpoint after a specific message.
+#[tauri::command]
+async fn create_checkpoint(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    story_id: String,
+    after_message_id: Option<String>,
+    name: String,
+) -> Result<Checkpoint, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    let cp = branch::create_checkpoint(conn, &story_id, after_message_id.as_deref(), &name)?;
+
+    // Emit live update event
+    let _ = app.emit("branch_map_updated", &story_id);
+    Ok(cp)
+}
+
+/// Rename a checkpoint.
+#[tauri::command]
+async fn rename_checkpoint(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    checkpoint_id: String,
+    name: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    branch::rename_checkpoint(conn, &checkpoint_id, &name)?;
+
+    // Get story_id for the event
+    let story_id: String = conn
+        .query_row(
+            "SELECT story_id FROM checkpoints WHERE id = ?1",
+            rusqlite::params![&checkpoint_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    let _ = app.emit("branch_map_updated", &story_id);
+    Ok(())
+}
+
+/// Delete a non-Start checkpoint.
+#[tauri::command]
+async fn delete_checkpoint(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    story_id: String,
+    checkpoint_id: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    branch::delete_checkpoint(conn, &checkpoint_id)?;
+    let _ = app.emit("branch_map_updated", &story_id);
+    Ok(())
+}
+
+/// Delete a branch starting from a model message (soft-delete).
+#[tauri::command]
+async fn delete_branch_from(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    story_id: String,
+    model_msg_id: String,
+) -> Result<BranchDeletionResult, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    let result = branch::delete_branch_from(conn, &story_id, &model_msg_id)?;
+    let _ = app.emit("branch_map_updated", &story_id);
+    Ok(result)
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1558,6 +1674,12 @@ pub fn run() {
             // Phase 12: Ghostwriter
             send_ghostwriter_request,
             save_ghostwriter_edit,
+            // Phase 13: Branch Map + Checkpoints
+            load_branch_map,
+            create_checkpoint,
+            rename_checkpoint,
+            delete_checkpoint,
+            delete_branch_from,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

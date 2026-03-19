@@ -3,7 +3,7 @@
  * Per CLAUDE.md: no raw invoke() scattered through components.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { WorldMeta, VaultItemMeta, VaultItem, UserContent, ChatMessage, StoryPayload, StreamDone, Template, ContextDoc } from "./types";
+import type { WorldMeta, VaultItemMeta, VaultItem, UserContent, ChatMessage, StoryPayload, StreamDone, Template, ContextDoc, BranchMapData, Checkpoint, BranchDeletionResult } from "./types";
 
 // ─── Auth & Config ────────────────────────────────────────────────────────────
 
@@ -184,8 +184,8 @@ export function deleteMessageCmd(
   return invoke<string | null>("delete_message", { storyId, messageId });
 }
 
-export function undeleteMessage(messageIds: string[]): Promise<void> {
-  return invoke("undelete_message", { messageIds });
+export function undeleteMessage(storyId: string, messageIds: string[]): Promise<void> {
+  return invoke("undelete_message", { storyId, messageIds });
 }
 
 export function setStoryLeafId(storyId: string, leafId: string): Promise<void> {
@@ -341,4 +341,34 @@ export function saveGhostwriterEdit(
   },
 ): Promise<void> {
   return invoke("save_ghostwriter_edit", { messageId, newContent, historyEntry });
+}
+
+// ─── Phase 13: Branch Map + Checkpoints ────────────────────────────────────
+
+export function loadBranchMap(storyId: string): Promise<BranchMapData> {
+  return invoke<BranchMapData>("load_branch_map", { storyId });
+}
+
+export function createCheckpointCmd(
+  storyId: string,
+  afterMessageId: string | null,
+  name: string,
+): Promise<Checkpoint> {
+  return invoke<Checkpoint>("create_checkpoint", {
+    storyId,
+    afterMessageId,
+    name,
+  });
+}
+
+export function renameCheckpointCmd(checkpointId: string, name: string): Promise<void> {
+  return invoke("rename_checkpoint", { checkpointId, name });
+}
+
+export function deleteCheckpointCmd(storyId: string, checkpointId: string): Promise<void> {
+  return invoke("delete_checkpoint", { storyId, checkpointId });
+}
+
+export function deleteBranchFrom(storyId: string, modelMsgId: string): Promise<BranchDeletionResult> {
+  return invoke<BranchDeletionResult>("delete_branch_from", { storyId, modelMsgId });
 }

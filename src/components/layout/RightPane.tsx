@@ -8,7 +8,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
-import { toast } from "sonner";
+
 import { useUiStore } from "../../stores/uiStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
@@ -348,7 +348,6 @@ function StoryTitle({
       <button
         onClick={() => {
           setBranchMapOpen(true);
-          toast("Branch Map is coming in a future update.", { duration: 2000 });
         }}
         className="flex items-center justify-center shrink-0 transition-colors duration-150"
         style={{
