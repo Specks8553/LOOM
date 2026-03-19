@@ -140,7 +140,7 @@ CONTEXT DOCS                     [?]
 
 - Icon: template-defined icon (`16px`, `--color-text-muted`)
 - Subtype label: `11px`, italic, `--color-text-muted`
-- Doc name: `12px`, Inter 500, `--color-text-primary`
+- Doc name: `12px`, Inter 500, `--color-text-primary`, `cursor: pointer`. Click opens the document in the theater (DocEditor or ImageViewer)
 - `[✕]` remove button: `lucide-react X`, `12px`, visible on hover
   Calls `detach_context_doc(story_id, doc_id)`. Does not delete doc from vault.
 - Chip background: `--color-bg-elevated`, border: `1px solid --color-border`,
@@ -196,20 +196,32 @@ CREATE TABLE IF NOT EXISTS attachment_history (
 
 ---
 
-## 5. System Instructions
+## 5. System Instructions (Dual Slots)
 
 ```
-SYSTEM INSTRUCTIONS    [▲ collapse]
+SYSTEM INSTRUCTIONS  [SI 1]  [▲ collapse]
+SI 1                         ← click to rename
 ┌──────────────────────────────────────┐
 │ You are a master storyteller…        │
 └──────────────────────────────────────┘
-Applied to every AI request in this world.
+Active slot applied to every AI request.
 ```
 
-- Expanded by default. Collapse state: `localStorage` key `ctrl_sysinstr_collapsed`
-- `<textarea>`, `12px`, Inter 400, `--color-text-secondary`, `min-height: 80px`, auto-grow
-- Saves on blur via `save_settings("system_instructions", value)`
-- Synced with Settings → Writing → System Instructions (same store value)
+LOOM supports two system instruction slots (SI 1 and SI 2). The user can switch between them via a toggle button inline with the section header.
+
+- **Toggle button**: displays the active slot's name. Click to switch to the other slot. Styled as a compact pill (`9px` mono, accent color, `--color-bg-active` background).
+- **Slot name**: displayed below the header, click to edit inline. Names persist as `si_slot_1_name` / `si_slot_2_name` in settings.
+- **Content**: each slot stores its own content (`system_instructions` for slot 1, `system_instructions_2` for slot 2). The active slot's content is sent with all AI requests.
+- **Active slot**: stored as `active_si_slot` setting (`"1"` or `"2"`). Switching does not clear content — both slots are preserved independently.
+- Expanded by default. Collapse state: `localStorage` key `ctrl_sysinstr_collapsed`.
+- `<textarea>`, `12px`, Inter 400, `--color-text-secondary`, `min-height: 80px`, auto-grow.
+- Saves on blur via `updateSetting(activeKey, value)`.
+
+### Backend Integration
+
+`send_message` reads `active_si_slot` to determine which key to load:
+- If `"2"` → reads `system_instructions_2`
+- Otherwise → reads `system_instructions` (default)
 
 ---
 
@@ -242,7 +254,7 @@ Slide animation: `transform: translateX(100%)` → `translateX(0)`, `200ms ease`
 
 ### 6.3 Feedback Entry List
 
-Each message with non-empty `user_feedback` renders as an entry:
+Only model messages from the active branch that have non-empty `user_feedback` are shown. Messages without feedback are excluded from this list. Each qualifying message renders as an entry:
 
 ```
 ┌───────────────────────────────────────┐
@@ -288,10 +300,11 @@ RPD  ██░░░░░░░░  312 / 1,500
 
 - Section header: `10px`, Inter 600, uppercase, `--color-text-muted`
 - Bar color thresholds: < 60% emerald · 60–80% amber · > 80% rose
-- Updated after every response via `telemetryStore.refresh()`
+- Data source: `get_telemetry()` Tauri command returns `TelemetryCounters` (req_count_min, req_count_day, token_count_min, rpm_limit, tpm_limit, rpd_limit)
+- Polling: every 5 seconds, plus immediate refresh after generation completes
+- Window rollover: minute window resets after 60 seconds, day window resets on UTC date change
 - Padding: `12px 14px`
-
-Full specification in `06-Telemetry-and-Rate-Limiting.md §6.2`.
+- Rate limit banner: when limits exceeded, an amber warning banner appears above the InputArea with the reason text and the Send button is disabled
 
 ---
 
@@ -313,6 +326,7 @@ pub struct ContextDoc {
     pub item_subtype: String,
     pub icon: String,
     pub content: String,
-    pub file_uri: Option<String>,  // Gemini File API URI if uploaded
+    // Note: text docs are always sent inline (no File API).
+    // Image docs use Gemini File API — see Doc 19.
 }
 ```

@@ -42,7 +42,7 @@ supporting full narrative branching.
 | 07 | Onboarding and First Launch | Wizard steps, API key lifecycle, recovery file, Recovery Screen |
 | 05 | Settings Modal | All settings tabs, World vs App scope, defaults table, Tauri commands |
 | 04 | Reader View and Export | View modes, Markdown export, Full Branch JSON export |
-| 12 | Source Document Viewer and Editor | Editor UI, template placeholders, Gemini File API, image docs |
+| 12 | Source Document Viewer and Editor | Editor UI, template placeholders, inline context injection, image docs |
 
 ### Vault and Conversation
 
@@ -106,7 +106,7 @@ supporting full narrative branching.
 | Accordion | Token Counter | Shows sent tokens + saved tokens separately |
 | Branch Map | Checkpoints | Checkpoints displayed as markers, manageable in map |
 | Feedback | History | Injected as `[WRITER FEEDBACK]` tag in model message content |
-| Context Docs | Gemini File API | Large docs uploaded; URI cached in story_settings |
+| Context Docs | History / Request Assembly | Text docs always inline in current turn (not in history); image docs use Gemini File API |
 
 ### Settings Scope
 - **App Settings** (in `localStorage`): auto-lock timer, export folder path

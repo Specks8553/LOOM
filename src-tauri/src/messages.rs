@@ -144,11 +144,12 @@ pub fn load_story_messages(
         .collect();
 
     // Sibling counts: fork points with >1 child — Doc 09 §2.2
+    // Use COALESCE so root-level messages (parent_id IS NULL) are counted under '__root__'
     let mut sc_stmt = conn.prepare(
-        "SELECT parent_id, COUNT(*) AS sibling_count
+        "SELECT COALESCE(parent_id, '__root__') AS pid, COUNT(*) AS sibling_count
          FROM messages
-         WHERE story_id = ?1 AND deleted_at IS NULL AND parent_id IS NOT NULL
-         GROUP BY parent_id
+         WHERE story_id = ?1 AND deleted_at IS NULL
+         GROUP BY pid
          HAVING sibling_count > 1",
     )?;
 
@@ -327,6 +328,8 @@ mod tests {
             plot_direction: "The hero enters the cave.".to_string(),
             background_information: String::new(),
             modificators: vec![],
+            constraints: String::new(),
+            output_length: None,
         };
 
         let user_msg = insert_user_message(&conn, "story1", None, &uc).unwrap();

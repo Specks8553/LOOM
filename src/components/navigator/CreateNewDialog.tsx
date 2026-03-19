@@ -1,10 +1,19 @@
-import { useState, useCallback } from "react";
-import { X, BookOpen, Folder, User, Globe, Image } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { X, BookOpen, Folder, FileText, Image, User, Globe } from "lucide-react";
 import { useVaultStore } from "../../stores/vaultStore";
-import { vaultCreateItem, vaultListItems } from "../../lib/tauriApi";
+import { vaultCreateItem, vaultCreateItemWithContent, vaultListItems, listTemplates } from "../../lib/tauriApi";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import type { Template } from "../../lib/types";
 
-type SourceDocSubtype = "CharacterProfile" | "WorldBuilding" | "Image";
+// Map template icon names to lucide-react components
+function getTemplateIcon(iconName: string) {
+  switch (iconName) {
+    case "User": return <User size={16} style={{ color: "var(--color-text-muted)" }} />;
+    case "Globe": return <Globe size={16} style={{ color: "var(--color-text-muted)" }} />;
+    case "Image": return <Image size={16} style={{ color: "var(--color-text-muted)" }} />;
+    default: return <FileText size={16} style={{ color: "var(--color-text-muted)" }} />;
+  }
+}
 
 export function CreateNewDialog() {
   const createNewOpen = useVaultStore((s) => s.createNewOpen);
@@ -15,13 +24,24 @@ export function CreateNewDialog() {
   const items = useVaultStore((s) => s.items);
 
   const [sourceDocName, setSourceDocName] = useState("");
-  const [activeSubtype, setActiveSubtype] = useState<SourceDocSubtype | null>(null);
+  const [activeTemplate, setActiveTemplate] = useState<Template | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
 
   const dialogRef = useFocusTrap(createNewOpen);
 
+  // Load templates when dialog opens
+  useEffect(() => {
+    if (createNewOpen) {
+      listTemplates()
+        .then(setTemplates)
+        .catch((e) => console.error("Failed to load templates:", e));
+    }
+  }, [createNewOpen]);
+
   const close = useCallback(() => {
     setCreateNewOpen(false);
-    setActiveSubtype(null);
+    setActiveTemplate(null);
     setSourceDocName("");
     setError(null);
   }, [setCreateNewOpen]);
@@ -32,13 +52,10 @@ export function CreateNewDialog() {
     if (selectedArr.length === 1) {
       const selected = items.find((i) => i.id === selectedArr[0]);
       if (selected?.item_type === "Folder") return selected.id;
-      // If selected item has a parent folder, use that
       if (selected?.parent_id) return selected.parent_id;
     }
     return null;
   }, [selectedItems, items]);
-
-  const [error, setError] = useState<string | null>(null);
 
   const handleCreateSimple = useCallback(
     async (type: "Story" | "Folder") => {
@@ -48,7 +65,6 @@ export function CreateNewDialog() {
         const created = await vaultCreateItem(type, defaultName, getParentId());
         const refreshed = await vaultListItems();
         setItems(refreshed);
-        // Trigger inline rename for the new item
         setPendingRename(created.id);
         close();
       } catch (e) {
@@ -60,10 +76,18 @@ export function CreateNewDialog() {
   );
 
   const handleCreateSourceDoc = useCallback(async () => {
-    if (!activeSubtype || !sourceDocName.trim()) return;
+    if (!activeTemplate || !sourceDocName.trim()) return;
     setError(null);
     try {
-      await vaultCreateItem("SourceDocument", sourceDocName.trim(), getParentId(), activeSubtype);
+      const itemType = activeTemplate.slug === "image" ? "Image" : "SourceDocument";
+      // Use create_with_content to populate template default_content
+      await vaultCreateItemWithContent(
+        itemType,
+        sourceDocName.trim(),
+        getParentId(),
+        activeTemplate.slug,
+        activeTemplate.default_content,
+      );
       const refreshed = await vaultListItems();
       setItems(refreshed);
       close();
@@ -71,24 +95,31 @@ export function CreateNewDialog() {
       console.error("Failed to create source document:", e);
       setError(String(e));
     }
-  }, [activeSubtype, sourceDocName, getParentId, setItems, close]);
+  }, [activeTemplate, sourceDocName, getParentId, setItems, close]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        if (activeSubtype) {
-          setActiveSubtype(null);
+        if (activeTemplate) {
+          setActiveTemplate(null);
           setSourceDocName("");
         } else {
           close();
         }
       }
     },
-    [activeSubtype, close],
+    [activeTemplate, close],
   );
 
   if (!createNewOpen) return null;
+
+  // Separate builtin image template from user-defined templates
+  const userTemplates = templates.filter((t) => !t.is_builtin);
+  const imageTemplate = templates.find((t) => t.slug === "image");
+
+  // If no user templates exist, show hardcoded defaults as fallback
+  const hasUserTemplates = userTemplates.length > 0;
 
   const itemButtonStyle = {
     display: "flex",
@@ -105,6 +136,15 @@ export function CreateNewDialog() {
     color: "var(--color-text-primary)",
     textAlign: "left" as const,
     transition: "background-color 150ms ease",
+  };
+
+  const hoverHandlers = {
+    onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.currentTarget.style.backgroundColor = "transparent";
+    },
   };
 
   return (
@@ -143,7 +183,7 @@ export function CreateNewDialog() {
               letterSpacing: "0.04em",
             }}
           >
-            {activeSubtype ? "Name Document" : "Create New"}
+            {activeTemplate ? "Name Document" : "Create New"}
           </span>
           <button
             onClick={close}
@@ -163,7 +203,7 @@ export function CreateNewDialog() {
 
         {/* Content */}
         <div className="flex flex-col p-2">
-          {activeSubtype ? (
+          {activeTemplate ? (
             /* Source document name input */
             <div className="flex flex-col gap-2 p-2">
               <input
@@ -216,31 +256,13 @@ export function CreateNewDialog() {
           ) : (
             <>
               {/* Story */}
-              <button
-                style={itemButtonStyle}
-                onClick={() => handleCreateSimple("Story")}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
+              <button style={itemButtonStyle} onClick={() => handleCreateSimple("Story")} {...hoverHandlers}>
                 <BookOpen size={16} style={{ color: "var(--color-text-muted)" }} />
                 Story
               </button>
 
               {/* Folder */}
-              <button
-                style={itemButtonStyle}
-                onClick={() => handleCreateSimple("Folder")}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
+              <button style={itemButtonStyle} onClick={() => handleCreateSimple("Folder")} {...hoverHandlers}>
                 <Folder size={16} style={{ color: "var(--color-text-muted)" }} />
                 Folder
               </button>
@@ -250,59 +272,67 @@ export function CreateNewDialog() {
                 className="flex items-center gap-2 px-3 my-1"
                 style={{ color: "var(--color-text-muted)", fontSize: "11px" }}
               >
-                <div
-                  className="flex-1"
-                  style={{ height: "1px", backgroundColor: "var(--color-border-subtle)" }}
-                />
+                <div className="flex-1" style={{ height: "1px", backgroundColor: "var(--color-border-subtle)" }} />
                 <span style={{ letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>
                   Source Documents
                 </span>
-                <div
-                  className="flex-1"
-                  style={{ height: "1px", backgroundColor: "var(--color-border-subtle)" }}
-                />
+                <div className="flex-1" style={{ height: "1px", backgroundColor: "var(--color-border-subtle)" }} />
               </div>
 
-              {/* Character Profile */}
-              <button
-                style={itemButtonStyle}
-                onClick={() => setActiveSubtype("CharacterProfile")}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                <User size={16} style={{ color: "var(--color-text-muted)" }} />
-                Character Profile
-              </button>
+              {/* User-defined templates from DB */}
+              {hasUserTemplates ? (
+                userTemplates.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    style={itemButtonStyle}
+                    onClick={() => setActiveTemplate(tmpl)}
+                    {...hoverHandlers}
+                  >
+                    {getTemplateIcon(tmpl.icon)}
+                    {tmpl.name}
+                  </button>
+                ))
+              ) : (
+                <>
+                  {/* Hardcoded defaults when no user templates exist */}
+                  <button
+                    style={itemButtonStyle}
+                    onClick={() => setActiveTemplate({
+                      id: "__char__", slug: "character_profile", name: "Character Profile",
+                      icon: "User", default_content: "## {{character_name}}\n\n**Age:** {{age}}\n**Occupation:** {{occupation}}\n\n### Backstory\n{{backstory}}\n\n### Personality\n{{personality}}\n\n### Notes\n{{notes}}",
+                      is_builtin: false, created_at: "", modified_at: "",
+                    })}
+                    {...hoverHandlers}
+                  >
+                    <User size={16} style={{ color: "var(--color-text-muted)" }} />
+                    Character Profile
+                  </button>
+                  <button
+                    style={itemButtonStyle}
+                    onClick={() => setActiveTemplate({
+                      id: "__world__", slug: "world_building", name: "World Building",
+                      icon: "Globe", default_content: "## {{location_name}}\n\n### Description\n{{description}}\n\n### History\n{{history}}\n\n### Notable Features\n{{features}}\n\n### Notes\n{{notes}}",
+                      is_builtin: false, created_at: "", modified_at: "",
+                    })}
+                    {...hoverHandlers}
+                  >
+                    <Globe size={16} style={{ color: "var(--color-text-muted)" }} />
+                    World Building
+                  </button>
+                </>
+              )}
 
-              {/* World Building */}
+              {/* Image (always present, built-in) */}
               <button
                 style={itemButtonStyle}
-                onClick={() => setActiveSubtype("WorldBuilding")}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                <Globe size={16} style={{ color: "var(--color-text-muted)" }} />
-                World Building
-              </button>
-
-              {/* Image */}
-              <button
-                style={itemButtonStyle}
-                onClick={() => setActiveSubtype("Image")}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
+                onClick={() => setActiveTemplate(
+                  imageTemplate ?? {
+                    id: "__image__", slug: "image", name: "Image",
+                    icon: "Image", default_content: "",
+                    is_builtin: true, created_at: "", modified_at: "",
+                  }
+                )}
+                {...hoverHandlers}
               >
                 <Image size={16} style={{ color: "var(--color-text-muted)" }} />
                 Image

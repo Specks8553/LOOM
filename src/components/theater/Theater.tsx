@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
@@ -33,13 +33,12 @@ export function Theater() {
   const setCurrentLeafId = useWorkspaceStore((s) => s.setCurrentLeafId);
   const appendStreamDelta = useWorkspaceStore((s) => s.appendStreamDelta);
   const finalizeStream = useWorkspaceStore((s) => s.finalizeStream);
-  const setIsGenerating = useWorkspaceStore((s) => s.setIsGenerating);
-  const setStreamingMsgId = useWorkspaceStore((s) => s.setStreamingMsgId);
 
   const items = useVaultStore((s) => s.items);
   const storyItem = items.find((i) => i.id === activeStoryId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   // Load messages when story changes
   const loadMessages = useCallback(async () => {
@@ -92,6 +91,7 @@ export function Theater() {
     async (siblingId: string) => {
       if (!activeStoryId) return;
       try {
+        setShouldAutoScroll(false);
         const payload = await navigateToSibling(activeStoryId, siblingId);
         setMessages(payload.messages);
         setSiblingCounts(payload.sibling_counts);
@@ -105,28 +105,40 @@ export function Theater() {
     [activeStoryId, setMessages, setSiblingCounts, setCurrentLeafId],
   );
 
-  // Listen for streaming events
+  // Listen for streaming events.
+  // Use a cancelled flag to prevent listener registration after cleanup
+  // (React StrictMode remounts effects, and async listen() can resolve after unmount).
   useEffect(() => {
+    let cancelled = false;
     let unlistenChunk: (() => void) | null = null;
     let unlistenDone: (() => void) | null = null;
 
     const setup = async () => {
-      unlistenChunk = await listen<StreamChunk>("stream_chunk", (event) => {
-        appendStreamDelta(event.payload.message_id, event.payload.delta);
+      const chunkUn = await listen<StreamChunk>("stream_chunk", (event) => {
+        if (!cancelled) {
+          appendStreamDelta(event.payload.message_id, event.payload.delta);
+        }
       });
+      if (cancelled) { chunkUn(); return; }
+      unlistenChunk = chunkUn;
 
-      unlistenDone = await listen<StreamDone>("stream_done", (event) => {
-        finalizeStream(event.payload.message_id, event.payload.model_msg);
+      const doneUn = await listen<StreamDone>("stream_done", (event) => {
+        if (!cancelled) {
+          finalizeStream(event.payload.message_id, event.payload.model_msg);
+        }
       });
+      if (cancelled) { doneUn(); return; }
+      unlistenDone = doneUn;
     };
 
     setup();
 
     return () => {
+      cancelled = true;
       unlistenChunk?.();
       unlistenDone?.();
     };
-  }, [appendStreamDelta, finalizeStream, setIsGenerating, setStreamingMsgId]);
+  }, [appendStreamDelta, finalizeStream]);
 
   // Persist leaf_id on every change — Doc 09 §2.4
   useEffect(() => {
@@ -137,12 +149,36 @@ export function Theater() {
     }
   }, [activeStoryId, currentLeafId]);
 
-  // Auto-scroll to bottom on new messages or streaming content
+  // Listen for scroll-to-message events from feedback overlay — Doc 10 §6.3
   useEffect(() => {
+    const handler = (e: Event) => {
+      const { messageId } = (e as CustomEvent).detail;
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Brief highlight
+        el.style.outline = "2px solid var(--color-accent)";
+        el.style.borderRadius = "8px";
+        setTimeout(() => {
+          el.style.outline = "";
+          el.style.borderRadius = "";
+        }, 1500);
+      }
+    };
+    window.addEventListener("loom:scroll-to-message", handler);
+    return () => window.removeEventListener("loom:scroll-to-message", handler);
+  }, []);
+
+  // Auto-scroll to bottom on new messages or streaming — skip on branch navigation
+  useEffect(() => {
+    if (!shouldAutoScroll) {
+      setShouldAutoScroll(true);
+      return;
+    }
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Token estimation (chars / 4) — Doc 09 §12.1
   const estimatedTokens = messages.reduce((sum, m) => {
@@ -211,26 +247,26 @@ export function Theater() {
         >
           {messages.map((msg, idx) => {
             const isLast = idx === lastMsgIdx;
-            const hasSiblings = msg.parent_id
-              ? (siblingCountMap.get(msg.parent_id) ?? 0) > 1
-              : false;
+            const parentKey = msg.parent_id ?? "__root__";
+            const hasSiblings = (siblingCountMap.get(parentKey) ?? 0) > 1;
 
             if (msg.role === "user") {
               return (
-                <UserBubble
-                  key={msg.id}
-                  message={msg}
-                  isLast={isLast}
-                  hasSiblings={hasSiblings}
-                  onNavigateSibling={handleNavigateSibling}
-                  onReloadBranch={reloadBranch}
-                  storyId={activeStoryId}
-                />
+                <div key={msg.id} id={`msg-${msg.id}`}>
+                  <UserBubble
+                    message={msg}
+                    isLast={isLast}
+                    hasSiblings={hasSiblings}
+                    onNavigateSibling={handleNavigateSibling}
+                    onReloadBranch={reloadBranch}
+                    storyId={activeStoryId}
+                  />
+                </div>
               );
             }
             return (
+              <div key={msg.id} id={`msg-${msg.id}`}>
               <AiBubble
-                key={msg.id}
                 message={msg}
                 isStreaming={msg.id === streamingMsgId}
                 isLast={isLast}
@@ -239,6 +275,7 @@ export function Theater() {
                 onReloadBranch={reloadBranch}
                 storyId={activeStoryId}
               />
+              </div>
             );
           })}
         </div>

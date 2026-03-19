@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Plus, ChevronDown, Lock, Trash2 } from "lucide-react";
+import { Plus, ChevronDown, Lock, Trash2, Settings } from "lucide-react";
 import { useVaultStore } from "../../stores/vaultStore";
 import { useUiStore } from "../../stores/uiStore";
 import { vaultListTrash } from "../../lib/tauriApi";
@@ -8,6 +8,8 @@ import { VaultTree } from "../navigator/VaultTree";
 import { CreateNewDialog } from "../navigator/CreateNewDialog";
 import { BulkActionBar } from "../navigator/BulkActionBar";
 import { TrashView } from "../theater/TrashView";
+import { useContextMenu, ContextMenu } from "../shared/ContextMenu";
+import type { MenuItem } from "../shared/ContextMenu";
 
 interface LeftPaneProps {
   onLock: () => void;
@@ -25,6 +27,8 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
   const selectedItems = useVaultStore((s) => s.selectedItems);
   const clearSelection = useVaultStore((s) => s.clearSelection);
   const setWorldPickerOpen = useUiStore((s) => s.setWorldPickerOpen);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
 
   const activeWorld = worlds.find((w) => w.id === activeWorldId);
 
@@ -115,6 +119,31 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
           </button>
 
           <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center justify-center transition-colors duration-150"
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              width: "24px",
+              height: "24px",
+              borderRadius: "4px",
+              color: "var(--color-text-muted)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--color-bg-hover)";
+              e.currentTarget.style.color = "var(--color-text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "var(--color-text-muted)";
+            }}
+            title="Settings (Ctrl+,)"
+          >
+            <Settings size={14} />
+          </button>
+
+          <button
             onClick={onLock}
             className="flex items-center justify-center transition-colors duration-150"
             style={{
@@ -145,7 +174,17 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
       {showingTrash ? (
         <TrashView />
       ) : (
-        <>
+        <div
+          className="flex flex-col flex-1 min-h-0"
+          onContextMenu={(e) => {
+            const items: MenuItem[] = [
+              { label: "Create New...", icon: Plus, onClick: () => setCreateNewOpen(true) },
+              { separator: true, label: "", onClick: () => {} },
+              { label: "More actions coming soon", onClick: () => {}, disabled: true },
+            ];
+            showContextMenu(e, items);
+          }}
+        >
           {/* Filter */}
           <div className="pt-2">
             <FilterInput />
@@ -156,7 +195,9 @@ export function LeftPane({ onLock, style }: LeftPaneProps) {
 
           {/* Bulk action bar (conditional) */}
           {selectedItems.size >= 2 && <BulkActionBar />}
-        </>
+
+          {contextMenu && <ContextMenu menu={contextMenu} onClose={hideContextMenu} />}
+        </div>
       )}
 
       {/* Trash entry */}

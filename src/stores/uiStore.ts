@@ -8,11 +8,13 @@ interface UiStore {
   branchMapOpen: boolean;
   viewportNarrow: boolean;
   worldPickerOpen: boolean;
+  settingsOpen: boolean;
   setAppPhase: (p: AppPhase) => void;
   setRightPaneCollapsed: (v: boolean) => void;
   setBranchMapOpen: (v: boolean) => void;
   setViewportNarrow: (v: boolean) => void;
   setWorldPickerOpen: (v: boolean) => void;
+  setSettingsOpen: (v: boolean) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -21,6 +23,7 @@ export const useUiStore = create<UiStore>((set) => ({
   branchMapOpen: false,
   viewportNarrow: false,
   worldPickerOpen: false,
+  settingsOpen: false,
 
   setAppPhase: (p) => set({ appPhase: p }),
   setRightPaneCollapsed: (v) => {
@@ -30,6 +33,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setBranchMapOpen: (v) => set({ branchMapOpen: v }),
   setViewportNarrow: (v) => set({ viewportNarrow: v }),
   setWorldPickerOpen: (v) => set({ worldPickerOpen: v }),
+  setSettingsOpen: (v) => set({ settingsOpen: v }),
 }));
 
 // Dev-only: expose store for preview debugging (not included in production builds)

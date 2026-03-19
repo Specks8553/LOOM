@@ -62,6 +62,9 @@ export interface UserContent {
   plot_direction: string;
   background_information: string;
   modificators: string[];
+  constraints: string;              // Amendment: tells AI what NOT to write
+  output_length: number | null;     // Target word count (null = off, 200–2000)
+  context_doc_names?: string[];     // Names of attached context docs at send time (display only)
 }
 
 export interface ChatMessage {
@@ -211,9 +214,29 @@ Keys stored here:
 | `plot_direction` | ✓ Always | ✓ Yes | Tells the AI where the story goes next |
 | `background_information` | Optional | ✓ Yes | Facts the AI needs but must NOT appear in prose |
 | `modificators` | Optional | ✓ Yes | Tone/style tags influencing how the AI writes |
+| `constraints` | Optional | ✓ Yes | Tells the AI what NOT to write |
+| `output_length` | Optional | No | Target word count (null = auto, 200–2000) |
 
-**All three fields are cleared after Send.** Background information is no longer
-persistent between sends — it must be re-entered if still relevant.
+**All input fields except `output_length` are cleared after Send.**
+
+#### InputArea Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PLOT DIRECTION                                              │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Tell the AI where the story goes next...                │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│ [📎 Character…  ×] [📎 World Bi…  ×]           ← doc tags │
+│ Length: Auto ──●──   [▶ Send]                              │
+│ ▸ Additional Input                                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- **Context doc tags** appear below the plot direction textarea when documents are attached to the story. Each tag shows a paperclip icon, the document name (truncated to 18 characters), and an × button to detach. Clicking the name opens the document in the theater.
+- **Length slider** and **Send/Stop button** share a single row. The slider is compact (100px wide).
+- **Additional Input** expander sits below the action row, toggling Background, Modificators, and Constraints fields.
+- At send time, attached context doc names are captured into `context_doc_names` in the stored `UserContent` JSON for display in message bubbles.
 
 ### 4.2 Gemini Request Assembly
 
@@ -328,9 +351,13 @@ pub async fn send_message(
 1. Reconstruct active branch (root → leaf) via Recursive CTE
 2. For each model message with `user_feedback`: append as `[WRITER FEEDBACK]` tag
 3. For collapsed Accordion segments: substitute with Fake-Pairs (see `18-Accordion.md §6`)
-4. Load context doc content/URIs from `story_settings`
+4. Load attached context doc IDs from `story_settings`, read their content from `items`
 5. Read `system_instructions` from `settings` table
-6. Assemble Gemini API request with full history + system instructions + context docs
+6. Assemble Gemini API request: system instructions + history + context docs inline in current turn
+   *(Context docs are injected as additional parts in the current user turn only —
+   they do NOT appear in the history. This prevents bloating the history with
+   repeated document content on every exchange. Text docs are always inline;
+   image docs use Gemini File API URIs — see Doc 19.)*
 7. Stream response via Tauri events
 
 Streaming via Tauri events:
@@ -432,6 +459,15 @@ Shown if `background_information` non-empty. Amber tint chip, expandable.
 Shown if `modificators` non-empty. Accent-tint chip, expandable.
 (Full spec in `02-Design-System.md §5.3`.)
 
+### 9.4 Context Doc Tags
+
+Shown if `context_doc_names` is non-empty. Each doc name renders as a blue tag in the pills row:
+- Style: `rgba(59,130,246,0.1)` background, `1px solid rgba(59,130,246,0.25)` border, `border-radius: 12px`
+- Font: `11px`, Inter 500, blue text
+- Paperclip icon (10px) preceding name
+- Name truncated to 18 characters with `…`, full name on `title` hover
+- Tags are display-only — not interactive in message bubbles
+
 ---
 
 ## 10. AI Message Bubble Display
@@ -511,7 +547,7 @@ function estimateTokens(text: string): number {
 This `chars / 4` heuristic is applied to:
 - All message content in the current branch (after Accordion substitution)
 - System instructions
-- Context doc content (for inline docs; File API docs excluded from estimate)
+- Context doc content (text docs always inline; image docs via File API excluded from estimate)
 
 **After** each API response, the actual `usageMetadata.totalTokenCount` from
 Gemini replaces the estimate for that response's token count. The Theater

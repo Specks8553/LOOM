@@ -3,7 +3,7 @@
  * Per CLAUDE.md: no raw invoke() scattered through components.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { WorldMeta, VaultItemMeta, UserContent, ChatMessage, StoryPayload, StreamDone } from "./types";
+import type { WorldMeta, VaultItemMeta, VaultItem, UserContent, ChatMessage, StoryPayload, StreamDone, Template, ContextDoc } from "./types";
 
 // ─── Auth & Config ────────────────────────────────────────────────────────────
 
@@ -194,4 +194,151 @@ export function setStoryLeafId(storyId: string, leafId: string): Promise<void> {
 
 export function getMessage(messageId: string): Promise<ChatMessage> {
   return invoke<ChatMessage>("get_message", { messageId });
+}
+
+// ─── Phase 8: Settings ──────────────────────────────────────────────────────
+
+export function getSettingsAll(): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("get_settings_all");
+}
+
+export function saveSetting(key: string, value: string): Promise<void> {
+  return invoke("save_setting", { key, value });
+}
+
+export function syncAccentToWorldMeta(hex: string): Promise<void> {
+  return invoke("sync_accent_to_world_meta", { hex });
+}
+
+export function resetRateLimiter(): Promise<void> {
+  return invoke("reset_rate_limiter");
+}
+
+export function getTelemetry(): Promise<import("./types").TelemetryCounters> {
+  return invoke<import("./types").TelemetryCounters>("get_telemetry");
+}
+
+export function checkRateLimit(): Promise<import("./types").RateLimitStatus> {
+  return invoke<import("./types").RateLimitStatus>("check_rate_limit");
+}
+
+export function hasApiKey(): Promise<boolean> {
+  return invoke<boolean>("has_api_key");
+}
+
+export function changeMasterPassword(oldPassword: string, newPassword: string): Promise<void> {
+  return invoke("change_master_password", { oldPassword, newPassword });
+}
+
+// ─── Phase 9: Control Pane ──────────────────────────────────────────────────
+
+export function updateItemDescription(id: string, description: string): Promise<void> {
+  return invoke("update_item_description", { id, description });
+}
+
+export function getStorySettings(storyId: string): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("get_story_settings", { storyId });
+}
+
+export function saveStorySetting(storyId: string, key: string, value: string): Promise<void> {
+  return invoke("save_story_setting", { storyId, key, value });
+}
+
+export function updateMessageFeedback(messageId: string, feedback: string): Promise<void> {
+  return invoke("update_message_feedback", { messageId, feedback });
+}
+
+export function getBranchInfo(storyId: string): Promise<[number, number]> {
+  return invoke<[number, number]>("get_branch_info", { storyId });
+}
+
+// ─── Phase 9: Context Doc Attachment ─────────────────────────────────────────
+
+export function attachContextDoc(storyId: string, docId: string): Promise<void> {
+  return invoke("attach_context_doc", { storyId, docId });
+}
+
+export function detachContextDoc(storyId: string, docId: string): Promise<void> {
+  return invoke("detach_context_doc", { storyId, docId });
+}
+
+export function getContextDocs(storyId: string): Promise<ContextDoc[]> {
+  return invoke<ContextDoc[]>("get_context_docs", { storyId });
+}
+
+// ─── Phase 11: Source Document Editor + Templates ────────────────────────────
+
+export function vaultGetItem(id: string): Promise<VaultItem> {
+  return invoke<VaultItem>("vault_get_item", { id });
+}
+
+export function vaultUpdateItemContent(id: string, content: string): Promise<void> {
+  return invoke("vault_update_item_content", { id, content });
+}
+
+export function vaultCreateItemWithContent(
+  itemType: string,
+  name: string,
+  parentId: string | null,
+  subtype: string | null,
+  content: string,
+): Promise<VaultItemMeta> {
+  return invoke<VaultItemMeta>("vault_create_item_with_content", {
+    itemType,
+    name,
+    parentId,
+    subtype,
+    content,
+  });
+}
+
+export function listTemplates(): Promise<Template[]> {
+  return invoke<Template[]>("list_templates");
+}
+
+export function saveTemplateCmd(template: Template): Promise<Template> {
+  return invoke<Template>("save_template", { template });
+}
+
+export function deleteTemplateCmd(id: string): Promise<void> {
+  return invoke("delete_template", { id });
+}
+
+// ─── Phase 12: Ghostwriter ──────────────────────────────────────────────────
+
+export interface GhostwriterResult {
+  new_content: string;
+  token_count: number;
+}
+
+export function sendGhostwriterRequest(
+  messageId: string,
+  selectedText: string,
+  instruction: string,
+  originalContent: string,
+  storyId: string,
+  leafId: string,
+): Promise<GhostwriterResult> {
+  return invoke<GhostwriterResult>("send_ghostwriter_request", {
+    messageId,
+    selectedText,
+    instruction,
+    originalContent,
+    storyId,
+    leafId,
+  });
+}
+
+export function saveGhostwriterEdit(
+  messageId: string,
+  newContent: string,
+  historyEntry: {
+    edited_at: string;
+    original_content: string;
+    new_content: string;
+    instruction: string;
+    selected_text: string;
+  },
+): Promise<void> {
+  return invoke("save_ghostwriter_edit", { messageId, newContent, historyEntry });
 }

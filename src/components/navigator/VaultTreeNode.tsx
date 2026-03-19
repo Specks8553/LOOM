@@ -12,6 +12,7 @@ import {
   Trash2,
   FolderInput,
   ExternalLink,
+  Paperclip,
 } from "lucide-react";
 import type { VaultItemMeta } from "../../lib/types";
 import { useVaultStore } from "../../stores/vaultStore";
@@ -22,6 +23,9 @@ import {
   vaultMoveItem,
   vaultListItems,
   vaultUpdateSortOrder,
+  vaultGetItem,
+  attachContextDoc,
+  detachContextDoc,
 } from "../../lib/tauriApi";
 import { ContextMenu } from "./ContextMenu";
 import type { ContextMenuItem } from "./ContextMenu";
@@ -58,8 +62,44 @@ export function VaultTreeNode({
   const setShowingTrash = useVaultStore((s) => s.setShowingTrash);
   const items = useVaultStore((s) => s.items);
   const setActiveStoryId = useWorkspaceStore((s) => s.setActiveStoryId);
+  const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const attachedDocIds = useWorkspaceStore((s) => s.attachedDocIds);
+  const addAttachedDocId = useWorkspaceStore((s) => s.addAttachedDocId);
+  const removeAttachedDocId = useWorkspaceStore((s) => s.removeAttachedDocId);
+  const openDoc = useWorkspaceStore((s) => s.openDoc);
 
   const { flatOrder } = useContext(VaultTreeContext);
+
+  // Open a source document or image in the editor
+  const handleOpenDoc = useCallback(async () => {
+    try {
+      const fullItem = await vaultGetItem(item.id);
+      openDoc(item.id, fullItem.content, fullItem.name, fullItem.item_subtype, fullItem.item_type);
+    } catch (e) {
+      console.error("Failed to open document:", e);
+    }
+  }, [item.id, openDoc]);
+
+  const isAttachable =
+    (item.item_type === "SourceDocument" || item.item_type === "Image") && !!activeStoryId;
+  const isAttached = isAttachable && attachedDocIds.includes(item.id);
+
+  const handleToggleAttach = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      e.nativeEvent.stopImmediatePropagation();
+      if (!activeStoryId) return;
+      if (isAttached) {
+        removeAttachedDocId(item.id);
+        detachContextDoc(activeStoryId, item.id).catch(() => {});
+      } else {
+        addAttachedDocId(item.id);
+        attachContextDoc(activeStoryId, item.id).catch(() => {});
+      }
+    },
+    [activeStoryId, item.id, isAttached, addAttachedDocId, removeAttachedDocId],
+  );
 
   const isRenaming = pendingRename === item.id;
   const isSelected = selectedItems.has(item.id);
@@ -126,6 +166,9 @@ export function VaultTreeNode({
     (e: React.MouseEvent) => {
       if (isRenaming) return;
 
+      // Ignore clicks that originated on a button (paperclip, ellipsis, etc.)
+      if ((e.target as HTMLElement).closest("button")) return;
+
       const isCtrl = e.ctrlKey || e.metaKey;
       const isShift = e.shiftKey;
 
@@ -148,6 +191,8 @@ export function VaultTreeNode({
         toggleExpanded(item.id);
       } else if (item.item_type === "Story") {
         setActiveStoryId(item.id);
+      } else if (item.item_type === "SourceDocument" || item.item_type === "Image") {
+        handleOpenDoc();
       }
     },
     [
@@ -161,6 +206,7 @@ export function VaultTreeNode({
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      // Double-click always enters rename mode
       setPendingRename(item.id);
     },
     [item.id, setPendingRename],
@@ -189,12 +235,16 @@ export function VaultTreeNode({
   const handleDelete = useCallback(async () => {
     try {
       await vaultSoftDelete(item.id);
+      // If this doc was attached as context, remove it from the attached list
+      if (attachedDocIds.includes(item.id)) {
+        removeAttachedDocId(item.id);
+      }
       const refreshed = await vaultListItems();
       setItems(refreshed);
     } catch (e) {
       console.error("Failed to delete item:", e);
     }
-  }, [item.id, setItems]);
+  }, [item.id, setItems, attachedDocIds, removeAttachedDocId]);
 
   const handleMoveToFolder = useCallback(
     async (folderId: string | null) => {
@@ -220,6 +270,14 @@ export function VaultTreeNode({
         label: "Open",
         icon: <ExternalLink size={14} />,
         onClick: () => setActiveStoryId(item.id),
+      });
+    }
+
+    if (item.item_type === "SourceDocument" || item.item_type === "Image") {
+      menuItems.push({
+        label: "Open",
+        icon: <ExternalLink size={14} />,
+        onClick: handleOpenDoc,
       });
     }
 
@@ -477,9 +535,32 @@ export function VaultTreeNode({
           <span className="flex-1 min-w-0 truncate">{item.name}</span>
         )}
 
+        {/* Paperclip attach/detach for SourceDocument/Image */}
+        {isAttachable && (isHovered || isAttached) && !isRenaming && (
+          <button
+            draggable={false}
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={handleToggleAttach}
+            className="flex items-center justify-center shrink-0 transition-colors duration-100"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px",
+              color: isAttached ? "var(--color-accent)" : "var(--color-text-muted)",
+              marginLeft: "4px",
+            }}
+            title={isAttached ? "Detach from story" : "Attach to story as context"}
+          >
+            <Paperclip size={13} />
+          </button>
+        )}
+
         {/* Ellipsis button on hover */}
         {isHovered && !isRenaming && (
           <button
+            draggable={false}
+            onMouseDown={(e) => { e.stopPropagation(); }}
             onClick={handleEllipsisClick}
             className="flex items-center justify-center shrink-0 transition-colors duration-100"
             style={{

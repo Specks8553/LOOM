@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Send, Square, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, Square, ChevronDown, ChevronRight, AlertTriangle, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { sendMessage, cancelGeneration } from "../../lib/tauriApi";
-import type { UserContent, ChatMessage } from "../../lib/types";
+import { useVaultStore } from "../../stores/vaultStore";
+import { sendMessage, cancelGeneration, checkRateLimit, detachContextDoc, vaultGetItem } from "../../lib/tauriApi";
+import { TagInput } from "../shared/TagInput";
+import type { UserContent, ChatMessage, RateLimitStatus } from "../../lib/types";
 
 /**
  * Three-field input area — Doc 09 §4.1 / Doc 02 §6.1.
- * Plot Direction always visible; Background & Modificators collapsible.
+ * Plot Direction always visible; Background, Modificators & Constraints collapsible.
  */
 export function InputArea() {
   const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
@@ -19,18 +21,40 @@ export function InputArea() {
   const finalizeStream = useWorkspaceStore((s) => s.finalizeStream);
   const removeMessages = useWorkspaceStore((s) => s.removeMessages);
   const setCurrentLeafId = useWorkspaceStore((s) => s.setCurrentLeafId);
+  const attachedDocIds = useWorkspaceStore((s) => s.attachedDocIds);
+  const removeAttachedDocId = useWorkspaceStore((s) => s.removeAttachedDocId);
+  const openDoc = useWorkspaceStore((s) => s.openDoc);
+  const items = useVaultStore((s) => s.items);
 
   const [plotDirection, setPlotDirection] = useState("");
   const [backgroundInfo, setBackgroundInfo] = useState("");
-  const [modificators, setModificators] = useState("");
-  const [bgExpanded, setBgExpanded] = useState(false);
-  const [modExpanded, setModExpanded] = useState(false);
+  const [modTags, setModTags] = useState<string[]>([]);
+  const [constraints, setConstraints] = useState("");
+  const [extrasExpanded, setExtrasExpanded] = useState(false);
+  const [outputLength, setOutputLength] = useState(0);
+  const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const plotRef = useRef<HTMLTextAreaElement>(null);
+  const bgRef = useRef<HTMLTextAreaElement>(null);
+  const modRef = useRef<HTMLInputElement>(null);
+  const constraintsRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
+  // Check rate limit status periodically and after generation
   useEffect(() => {
-    const el = textareaRef.current;
+    let mounted = true;
+    const refresh = () => {
+      checkRateLimit()
+        .then((s) => { if (mounted) setRateLimitStatus(s); })
+        .catch(() => {});
+    };
+    refresh();
+    const interval = setInterval(refresh, 10000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, [isGenerating]);
+
+  // Auto-resize plot direction textarea
+  useEffect(() => {
+    const el = plotRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.max(80, el.scrollHeight) + "px";
@@ -39,21 +63,32 @@ export function InputArea() {
   const handleSend = useCallback(async () => {
     if (!activeStoryId || plotDirection.trim() === "" || isGenerating) return;
 
+    // Capture context doc names at send time for display in bubbles
+    const docNames = attachedDocIds
+      .map((id) => items.find((i) => i.id === id)?.name)
+      .filter((n): n is string => !!n);
+
     const userContent: UserContent = {
       plot_direction: plotDirection.trim(),
       background_information: backgroundInfo.trim(),
-      modificators: modificators
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0),
+      modificators: modTags,
+      constraints: constraints.trim(),
+      output_length: outputLength === 0 ? null : outputLength,
+      context_doc_names: docNames.length > 0 ? docNames : undefined,
     };
 
-    // Clear fields immediately — Doc 09 §4.1
+    // Save current values for restore on failure
+    const savedPlot = plotDirection;
+    const savedBg = backgroundInfo;
+    const savedMods = modTags;
+    const savedConstraints = constraints;
+
+    // Clear field values — Doc 09 §4.1
+    // Do NOT collapse extrasExpanded; persist across sends
     setPlotDirection("");
     setBackgroundInfo("");
-    setModificators("");
-    setBgExpanded(false);
-    setModExpanded(false);
+    setModTags([]);
+    setConstraints("");
 
     // Optimistic UI: create placeholder messages
     const tempUserId = `temp-user-${Date.now()}`;
@@ -113,14 +148,25 @@ export function InputArea() {
       removeMessages([tempUserId, tempModelId]);
       setIsGenerating(false);
       setStreamingMsgId(null);
+      // Restore input fields so user doesn't lose their work
+      setPlotDirection(savedPlot);
+      setBackgroundInfo(savedBg);
+      setModTags(savedMods);
+      setConstraints(savedConstraints);
+      if (!extrasExpanded && (savedBg || savedMods.length > 0 || savedConstraints)) {
+        setExtrasExpanded(true);
+      }
     }
   }, [
     activeStoryId,
     currentLeafId,
     plotDirection,
     backgroundInfo,
-    modificators,
+    modTags,
+    constraints,
+    outputLength,
     isGenerating,
+    extrasExpanded,
     addOptimisticMessages,
     removeMessages,
     setIsGenerating,
@@ -137,17 +183,48 @@ export function InputArea() {
     }
   }, []);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+  // Tab cycling between input fields: Plot -> Background -> Modificators -> Constraints
+  const fieldRefs = [plotRef, bgRef, modRef, constraintsRef];
+
+  const handleFieldKeyDown = useCallback(
+    (e: React.KeyboardEvent, fieldIndex: number) => {
+      // Ctrl+Enter to send from any field
       if (e.key === "Enter" && e.ctrlKey) {
         e.preventDefault();
         handleSend();
+        return;
+      }
+
+      if (e.key !== "Tab") return;
+
+      // Only cycle when extras are expanded (otherwise only plot direction is visible)
+      if (!extrasExpanded) return;
+
+      const maxIndex = fieldRefs.length - 1;
+
+      if (e.shiftKey) {
+        // Shift+Tab: go backwards
+        if (fieldIndex > 0) {
+          e.preventDefault();
+          fieldRefs[fieldIndex - 1].current?.focus();
+        }
+        // If at first field, let default Tab behavior happen (leave input area)
+      } else {
+        // Tab: go forwards
+        if (fieldIndex < maxIndex) {
+          e.preventDefault();
+          fieldRefs[fieldIndex + 1].current?.focus();
+        }
+        // If at last field, let default Tab behavior happen
       }
     },
-    [handleSend],
+    [extrasExpanded, handleSend],
   );
 
-  const canSend = plotDirection.trim().length > 0 && !isGenerating;
+  const rateLimited = rateLimitStatus !== null && !rateLimitStatus.can_proceed;
+  const canSend = plotDirection.trim().length > 0 && !isGenerating && !rateLimited;
+
+  const lengthLabel = outputLength === 0 ? "Auto" : `~${outputLength}w`;
 
   return (
     <div
@@ -157,6 +234,26 @@ export function InputArea() {
         padding: "12px 16px",
       }}
     >
+      {/* Rate limit banner */}
+      {rateLimited && (
+        <div
+          className="flex items-center gap-2"
+          style={{
+            padding: "8px 12px",
+            marginBottom: "8px",
+            borderRadius: "6px",
+            fontSize: "12px",
+            fontFamily: "var(--font-sans)",
+            color: "var(--color-warning)",
+            backgroundColor: "rgba(245,158,11,0.1)",
+            border: "1px solid rgba(245,158,11,0.25)",
+          }}
+        >
+          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          <span>{rateLimitStatus?.reason ?? "Rate limit exceeded."}</span>
+        </div>
+      )}
+
       {/* Plot Direction */}
       <label
         style={{
@@ -173,10 +270,10 @@ export function InputArea() {
         Plot Direction
       </label>
       <textarea
-        ref={textareaRef}
+        ref={plotRef}
         value={plotDirection}
         onChange={(e) => setPlotDirection(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => handleFieldKeyDown(e, 0)}
         placeholder="Tell the AI where the story goes next..."
         style={{
           width: "100%",
@@ -195,61 +292,97 @@ export function InputArea() {
         }}
       />
 
-      {/* Toggles row */}
-      <div className="flex items-center gap-2" style={{ marginTop: "8px" }}>
-        {/* Background toggle */}
-        <button
-          onClick={() => setBgExpanded(!bgExpanded)}
-          className="flex items-center gap-1 transition-colors duration-150"
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontFamily: "var(--font-sans)",
-            color: "var(--color-text-muted)",
-            padding: "2px 4px",
-            borderRadius: "4px",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--color-text-primary)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--color-text-muted)";
-          }}
-        >
-          {bgExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          Background
-        </button>
+      {/* Attached context docs as tags */}
+      {attachedDocIds.length > 0 && (
+        <div className="flex flex-wrap gap-1" style={{ marginTop: "6px" }}>
+          {attachedDocIds.map((docId) => {
+            const docItem = items.find((i) => i.id === docId);
+            const name = docItem?.name ?? "Document";
+            return (
+              <ContextDocTag
+                key={docId}
+                docId={docId}
+                name={name}
+                storyId={activeStoryId!}
+                onDetach={() => {
+                  if (activeStoryId) {
+                    // Optimistic: update UI immediately
+                    removeAttachedDocId(docId);
+                    detachContextDoc(activeStoryId, docId).catch(() => {});
+                  }
+                }}
+                onOpen={async () => {
+                  try {
+                    const fullItem = await vaultGetItem(docId);
+                    openDoc(docId, fullItem.content, fullItem.name, fullItem.item_subtype, fullItem.item_type);
+                  } catch (e) {
+                    console.error("Failed to open doc:", e);
+                  }
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
 
-        {/* Modificators toggle */}
-        <button
-          onClick={() => setModExpanded(!modExpanded)}
-          className="flex items-center gap-1 transition-colors duration-150"
+      {/* Action row: Length slider + Send/Stop */}
+      <div className="flex items-center gap-2" style={{ marginTop: "8px" }}>
+        {/* Length slider (compact) */}
+        <span
           style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontFamily: "var(--font-sans)",
+            fontSize: "10px",
+            fontFamily: "var(--font-mono)",
             color: "var(--color-text-muted)",
-            padding: "2px 4px",
-            borderRadius: "4px",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--color-text-primary)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--color-text-muted)";
+            whiteSpace: "nowrap",
+            minWidth: "42px",
+            textAlign: "right",
           }}
         >
-          {modExpanded ? (
-            <ChevronDown size={12} />
-          ) : (
-            <ChevronRight size={12} />
-          )}
-          Modificators
-        </button>
+          {lengthLabel}
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={2000}
+          step={100}
+          value={outputLength}
+          onChange={(e) => {
+            let v = Number(e.target.value);
+            if (v > 0 && v < 200) v = 200;
+            setOutputLength(v);
+          }}
+          style={{
+            width: "100px",
+            height: "4px",
+            appearance: "none",
+            WebkitAppearance: "none",
+            background: `linear-gradient(to right, var(--color-accent) ${(outputLength / 2000) * 100}%, var(--color-border) ${(outputLength / 2000) * 100}%)`,
+            borderRadius: "2px",
+            outline: "none",
+            cursor: "pointer",
+            accentColor: "var(--color-accent)",
+          }}
+        />
+        <style>{`
+          input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--color-accent);
+            cursor: pointer;
+            border: none;
+          }
+          input[type="range"]::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--color-accent);
+            cursor: pointer;
+            border: none;
+          }
+        `}</style>
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -300,55 +433,191 @@ export function InputArea() {
         )}
       </div>
 
-      {/* Background Information field */}
-      {bgExpanded && (
-        <div style={{ marginTop: "8px" }}>
-          <textarea
-            value={backgroundInfo}
-            onChange={(e) => setBackgroundInfo(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Facts the AI needs but must NOT appear in the prose..."
-            style={{
-              width: "100%",
-              minHeight: "60px",
-              resize: "vertical",
-              background: "var(--color-bg-pane)",
-              border: "1px solid rgba(245,158,11,0.3)",
-              borderRadius: "6px",
-              padding: "8px 10px",
-              fontSize: "13px",
-              fontFamily: "var(--font-sans)",
-              color: "var(--color-text-primary)",
-              lineHeight: 1.5,
-              outline: "none",
-            }}
-          />
-        </div>
-      )}
+      {/* Additional Input toggle */}
+      <button
+        onClick={() => setExtrasExpanded(!extrasExpanded)}
+        className="flex items-center gap-1 transition-colors duration-150"
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: "12px",
+          fontFamily: "var(--font-sans)",
+          color: "var(--color-text-muted)",
+          padding: "2px 4px",
+          marginTop: "4px",
+          borderRadius: "4px",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--color-text-primary)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--color-text-muted)";
+        }}
+      >
+        {extrasExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        Additional Input
+      </button>
 
-      {/* Modificators field */}
-      {modExpanded && (
-        <div style={{ marginTop: "8px" }}>
-          <input
-            type="text"
-            value={modificators}
-            onChange={(e) => setModificators(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Comma-separated tags: dark, slow burn, poetic..."
-            style={{
-              width: "100%",
-              background: "var(--color-bg-pane)",
-              border: "1px solid rgba(124,58,237,0.3)",
-              borderRadius: "6px",
-              padding: "8px 10px",
-              fontSize: "13px",
-              fontFamily: "var(--font-sans)",
-              color: "var(--color-text-primary)",
-              outline: "none",
-            }}
-          />
-        </div>
+      {/* Expanded additional fields: Background, Modificators, Constraints */}
+      {extrasExpanded && (
+        <>
+          {/* Background Information field */}
+          <div style={{ marginTop: "8px" }}>
+            <label
+              style={{
+                fontSize: "11px",
+                fontFamily: "var(--font-sans)",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--color-text-muted)",
+                display: "block",
+                marginBottom: "4px",
+              }}
+            >
+              Background
+            </label>
+            <textarea
+              ref={bgRef}
+              value={backgroundInfo}
+              onChange={(e) => setBackgroundInfo(e.target.value)}
+              onKeyDown={(e) => handleFieldKeyDown(e, 1)}
+              placeholder="Facts the AI needs but must NOT appear in the prose..."
+              style={{
+                width: "100%",
+                minHeight: "60px",
+                resize: "vertical",
+                background: "var(--color-bg-pane)",
+                border: "1px solid rgba(245,158,11,0.3)",
+                borderRadius: "6px",
+                padding: "8px 10px",
+                fontSize: "13px",
+                fontFamily: "var(--font-sans)",
+                color: "var(--color-text-primary)",
+                lineHeight: 1.5,
+                outline: "none",
+              }}
+            />
+          </div>
+
+          {/* Modificators field */}
+          <div style={{ marginTop: "8px" }}>
+            <label
+              style={{
+                fontSize: "11px",
+                fontFamily: "var(--font-sans)",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--color-text-muted)",
+                display: "block",
+                marginBottom: "4px",
+              }}
+            >
+              Modificators
+            </label>
+            <TagInput
+              tags={modTags}
+              onChange={setModTags}
+              inputRef={modRef}
+              placeholder="Type a tag, press comma to add..."
+              onKeyDown={(e) => handleFieldKeyDown(e, 2)}
+            />
+          </div>
+
+          {/* Constraints field */}
+          <div style={{ marginTop: "8px" }}>
+            <label
+              style={{
+                fontSize: "11px",
+                fontFamily: "var(--font-sans)",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--color-text-muted)",
+                display: "block",
+                marginBottom: "4px",
+              }}
+            >
+              Constraints
+            </label>
+            <textarea
+              ref={constraintsRef}
+              value={constraints}
+              onChange={(e) => setConstraints(e.target.value)}
+              onKeyDown={(e) => handleFieldKeyDown(e, 3)}
+              placeholder="What the AI must NOT write..."
+              style={{
+                width: "100%",
+                minHeight: "60px",
+                resize: "vertical",
+                background: "var(--color-bg-pane)",
+                border: "1px solid rgba(244,63,94,0.3)",
+                borderRadius: "6px",
+                padding: "8px 10px",
+                fontSize: "13px",
+                fontFamily: "var(--font-sans)",
+                color: "var(--color-text-primary)",
+                lineHeight: 1.5,
+                outline: "none",
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+/** Truncated context doc tag with hover tooltip and detach button. */
+function ContextDocTag({
+  name,
+  onDetach,
+  onOpen,
+}: {
+  docId: string;
+  name: string;
+  storyId: string;
+  onDetach: () => void;
+  onOpen: () => void;
+}) {
+  const maxLen = 18;
+  const truncated = name.length > maxLen ? name.slice(0, maxLen) + "…" : name;
+
+  return (
+    <span
+      className="flex items-center gap-1"
+      style={{
+        background: "rgba(59,130,246,0.1)",
+        border: "1px solid rgba(59,130,246,0.25)",
+        borderRadius: "4px",
+        padding: "2px 6px",
+        fontSize: "11px",
+        fontFamily: "var(--font-sans)",
+        color: "var(--color-text-secondary)",
+        cursor: "pointer",
+      }}
+      title={name}
+    >
+      <Paperclip size={10} style={{ flexShrink: 0 }} />
+      <span onClick={onOpen}>{truncated}</span>
+      <button
+        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDetach(); }}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "0 2px",
+          color: "var(--color-text-muted)",
+          display: "flex",
+          alignItems: "center",
+        }}
+        title="Detach"
+      >
+        <X size={10} />
+      </button>
+    </span>
   );
 }

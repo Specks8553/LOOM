@@ -650,10 +650,12 @@ attachment, system instructions, feedback overlay, and telemetry placeholder.
 - Empty state: "No documents attached."
 
 **9.6 — Context Doc Integration with Gemini**
-- Backend: on `send_message`, read attached docs from story_settings
-- For docs ≤ 10k chars: include inline as text
-- For docs > 10k chars: upload to Gemini File API, cache URI in story_settings
-- URI invalidation on doc content update or detach
+- Backend: on `send_message`, read attached doc IDs from story_settings,
+  load content from `items` table
+- Text docs: always include inline as additional parts in the current user turn
+  (NOT in the history — avoids bloating history with repeated doc content)
+- Image docs: upload to Gemini File API, send as file URI (see Phase 15)
+- No File API for text documents — always inline regardless of size
 
 **9.7 — System Instructions**
 - Collapsible textarea, synced with Settings → Writing
@@ -1057,7 +1059,7 @@ Doc 03 (remaining), Doc 14 (remaining), Doc 20 (stubs only), Doc 21 (stubs only)
 - Navigator: image icon, hover thumbnail (160×160px) via asset:// protocol
 - Inline in bubbles: MessageBlock[] with image blocks
 - Vault Image Picker modal for inserting images into messages
-- Image as Context Doc (Gemini File API upload)
+- Image as Context Doc (Gemini File API upload; text docs are always inline — see Phase 9.6)
 - Deletion: soft delete preserves asset, purge deletes file
 
 **15.5 — World Export/Import**

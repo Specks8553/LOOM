@@ -4,14 +4,18 @@ import { useAuthStore } from "../../stores/authStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
 import { WorldPickerModal } from "../modals/WorldPickerModal";
+import { SettingsModal } from "../modals/SettingsModal";
 import { LeftPane } from "./LeftPane";
 import { PaneDivider } from "./PaneDivider";
 import { RightPane } from "./RightPane";
 import { NoStorySelected } from "../empty/NoStorySelected";
 import { Theater } from "../theater/Theater";
+import { DocEditor } from "../theater/DocEditor";
+import { ImageViewer } from "../theater/ImageViewer";
 import { initViewportWatcher } from "../../lib/viewportWatcher";
 import { PanelRightOpen } from "lucide-react";
 import { lockVault, listWorlds, vaultListItems } from "../../lib/tauriApi";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 // localStorage keys
 const LS_LEFT_WIDTH = "left_pane_width";
@@ -42,6 +46,8 @@ export function Workspace() {
   const setItems = useVaultStore((s) => s.setItems);
   const setActiveWorldId = useVaultStore((s) => s.setActiveWorldId);
   const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const activeDocId = useWorkspaceStore((s) => s.activeDocId);
+  const docItemType = useWorkspaceStore((s) => s.docItemType);
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
 
   const [leftWidth, setLeftWidth] = useState(() => readWidth(LS_LEFT_WIDTH, LEFT_DEFAULT));
@@ -67,7 +73,7 @@ export function Workspace() {
     return initViewportWatcher();
   }, []);
 
-  // Load worlds + items on mount
+  // Load worlds + items + settings on mount
   // NOTE: Do NOT call switchWorld here — unlock_vault already opens the DB
   // connection for the active world. Calling switchWorld would close and reopen
   // the connection, creating a race condition window where active_conn is None.
@@ -82,6 +88,8 @@ export function Workspace() {
           const items = await vaultListItems();
           setItems(items);
         }
+        // Load settings and apply theme — Doc 02 §13
+        await useSettingsStore.getState().loadSettings();
       } catch (e) {
         console.error("Failed to load worlds on mount:", e);
       }
@@ -100,6 +108,7 @@ export function Workspace() {
     // Clear all workspace state per Doc 11 §7
     useWorkspaceStore.getState().clearWorkspace();
     useVaultStore.getState().clearVault();
+    useSettingsStore.getState().clearSettings();
     useAuthStore.getState().reset();
     setAppPhase("locked");
   }, [setAppPhase]);
@@ -119,8 +128,55 @@ export function Workspace() {
     return () => window.removeEventListener("loom:lock", listener);
   }, [handleLock]);
 
-  // Determine theater content
+  // Auto-lock idle timer — Doc 11 §6
+  useEffect(() => {
+    const getMinutes = () => {
+      const val = localStorage.getItem("loom_auto_lock_minutes") ?? "15";
+      const n = parseInt(val, 10);
+      return isNaN(n) || n <= 0 ? 0 : n;
+    };
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let warningTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const resetTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      if (warningTimeout) clearTimeout(warningTimeout);
+      const minutes = getMinutes();
+      if (minutes === 0) return; // disabled
+
+      const ms = minutes * 60_000;
+
+      // Warning toast at T-1 minute (if timer >= 2 minutes)
+      if (minutes >= 2) {
+        warningTimeout = setTimeout(() => {
+          import("sonner").then(({ toast }) => {
+            toast.warning("Auto-lock in 1 minute due to inactivity.");
+          });
+        }, ms - 60_000);
+      }
+
+      timeout = setTimeout(() => {
+        performLock();
+      }, ms);
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (warningTimeout) clearTimeout(warningTimeout);
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [performLock]);
+
+  // Determine theater content — Doc 12 §1.2: doc editor overlays Theater
   const renderTheater = () => {
+    if (activeDocId) {
+      return docItemType === "Image" ? <ImageViewer /> : <DocEditor />;
+    }
     if (activeStoryId) return <Theater />;
     return <NoStorySelected />;
   };
@@ -175,6 +231,7 @@ export function Workspace() {
       )}
 
       <WorldPickerModal />
+      <SettingsModal />
 
       {/* Lock-during-generation confirmation */}
       {showLockConfirm && (

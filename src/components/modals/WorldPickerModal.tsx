@@ -229,6 +229,8 @@ export function WorldPickerModal() {
   const performSwitch = async (worldId: string) => {
     try {
       await switchWorld(worldId);
+      // Clear workspace state so Theater doesn't show stale content
+      useWorkspaceStore.getState().clearWorkspace();
       setActiveWorldId(worldId);
       const items = await vaultListItems();
       setItems(items);
@@ -244,6 +246,8 @@ export function WorldPickerModal() {
     setCreating(true);
     try {
       await createWorld(newWorldName.trim());
+      // Clear workspace state so Theater doesn't show stale content from previous world
+      useWorkspaceStore.getState().clearWorkspace();
       setNewWorldName("");
       setShowNewForm(false);
       await loadWorlds();

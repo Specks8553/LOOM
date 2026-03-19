@@ -60,6 +60,14 @@ function App() {
         return;
       }
 
+      // Ctrl+, → Settings
+      if (e.ctrlKey && e.key === "," && appPhase === "workspace") {
+        e.preventDefault();
+        const uiState = useUiStore.getState();
+        uiState.setSettingsOpen(!uiState.settingsOpen);
+        return;
+      }
+
       // Escape chain: multi-select clear (lower priority than modals)
       if (e.key === "Escape" && appPhase === "workspace") {
         const { selectedItems, clearSelection } = useVaultStore.getState();

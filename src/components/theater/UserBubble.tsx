@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
-import { Brain, Palette, Pencil } from "lucide-react";
+import { Brain, Palette, Pencil, ShieldAlert, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { parseUserContent } from "../../lib/types";
 import { SiblingNav } from "./SiblingNav";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { sendMessage } from "../../lib/tauriApi";
+import { sendMessage, deleteMessageCmd } from "../../lib/tauriApi";
+import { TagInput } from "../shared/TagInput";
 import type { ChatMessage, UserContent } from "../../lib/types";
 
 interface UserBubbleProps {
@@ -25,6 +26,7 @@ interface UserBubbleProps {
  */
 export function UserBubble({
   message,
+  isLast: _isLast,
   hasSiblings,
   onNavigateSibling,
   onReloadBranch,
@@ -33,20 +35,23 @@ export function UserBubble({
   const uc = parseUserContent(message.content);
   const [bgExpanded, setBgExpanded] = useState(false);
   const [modExpanded, setModExpanded] = useState(false);
+  const [constraintsExpanded, setConstraintsExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
 
   // Edit state
   const [editPlot, setEditPlot] = useState(uc.plot_direction);
   const [editBg, setEditBg] = useState(uc.background_information);
-  const [editMods, setEditMods] = useState(uc.modificators.join(", "));
+  const [editModTags, setEditModTags] = useState<string[]>(uc.modificators);
+  const [editConstraints, setEditConstraints] = useState(uc.constraints ?? "");
 
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
 
   const handleStartEdit = useCallback(() => {
     setEditPlot(uc.plot_direction);
     setEditBg(uc.background_information);
-    setEditMods(uc.modificators.join(", "));
+    setEditModTags([...uc.modificators]);
+    setEditConstraints(uc.constraints ?? "");
     setEditing(true);
   }, [uc]);
 
@@ -62,20 +67,41 @@ export function UserBubble({
     const editedContent: UserContent = {
       plot_direction: editPlot.trim(),
       background_information: editBg.trim(),
-      modificators: editMods
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0),
+      modificators: editModTags,
+      constraints: editConstraints.trim(),
+      output_length: null,
     };
 
     setEditing(false);
 
+    // Check if we can overwrite instead of branching:
+    // If this user message's AI child is the last message with no siblings,
+    // delete the old pair and immediately replace with streaming placeholder.
+    const msgs = store.messages;
+    const myIdx = msgs.findIndex((m) => m.id === message.id);
+    const aiChild = myIdx >= 0 && myIdx < msgs.length - 1 ? msgs[myIdx + 1] : null;
+    const aiChildIsLast = aiChild != null && myIdx + 1 === msgs.length - 1;
+    let overwriting = false;
+    if (aiChildIsLast && aiChild && !hasSiblings) {
+      try {
+        await deleteMessageCmd(storyId, aiChild.id);
+        overwriting = true;
+      } catch {
+        // If delete fails, fall through to normal branching behavior
+      }
+    }
+
     const tempModelId = `temp-model-${Date.now()}`;
     const now = new Date().toISOString();
 
-    // Optimistic model placeholder
+    // If overwriting, strip only the old AI child from the displayed messages.
+    // Keep the user message visible so the user can see their input while streaming.
+    const baseMsgs = overwriting
+      ? msgs.filter((m) => m.id !== aiChild!.id)
+      : msgs;
+
     store.setMessages([
-      ...store.messages,
+      ...baseMsgs,
       {
         id: tempModelId,
         story_id: storyId,
@@ -96,7 +122,6 @@ export function UserBubble({
     store.setStreamingMsgId(tempModelId);
 
     try {
-      // Both Case A and Case B: create new user msg as sibling, then AI generates.
       // send_message inserts a NEW user message with parent = message.parent_id
       // (sibling of the current user message), then generates AI response.
       const result = await sendMessage(
@@ -119,11 +144,13 @@ export function UserBubble({
   }, [
     editPlot,
     editBg,
-    editMods,
+    editModTags,
+    editConstraints,
     storyId,
     message.id,
     message.parent_id,
     isGenerating,
+    hasSiblings,
     onReloadBranch,
   ]);
 
@@ -144,6 +171,12 @@ export function UserBubble({
           <textarea
             value={editPlot}
             onChange={(e) => setEditPlot(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleSendEdit();
+              }
+            }}
             style={{
               width: "100%",
               minHeight: "60px",
@@ -163,6 +196,12 @@ export function UserBubble({
           <textarea
             value={editBg}
             onChange={(e) => setEditBg(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleSendEdit();
+              }
+            }}
             placeholder="Background information..."
             style={{
               width: "100%",
@@ -181,21 +220,45 @@ export function UserBubble({
             }}
           />
           {/* Modificators */}
-          <input
-            type="text"
-            value={editMods}
-            onChange={(e) => setEditMods(e.target.value)}
-            placeholder="Modificators (comma-separated)..."
+          <div style={{ marginTop: "6px" }}>
+            <TagInput
+              tags={editModTags}
+              onChange={setEditModTags}
+              placeholder="Type a tag, press comma to add..."
+              fontSize={12}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSendEdit();
+                }
+              }}
+              style={{ padding: "3px 6px", minHeight: "30px" }}
+            />
+          </div>
+          {/* Constraints */}
+          <textarea
+            value={editConstraints}
+            onChange={(e) => setEditConstraints(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleSendEdit();
+              }
+            }}
+            placeholder="What the AI must NOT write..."
             style={{
               width: "100%",
+              minHeight: "40px",
+              resize: "vertical",
               marginTop: "6px",
               background: "var(--color-bg-pane)",
-              border: "1px solid rgba(124,58,237,0.3)",
+              border: "1px solid rgba(244,63,94,0.3)",
               borderRadius: "6px",
               padding: "6px 8px",
               fontSize: "12px",
               fontFamily: "var(--font-sans)",
               color: "var(--color-text-primary)",
+              lineHeight: 1.4,
               outline: "none",
             }}
           />
@@ -297,7 +360,7 @@ export function UserBubble({
         </p>
 
         {/* Pills row */}
-        {(uc.background_information.trim() || uc.modificators.length > 0) && (
+        {(uc.background_information.trim() || uc.modificators.length > 0 || (uc.constraints ?? "").trim() || (uc.context_doc_names && uc.context_doc_names.length > 0)) && (
           <div
             className="flex flex-wrap gap-1.5"
             style={{ marginTop: "8px" }}
@@ -388,16 +451,86 @@ export function UserBubble({
                 )}
               </div>
             )}
+
+            {/* Constraints pill */}
+            {(uc.constraints ?? "").trim() && (
+              <div>
+                <button
+                  onClick={() => setConstraintsExpanded(!constraintsExpanded)}
+                  className="flex items-center gap-1 transition-opacity duration-150"
+                  style={{
+                    background: "rgba(244,63,94,0.12)",
+                    border: "1px solid rgba(244,63,94,0.25)",
+                    borderRadius: "12px",
+                    padding: "3px 8px",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 500,
+                    color: "#f43f5e",
+                  }}
+                >
+                  <ShieldAlert size={12} />
+                  Constraints
+                </button>
+                {constraintsExpanded && (
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      borderLeft: "2px solid #f43f5e",
+                      paddingLeft: "8px",
+                      fontSize: "12px",
+                      fontFamily: "var(--font-sans)",
+                      color: "var(--color-text-secondary)",
+                      lineHeight: 1.5,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {uc.constraints}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Context doc tags */}
+            {uc.context_doc_names && uc.context_doc_names.length > 0 && (
+              uc.context_doc_names.map((name, i) => {
+                const maxLen = 18;
+                const truncated = name.length > maxLen ? name.slice(0, maxLen) + "…" : name;
+                return (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1"
+                    title={name}
+                    style={{
+                      background: "rgba(59,130,246,0.1)",
+                      border: "1px solid rgba(59,130,246,0.25)",
+                      borderRadius: "12px",
+                      padding: "3px 8px",
+                      fontSize: "11px",
+                      fontFamily: "var(--font-sans)",
+                      fontWeight: 500,
+                      color: "rgb(59,130,246)",
+                    }}
+                  >
+                    <Paperclip size={10} />
+                    {truncated}
+                  </span>
+                );
+              })
+            )}
           </div>
         )}
       </div>
 
       {/* Action row — visible on hover, below bubble — Doc 02 §5.2 */}
-      {hovered && !isGenerating && !editing && (
+      {!isGenerating && !editing && (
         <div
           className="flex items-center gap-2"
           style={{
             padding: "4px 4px 0 0",
+            opacity: hovered ? 1 : 0,
+            pointerEvents: hovered ? "auto" : "none",
             transition: "opacity 120ms ease",
           }}
         >

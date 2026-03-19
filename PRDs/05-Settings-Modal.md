@@ -476,6 +476,10 @@ Inserted by `init_schema()` on first world creation:
 | Key | Default | Scope |
 |---|---|---|
 | `system_instructions` | `""` | World |
+| `system_instructions_2` | `""` | World |
+| `si_slot_1_name` | `"SI 1"` | World |
+| `si_slot_2_name` | `"SI 2"` | World |
+| `active_si_slot` | `"1"` | World |
 | `text_model_name` | `"gemini-2.5-flash-preview"` | World |
 | `text_model_options` | `'["gemini-2.5-flash-preview","gemini-2.0-flash","gemini-1.5-pro"]'` | World |
 | `accent_color` | `"#7c3aed"` | World |

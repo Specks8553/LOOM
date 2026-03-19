@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide native password reveal buttons (WebView2/Edge shows its own eye icon) */
+input::-ms-reveal,
+input::-ms-clear,
+input::-webkit-credentials-auto-fill-button {
+  display: none;
+}
+
 @layer base {
   :root {
     /* Base Neutrals (Fixed) — Doc 02 §2.1 */
@@ -177,4 +184,85 @@ html, body, #root {
   margin: 0.75em 0;
   color: var(--color-text-secondary);
   font-style: italic;
+}
+
+/* ─── Doc Preview (Phase 11 — Doc 12 §5) ──────────────────────────────── */
+
+.doc-preview h1, .doc-preview h2, .doc-preview h3 {
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  margin: 1.5em 0 0.5em;
+}
+.doc-preview h1 { font-size: 24px; font-weight: 700; }
+.doc-preview h2 { font-size: 20px; font-weight: 600; }
+.doc-preview h3 { font-size: 16px; font-weight: 600; }
+.doc-preview p {
+  margin: 0.75em 0;
+}
+.doc-preview strong { font-family: var(--font-sans); font-weight: 600; }
+.doc-preview code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--color-bg-elevated);
+  padding: 3px 5px;
+  border-radius: 3px;
+}
+.doc-preview pre {
+  background: var(--color-bg-elevated);
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.doc-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+.doc-preview blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 12px;
+  margin: 0.75em 0;
+  color: var(--color-text-secondary);
+}
+.doc-preview hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5em 0;
+}
+.doc-preview a {
+  color: var(--color-accent-text);
+  text-decoration: none;
+}
+.doc-preview ul, .doc-preview ol {
+  padding-left: 1.5em;
+  margin: 0.75em 0;
+}
+.doc-preview li {
+  margin: 8px 0;
+}
+
+/* ─── Ghostwriter Mode — Doc 16 §11 ─────────────────────────────────────────── */
+
+@keyframes ghostwriter-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+.bubble-ghostwriter-active {
+  outline: 2px solid var(--color-ghostwriter-frame);
+  outline-offset: 3px;
+  border-radius: 10px;
+  animation: ghostwriter-pulse 2s ease-in-out infinite;
+}
+
+.ghostwriter-diff-changed {
+  background-color: color-mix(in srgb, var(--color-ghostwriter-diff) 30%, transparent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ghostwriter-diff);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.ghostwriter-selection {
+  background-color: color-mix(in srgb, var(--color-ghostwriter-diff) 25%, transparent);
 }

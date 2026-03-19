@@ -270,6 +270,344 @@ pub fn purge_item(conn: &Connection, id: &str) -> Result<(), LoomError> {
     Ok(())
 }
 
+/// Full vault item including content (for doc editor).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultItem {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub item_type: String,
+    pub item_subtype: Option<String>,
+    pub name: String,
+    pub content: String,
+    pub description: Option<String>,
+    pub sort_order: i64,
+    pub created_at: String,
+    pub modified_at: String,
+    pub deleted_at: Option<String>,
+}
+
+/// Get a single vault item including its content.
+pub fn get_item(conn: &Connection, id: &str) -> Result<VaultItem, LoomError> {
+    conn.query_row(
+        "SELECT id, parent_id, item_type, item_subtype, name, content, description,
+                sort_order, created_at, modified_at, deleted_at
+         FROM items WHERE id = ?1",
+        rusqlite::params![id],
+        |row| {
+            Ok(VaultItem {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                item_type: row.get(2)?,
+                item_subtype: row.get(3)?,
+                name: row.get(4)?,
+                content: row.get(5)?,
+                description: row.get(6)?,
+                sort_order: row.get(7)?,
+                created_at: row.get(8)?,
+                modified_at: row.get(9)?,
+                deleted_at: row.get(10)?,
+            })
+        },
+    )
+    .map_err(|_| LoomError::ItemNotFound(id.to_string()))
+}
+
+/// Update the content of a vault item (for doc editor save).
+pub fn update_item_content(conn: &Connection, id: &str, content: &str) -> Result<(), LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let rows = conn.execute(
+        "UPDATE items SET content = ?1, modified_at = ?2 WHERE id = ?3",
+        rusqlite::params![content, now, id],
+    )?;
+    if rows == 0 {
+        return Err(LoomError::ItemNotFound(id.to_string()));
+    }
+    Ok(())
+}
+
+/// Create a vault item with initial content (for template-based creation).
+pub fn create_item_with_content(
+    conn: &Connection,
+    item_type: &str,
+    name: &str,
+    parent_id: Option<&str>,
+    subtype: Option<&str>,
+    content: &str,
+) -> Result<VaultItemMeta, LoomError> {
+    // Validate item type
+    match item_type {
+        "Story" | "Folder" | "SourceDocument" | "Image" => {}
+        other => return Err(LoomError::InvalidItemType(other.to_string())),
+    }
+
+    // Enforce 5-level nesting depth
+    let depth = get_depth(conn, parent_id)?;
+    if depth >= 5 {
+        return Err(LoomError::MaxNestingDepth);
+    }
+
+    let sort_order: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM items
+         WHERE parent_id IS ?1 AND deleted_at IS NULL",
+        rusqlite::params![parent_id],
+        |row| row.get(0),
+    )?;
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let story_id: Option<&str> = if item_type == "Story" { Some(&id) } else { None };
+
+    conn.execute(
+        "INSERT INTO items (id, story_id, parent_id, item_type, item_subtype, name, content,
+                           description, sort_order, created_at, modified_at, deleted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, NULL)",
+        rusqlite::params![id, story_id, parent_id, item_type, subtype, name, content, sort_order, now, now],
+    )?;
+
+    log::info!("Vault item created with content: id={}, type={}", id, item_type);
+
+    Ok(VaultItemMeta {
+        id,
+        parent_id: parent_id.map(|s| s.to_string()),
+        item_type: item_type.to_string(),
+        item_subtype: subtype.map(|s| s.to_string()),
+        name: name.to_string(),
+        description: None,
+        sort_order,
+        created_at: now.clone(),
+        modified_at: now,
+        deleted_at: None,
+    })
+}
+
+// ─── Template CRUD ───────────────────────────────────────────────────────────
+
+/// Template for Source Documents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Template {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub icon: String,
+    pub default_content: String,
+    pub is_builtin: bool,
+    pub created_at: String,
+    pub modified_at: String,
+}
+
+/// List all templates.
+pub fn list_templates(conn: &Connection) -> Result<Vec<Template>, LoomError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, slug, name, icon, default_content, is_builtin, created_at, modified_at
+         FROM templates ORDER BY sort_order ASC, name ASC"
+    )?;
+
+    let templates = stmt.query_map([], |row| {
+        Ok(Template {
+            id: row.get(0)?,
+            slug: row.get(1)?,
+            name: row.get(2)?,
+            icon: row.get(3)?,
+            default_content: row.get(4)?,
+            is_builtin: row.get::<_, i32>(5)? != 0,
+            created_at: row.get(6)?,
+            modified_at: row.get(7)?,
+        })
+    })?.filter_map(|r| r.ok()).collect();
+
+    Ok(templates)
+}
+
+/// Save (create or update) a template.
+pub fn save_template(conn: &Connection, template: &Template) -> Result<Template, LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Check if exists
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM templates WHERE id = ?1)",
+        rusqlite::params![template.id],
+        |row| row.get(0),
+    )?;
+
+    if exists {
+        conn.execute(
+            "UPDATE templates SET slug = ?1, name = ?2, icon = ?3, default_content = ?4, modified_at = ?5
+             WHERE id = ?6 AND is_builtin = 0",
+            rusqlite::params![template.slug, template.name, template.icon, template.default_content, now, template.id],
+        )?;
+    } else {
+        let sort_order: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM templates",
+            [],
+            |row| row.get(0),
+        )?;
+        conn.execute(
+            "INSERT INTO templates (id, slug, name, icon, default_content, is_builtin, sort_order, created_at, modified_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7, ?8)",
+            rusqlite::params![template.id, template.slug, template.name, template.icon, template.default_content, sort_order, now, now],
+        )?;
+    }
+
+    Ok(Template {
+        id: template.id.clone(),
+        slug: template.slug.clone(),
+        name: template.name.clone(),
+        icon: template.icon.clone(),
+        default_content: template.default_content.clone(),
+        is_builtin: false,
+        created_at: if exists { template.created_at.clone() } else { now.clone() },
+        modified_at: now,
+    })
+}
+
+/// Delete a template (only non-builtin).
+pub fn delete_template(conn: &Connection, id: &str) -> Result<(), LoomError> {
+    let rows = conn.execute(
+        "DELETE FROM templates WHERE id = ?1 AND is_builtin = 0",
+        rusqlite::params![id],
+    )?;
+    if rows == 0 {
+        return Err(LoomError::ItemNotFound(id.to_string()));
+    }
+    Ok(())
+}
+
+// ─── Context Doc Attachment ──────────────────────────────────────────────────
+
+/// Attach a source document to a story as a context doc.
+/// Adds the doc_id to the story's `context_doc_ids` in story_settings
+/// and writes an entry to attachment_history.
+pub fn attach_context_doc(
+    conn: &Connection,
+    story_id: &str,
+    doc_id: &str,
+) -> Result<(), LoomError> {
+    // Read current attached doc IDs
+    let current: String = conn
+        .query_row(
+            "SELECT value FROM story_settings WHERE story_id = ?1 AND key = 'context_doc_ids'",
+            rusqlite::params![story_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let mut ids: Vec<String> = serde_json::from_str(&current).unwrap_or_default();
+
+    // Don't duplicate
+    if ids.contains(&doc_id.to_string()) {
+        return Ok(());
+    }
+
+    ids.push(doc_id.to_string());
+    let new_value = serde_json::to_string(&ids)
+        .map_err(|e| LoomError::Internal(format!("JSON serialize error: {}", e)))?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO story_settings (story_id, key, value) VALUES (?1, 'context_doc_ids', ?2)",
+        rusqlite::params![story_id, new_value],
+    )?;
+
+    // Get doc name for attachment_history
+    let doc_name: String = conn
+        .query_row(
+            "SELECT name FROM items WHERE id = ?1",
+            rusqlite::params![doc_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let history_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO attachment_history (id, story_id, doc_id, doc_name, attached_at, detached_at, doc_purged)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0)",
+        rusqlite::params![history_id, story_id, doc_id, doc_name, now],
+    )?;
+
+    log::info!("Context doc attached: doc_id={}, story_id={}", doc_id, story_id);
+    Ok(())
+}
+
+/// Detach a source document from a story.
+/// Removes the doc_id from `context_doc_ids` and updates attachment_history.
+pub fn detach_context_doc(
+    conn: &Connection,
+    story_id: &str,
+    doc_id: &str,
+) -> Result<(), LoomError> {
+    // Read current attached doc IDs
+    let current: String = conn
+        .query_row(
+            "SELECT value FROM story_settings WHERE story_id = ?1 AND key = 'context_doc_ids'",
+            rusqlite::params![story_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let mut ids: Vec<String> = serde_json::from_str(&current).unwrap_or_default();
+    ids.retain(|id| id != doc_id);
+
+    let new_value = serde_json::to_string(&ids)
+        .map_err(|e| LoomError::Internal(format!("JSON serialize error: {}", e)))?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO story_settings (story_id, key, value) VALUES (?1, 'context_doc_ids', ?2)",
+        rusqlite::params![story_id, new_value],
+    )?;
+
+    // Update attachment_history: set detached_at on the most recent un-detached entry
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE attachment_history SET detached_at = ?1
+         WHERE story_id = ?2 AND doc_id = ?3 AND detached_at IS NULL",
+        rusqlite::params![now, story_id, doc_id],
+    )?;
+
+    log::info!("Context doc detached: doc_id={}, story_id={}", doc_id, story_id);
+    Ok(())
+}
+
+/// Context doc info for the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextDoc {
+    pub id: String,
+    pub name: String,
+    pub item_subtype: Option<String>,
+    pub content: String,
+}
+
+/// Get all attached context docs for a story (full content included).
+pub fn get_context_docs(
+    conn: &Connection,
+    story_id: &str,
+) -> Result<Vec<ContextDoc>, LoomError> {
+    let raw: String = conn
+        .query_row(
+            "SELECT value FROM story_settings WHERE story_id = ?1 AND key = 'context_doc_ids'",
+            rusqlite::params![story_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let ids: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+    let mut docs = Vec::new();
+
+    for doc_id in &ids {
+        if let Ok(item) = get_item(conn, doc_id) {
+            if item.deleted_at.is_none() {
+                docs.push(ContextDoc {
+                    id: item.id,
+                    name: item.name,
+                    item_subtype: item.item_subtype,
+                    content: item.content,
+                });
+            }
+        }
+    }
+
+    Ok(docs)
+}
+
 /// Batch update sort_order for multiple items.
 pub fn update_sort_order(
     conn: &Connection,

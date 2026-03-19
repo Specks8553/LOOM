@@ -20,6 +20,10 @@ pub struct UserContent {
     pub background_information: String,
     #[serde(default)]
     pub modificators: Vec<String>,
+    #[serde(default)]
+    pub constraints: String,
+    #[serde(default)]
+    pub output_length: Option<u32>,
 }
 
 /// Message stored in DB and sent to frontend — Doc 09 §1.
@@ -95,6 +99,12 @@ pub fn build_user_turn_text(content: &UserContent) -> String {
             parts.push(format!("[MODIFICATORS]\n{}", joined.join(" · ")));
         }
     }
+    if !content.constraints.trim().is_empty() {
+        parts.push(format!(
+            "[CONSTRAINTS — DO NOT INCLUDE IN OUTPUT]\n{}",
+            content.constraints.trim()
+        ));
+    }
     parts.join("\n\n")
 }
 
@@ -109,11 +119,22 @@ pub fn build_history_message_with_feedback(content: &str, feedback: Option<&str>
     result
 }
 
+/// A context doc to inject inline in the current user turn.
+pub struct ContextDocContent {
+    pub name: String,
+    pub content: String,
+}
+
 /// Assemble the complete Gemini API request body.
+/// `output_length` is appended to system_instructions when Some and >= 200.
+/// `context_docs` are injected as additional text parts in the current user turn
+/// (NOT in history) — Doc 12 §7.
 pub fn build_gemini_request(
     system_instructions: &str,
     history: &[ChatMessage],
     user_turn: &str,
+    output_length: Option<u32>,
+    context_docs: &[ContextDocContent],
 ) -> serde_json::Value {
     let mut contents = Vec::new();
 
@@ -141,18 +162,40 @@ pub fn build_gemini_request(
         }));
     }
 
-    // Current user turn
+    // Current user turn: user input + context docs as additional parts
+    let mut user_parts = vec![serde_json::json!({ "text": user_turn })];
+
+    // Inject context docs inline in the current turn (not in history)
+    for doc in context_docs {
+        user_parts.push(serde_json::json!({
+            "text": format!("[CONTEXT DOC: {}]\n{}", doc.name, doc.content)
+        }));
+    }
+
     contents.push(serde_json::json!({
         "role": "user",
-        "parts": [{ "text": user_turn }]
+        "parts": user_parts
     }));
 
     let mut body = serde_json::json!({ "contents": contents });
 
-    // System instruction
-    if !system_instructions.trim().is_empty() {
+    // System instruction — with optional output length amendment
+    let mut sys = system_instructions.trim().to_string();
+    if let Some(len) = output_length {
+        if len >= 200 {
+            if !sys.is_empty() {
+                sys.push_str("\n\n");
+            }
+            sys.push_str(&format!(
+                "[OUTPUT LENGTH] write approximately {} words for your next output regardless of the length of other messages",
+                len
+            ));
+        }
+    }
+
+    if !sys.is_empty() {
         body["system_instruction"] = serde_json::json!({
-            "parts": [{ "text": system_instructions.trim() }]
+            "parts": [{ "text": sys }]
         });
     }
 
@@ -293,6 +336,120 @@ pub async fn stream_generate(
     })
 }
 
+// ─── Ghostwriter (non-streamed) — Doc 16 §3 ─────────────────────────────────
+
+/// Build a Ghostwriter request payload.
+/// Uses a custom system prompt with selected_text, instruction, and original_content.
+pub fn build_ghostwriter_request(
+    prompt_template: &str,
+    history: &[ChatMessage],
+    selected_text: &str,
+    instruction: &str,
+    original_content: &str,
+) -> serde_json::Value {
+    let mut contents = Vec::new();
+
+    // History messages (up to but NOT including the AI message being edited)
+    for msg in history {
+        let role = if msg.role == "user" { "user" } else { "model" };
+        let text = if msg.role == "user" {
+            if msg.content_type == "json_user" {
+                match serde_json::from_str::<UserContent>(&msg.content) {
+                    Ok(uc) => build_user_turn_text(&uc),
+                    Err(_) => msg.content.clone(),
+                }
+            } else {
+                msg.content.clone()
+            }
+        } else {
+            build_history_message_with_feedback(&msg.content, msg.user_feedback.as_deref())
+        };
+
+        contents.push(serde_json::json!({
+            "role": role,
+            "parts": [{ "text": text }]
+        }));
+    }
+
+    // Assemble system prompt from template
+    let system_prompt = prompt_template
+        .replace("{selected_text}", selected_text)
+        .replace("{instruction}", instruction)
+        .replace("{original_message_content}", original_content);
+
+    // Add the user turn with the editing request.
+    // Gemini requires at least one user message in contents.
+    let user_turn = format!(
+        "Here is the full passage to edit:\n\n{}\n\nSelected text: \"{}\"\n\nInstruction: {}",
+        original_content, selected_text, instruction
+    );
+    contents.push(serde_json::json!({
+        "role": "user",
+        "parts": [{ "text": user_turn }]
+    }));
+
+    let mut body = serde_json::json!({ "contents": contents });
+
+    if !system_prompt.is_empty() {
+        body["system_instruction"] = serde_json::json!({
+            "parts": [{ "text": system_prompt }]
+        });
+    }
+
+    body
+}
+
+/// Non-streaming Gemini generate call for Ghostwriter.
+/// Returns the complete response text and token count.
+pub async fn generate_non_streaming(
+    api_key: &str,
+    model_name: &str,
+    request_body: &serde_json::Value,
+) -> Result<(String, Option<i64>), LoomError> {
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+        model_name, api_key
+    );
+
+    let client = Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(request_body)
+        .send()
+        .await
+        .map_err(|e| LoomError::ApiRequest(format!("Failed to connect to Gemini: {}", e)))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(LoomError::ApiRequest(format!(
+            "Gemini API returned {}: {}",
+            status, body
+        )));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| LoomError::ApiRequest(format!("Failed to parse Gemini response: {}", e)))?;
+
+    let content = json
+        .pointer("/candidates/0/content/parts/0/text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let token_count = json
+        .pointer("/usageMetadata/totalTokenCount")
+        .and_then(|v| v.as_i64());
+
+    Ok((content, token_count))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,11 +460,15 @@ mod tests {
             plot_direction: "She opens the letter.".to_string(),
             background_information: "The letter is from her dead mother.".to_string(),
             modificators: vec!["dark".to_string(), "slow burn".to_string()],
+            constraints: String::new(),
+            output_length: None,
         };
         let result = build_user_turn_text(&uc);
         assert!(result.contains("[PLOT DIRECTION]\nShe opens the letter."));
         assert!(result.contains("[BACKGROUND INFORMATION — NOT FOR THE READER]"));
         assert!(result.contains("[MODIFICATORS]\ndark · slow burn"));
+        // output_length should NOT appear in user turn text
+        assert!(!result.contains("[OUTPUT LENGTH]"));
     }
 
     #[test]
@@ -316,9 +477,27 @@ mod tests {
             plot_direction: "Continue the story.".to_string(),
             background_information: String::new(),
             modificators: vec![],
+            constraints: String::new(),
+            output_length: None,
         };
         let result = build_user_turn_text(&uc);
         assert_eq!(result, "[PLOT DIRECTION]\nContinue the story.");
+    }
+
+    #[test]
+    fn test_build_user_turn_text_with_constraints() {
+        let uc = UserContent {
+            plot_direction: "Continue.".to_string(),
+            background_information: String::new(),
+            modificators: vec![],
+            constraints: "No dialogue.".to_string(),
+            output_length: Some(500),
+        };
+        let result = build_user_turn_text(&uc);
+        assert!(result.contains("[CONSTRAINTS — DO NOT INCLUDE IN OUTPUT]\nNo dialogue."));
+        // output_length must NOT be in user turn — it goes in system instructions
+        assert!(!result.contains("[OUTPUT LENGTH]"));
+        assert!(!result.contains("500"));
     }
 
     #[test]

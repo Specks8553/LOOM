@@ -4,6 +4,7 @@ mod db;
 mod error;
 mod gemini;
 mod messages;
+mod rate_limiter;
 mod state;
 mod vault;
 mod world;
@@ -11,7 +12,7 @@ mod world;
 use error::LoomError;
 use gemini::{ChatMessage, StoryPayload, StreamDone, UserContent};
 use state::AppState;
-use vault::VaultItemMeta;
+use vault::{VaultItemMeta, VaultItem, Template, ContextDoc};
 use world::WorldMeta;
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -506,8 +507,8 @@ async fn send_message(
         guard.clone().ok_or(LoomError::ApiKeyMissing)?
     };
 
-    // Phase 1: Insert user message + read history (needs conn lock)
-    let (user_msg, history, system_instructions, model_name) = {
+    // Phase 1: Insert user message + read history + load context docs (needs conn lock)
+    let (user_msg, history, system_instructions, model_name, context_docs) = {
         let conn_guard = state.active_conn.lock().map_err(|e| {
             LoomError::Internal(format!("Failed to lock connection: {}", e))
         })?;
@@ -529,11 +530,24 @@ async fn send_message(
             vec![]
         };
 
-        // Read settings
+        // Read active system instructions slot
+        let active_slot: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'active_si_slot'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "1".to_string());
+
+        let si_key = if active_slot == "2" {
+            "system_instructions_2"
+        } else {
+            "system_instructions"
+        };
         let sys_instr: String = conn
             .query_row(
-                "SELECT value FROM settings WHERE key = 'system_instructions'",
-                [],
+                "SELECT value FROM settings WHERE key = ?1",
+                rusqlite::params![si_key],
                 |row| row.get(0),
             )
             .unwrap_or_default();
@@ -546,8 +560,30 @@ async fn send_message(
             )
             .unwrap_or_else(|_| "gemini-2.5-flash".to_string());
 
-        (user_msg, history, sys_instr, model)
+        // Load attached context docs (Doc 12 §7: inline in current turn, not in history)
+        let ctx_docs = vault::get_context_docs(conn, &story_id)?;
+        let context_docs: Vec<gemini::ContextDocContent> = ctx_docs
+            .into_iter()
+            .map(|d| gemini::ContextDocContent {
+                name: d.name,
+                content: d.content,
+            })
+            .collect();
+
+        (user_msg, history, sys_instr, model, context_docs)
     }; // conn lock dropped here
+
+    // Check rate limits before making the API call
+    {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        let status = rate_limiter::check_rate_limit(conn)?;
+        if !status.can_proceed {
+            return Err(LoomError::RateLimitExceeded);
+        }
+    }
 
     // Phase 2: Build request and stream (no conn lock held)
     let user_turn_text = gemini::build_user_turn_text(&user_content);
@@ -555,6 +591,8 @@ async fn send_message(
         &system_instructions,
         &history,
         &user_turn_text,
+        user_content.output_length,
+        &context_docs,
     );
 
     // Create cancellation channel
@@ -617,6 +655,12 @@ async fn send_message(
 
         // Persist leaf ID
         messages::set_story_leaf_id(conn, &story_id, &model_msg.id)?;
+
+        // Record usage for rate limiting (only on successful generation)
+        if finish_reason != "ERROR" {
+            let tokens = token_count.unwrap_or(0);
+            rate_limiter::record_usage(conn, tokens)?;
+        }
 
         model_msg
     };
@@ -800,6 +844,639 @@ async fn get_message(
     messages::get_message(conn, &message_id)
 }
 
+// ─── Phase 8: Settings ────────────────────────────────────────────────────────
+
+/// Get all settings as a key-value map.
+#[tauri::command]
+async fn get_settings_all(
+    state: tauri::State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, String>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let (k, v) = row.map_err(|e| LoomError::Internal(format!("Settings row error: {}", e)))?;
+        map.insert(k, v);
+    }
+    Ok(map)
+}
+
+/// Save a single setting.
+#[tauri::command]
+async fn save_setting(
+    state: tauri::State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params![key, value],
+    )?;
+    Ok(())
+}
+
+/// Sync accent color to world_meta.json for World Picker display.
+#[tauri::command]
+async fn sync_accent_to_world_meta(
+    state: tauri::State<'_, AppState>,
+    hex: String,
+) -> Result<(), LoomError> {
+    let world_id = {
+        let guard = state.active_world_id.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock world_id: {}", e))
+        })?;
+        guard.clone().ok_or(LoomError::NoActiveConnection)?
+    };
+    let mut meta = world::read_world_meta(&world_id)?;
+    meta.accent_color = hex;
+    meta.modified_at = chrono::Utc::now().to_rfc3339();
+    let world_dir = world::world_dir_path(&world_id)?;
+    world::write_world_meta_atomic(&world_dir, &meta)?;
+    Ok(())
+}
+
+/// Reset rate limiter counters.
+#[tauri::command]
+async fn reset_rate_limiter(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    rate_limiter::reset_counters(conn)
+}
+
+/// Get current telemetry counters for the frontend.
+#[tauri::command]
+async fn get_telemetry(
+    state: tauri::State<'_, AppState>,
+) -> Result<rate_limiter::TelemetryCounters, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    rate_limiter::get_telemetry(conn)
+}
+
+/// Check if a request can proceed under rate limits.
+#[tauri::command]
+async fn check_rate_limit(
+    state: tauri::State<'_, AppState>,
+) -> Result<rate_limiter::RateLimitStatus, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    rate_limiter::check_rate_limit(conn)
+}
+
+/// Check if API key is set (without exposing the actual key).
+#[tauri::command]
+async fn has_api_key(
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, LoomError> {
+    let guard = state.api_key.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock api_key: {}", e))
+    })?;
+    Ok(guard.is_some())
+}
+
+/// Change the master password — Amendment A6.
+/// Verifies old password, generates new salt + key + sentinel, re-keys all world DBs.
+#[tauri::command]
+async fn change_master_password(
+    state: tauri::State<'_, AppState>,
+    old_password: String,
+    new_password: String,
+) -> Result<(), LoomError> {
+    use zeroize::Zeroize;
+
+    // 1. Read current config and verify old password
+    let mut app_config = config::read_app_config()?;
+    let old_salt = hex::decode(&app_config.pbkdf2_salt_hex)?;
+    let mut old_key = crypto::derive_key(&old_password, &old_salt, app_config.pbkdf2_iterations);
+
+    if !crypto::verify_sentinel(&old_key, &app_config.key_check) {
+        old_key.zeroize();
+        return Err(LoomError::IncorrectPassword);
+    }
+
+    // 2. Generate new salt, derive new key, create new sentinel (Amendment A6: new salt every change)
+    let new_salt = crypto::generate_salt();
+    let new_key = crypto::derive_key(&new_password, &new_salt, config::DEFAULT_PBKDF2_ITERATIONS);
+    let new_sentinel = crypto::create_sentinel(&new_key)?;
+
+    // 3. Close the active DB connection before re-keying
+    {
+        let mut conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        *conn_guard = None;
+    }
+
+    // 4. Re-key every (non-deleted) world database
+    let new_key_hex = hex::encode(&new_key);
+    for world_entry in &app_config.worlds {
+        if world_entry.deleted_at.is_some() {
+            continue;
+        }
+
+        let data_dir = config::app_data_dir()?;
+        let db_path = data_dir.join("worlds").join(&world_entry.id).join("loom.db");
+        if !db_path.exists() {
+            continue;
+        }
+
+        // Open with old key, then rekey to new key
+        let conn = db::open_world_db(&db_path, &old_key)?;
+        conn.execute_batch(&format!("PRAGMA rekey = \"x'{new_key_hex}'\";"))
+            .map_err(|e| LoomError::Database(format!("Failed to rekey world {}: {}", world_entry.id, e)))?;
+        // Connection is dropped here, closing the DB
+    }
+
+    // 5. Update app_config.json atomically
+    app_config.pbkdf2_salt_hex = hex::encode(new_salt);
+    app_config.pbkdf2_iterations = config::DEFAULT_PBKDF2_ITERATIONS;
+    app_config.key_check = new_sentinel;
+    config::write_app_config_atomic(&app_config)?;
+
+    // 6. Update master key in AppState
+    {
+        let mut key_guard = state.master_key.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock master_key: {}", e))
+        })?;
+        if let Some(ref mut k) = *key_guard {
+            k.zeroize();
+        }
+        *key_guard = Some(new_key);
+    }
+
+    // 7. Re-open the active world DB with the new key
+    let active_world_id = {
+        let guard = state.active_world_id.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock active_world_id: {}", e))
+        })?;
+        guard.clone()
+    };
+
+    if let Some(wid) = active_world_id {
+        let data_dir = config::app_data_dir()?;
+        let db_path = data_dir.join("worlds").join(&wid).join("loom.db");
+        if db_path.exists() {
+            let conn = db::open_world_db(&db_path, &new_key)?;
+            let mut conn_guard = state.active_conn.lock().map_err(|e| {
+                LoomError::Internal(format!("Failed to lock connection: {}", e))
+            })?;
+            *conn_guard = Some(conn);
+        }
+    }
+
+    // 8. Zero old key material
+    old_key.zeroize();
+
+    log::info!("Master password changed successfully");
+    Ok(())
+}
+
+// ─── Phase 9: Control Pane ────────────────────────────────────────────────────
+
+/// Update an item's description field.
+#[tauri::command]
+async fn update_item_description(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    description: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    conn.execute(
+        "UPDATE items SET description = ?1, modified_at = ?2 WHERE id = ?3",
+        rusqlite::params![description, chrono::Utc::now().to_rfc3339(), id],
+    )?;
+    Ok(())
+}
+
+/// Get story settings (per-story key-value pairs from story_settings table).
+#[tauri::command]
+async fn get_story_settings(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<std::collections::HashMap<String, String>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    let mut stmt = conn.prepare("SELECT key, value FROM story_settings WHERE story_id = ?1")?;
+    let rows = stmt.query_map(rusqlite::params![story_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let (k, v) = row.map_err(|e| LoomError::Internal(format!("Story settings row error: {}", e)))?;
+        map.insert(k, v);
+    }
+    Ok(map)
+}
+
+/// Save a story setting.
+#[tauri::command]
+async fn save_story_setting(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    key: String,
+    value: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO story_settings (story_id, key, value) VALUES (?1, ?2, ?3)",
+        rusqlite::params![story_id, key, value],
+    )?;
+    Ok(())
+}
+
+/// Update user_feedback on a message.
+#[tauri::command]
+async fn update_message_feedback(
+    state: tauri::State<'_, AppState>,
+    message_id: String,
+    feedback: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    conn.execute(
+        "UPDATE messages SET user_feedback = ?1 WHERE id = ?2",
+        rusqlite::params![feedback, message_id],
+    )?;
+    Ok(())
+}
+
+/// Get branch count for a story (total branches = number of fork points + 1).
+#[tauri::command]
+async fn get_branch_info(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<(i64, i64), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    // Count total leaf nodes (messages with no children) as branch count
+    let branch_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM messages m
+         WHERE m.story_id = ?1 AND m.deleted_at IS NULL
+         AND NOT EXISTS (
+             SELECT 1 FROM messages c
+             WHERE c.parent_id = m.id AND c.story_id = ?1 AND c.deleted_at IS NULL
+         )",
+        rusqlite::params![story_id],
+        |row| row.get(0),
+    ).unwrap_or(0);
+
+    // Count total messages as depth proxy
+    let total_messages: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM messages WHERE story_id = ?1 AND deleted_at IS NULL",
+        rusqlite::params![story_id],
+        |row| row.get(0),
+    ).unwrap_or(0);
+
+    Ok((branch_count, total_messages))
+}
+
+// ─── Phase 9: Context Doc Attachment ──────────────────────────────────────────
+
+/// Attach a source document to a story as a context doc.
+#[tauri::command]
+async fn attach_context_doc(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    doc_id: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::attach_context_doc(conn, &story_id, &doc_id)
+}
+
+/// Detach a context doc from a story.
+#[tauri::command]
+async fn detach_context_doc(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+    doc_id: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::detach_context_doc(conn, &story_id, &doc_id)
+}
+
+/// Get all attached context docs for a story.
+#[tauri::command]
+async fn get_context_docs(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<Vec<ContextDoc>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::get_context_docs(conn, &story_id)
+}
+
+// ─── Phase 11: Source Document Editor + Templates ─────────────────────────────
+
+/// Get a single vault item including its content.
+#[tauri::command]
+async fn vault_get_item(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<VaultItem, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::get_item(conn, &id)
+}
+
+/// Update a vault item's content (doc editor save).
+#[tauri::command]
+async fn vault_update_item_content(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    content: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::update_item_content(conn, &id, &content)
+}
+
+/// Create a vault item with initial content (template-based).
+#[tauri::command]
+async fn vault_create_item_with_content(
+    item_type: String,
+    name: String,
+    parent_id: Option<String>,
+    subtype: Option<String>,
+    content: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<VaultItemMeta, LoomError> {
+    if name.trim().is_empty() {
+        return Err(LoomError::Validation("Item name cannot be empty.".into()));
+    }
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::create_item_with_content(conn, &item_type, name.trim(), parent_id.as_deref(), subtype.as_deref(), &content)
+}
+
+/// List all templates.
+#[tauri::command]
+async fn list_templates(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<Template>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::list_templates(conn)
+}
+
+/// Save (create or update) a template.
+#[tauri::command]
+async fn save_template(
+    state: tauri::State<'_, AppState>,
+    template: Template,
+) -> Result<Template, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::save_template(conn, &template)
+}
+
+/// Delete a template.
+#[tauri::command]
+async fn delete_template(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    vault::delete_template(conn, &id)
+}
+
+// ─── Phase 12: Ghostwriter ────────────────────────────────────────────────────
+
+/// Ghostwriter result returned to the frontend.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct GhostwriterResult {
+    new_content: String,
+    token_count: u32,
+}
+
+/// Ghostwriter edit history entry.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct GhostwriterEditRecord {
+    edited_at: String,
+    original_content: String,
+    new_content: String,
+    instruction: String,
+    selected_text: String,
+}
+
+/// Send a Ghostwriter revision request — Doc 16 §3.
+/// Non-streamed: returns the complete revised message.
+#[tauri::command]
+async fn send_ghostwriter_request(
+    state: tauri::State<'_, AppState>,
+    message_id: String,
+    selected_text: String,
+    instruction: String,
+    original_content: String,
+    story_id: String,
+    leaf_id: String,
+) -> Result<GhostwriterResult, LoomError> {
+    // Get API key
+    let api_key = {
+        let guard = state.api_key.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock api key: {}", e))
+        })?;
+        guard.clone().ok_or(LoomError::ApiKeyMissing)?
+    };
+
+    // Phase 1: Load history and settings (needs conn lock)
+    let (history, prompt_template, model_name) = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+        // Check rate limit
+        let status = rate_limiter::check_rate_limit(conn)?;
+        if !status.can_proceed {
+            return Err(LoomError::RateLimitExceeded);
+        }
+
+        // Load history up to but NOT including the AI message being edited.
+        // We need the parent user message's parent_id to reconstruct the branch.
+        let ai_msg = messages::get_message(conn, &message_id)?;
+        let history = if let Some(ref parent_user_id) = ai_msg.parent_id {
+            // Get the user message's parent (grandparent of AI msg)
+            let user_msg = messages::get_message(conn, parent_user_id)?;
+            if let Some(ref grandparent_id) = user_msg.parent_id {
+                let payload = messages::load_story_messages(conn, &story_id, grandparent_id)?;
+                payload.messages
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        // Read ghostwriter prompt template
+        let prompt: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'prompt_ghostwriter'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| DEFAULT_GHOSTWRITER_PROMPT.to_string());
+
+        let model: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'text_model_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "gemini-2.5-flash".to_string());
+
+        (history, prompt, model)
+    }; // conn lock dropped
+
+    // Phase 2: Build request and call API (non-streamed)
+    let request_body = gemini::build_ghostwriter_request(
+        &prompt_template,
+        &history,
+        &selected_text,
+        &instruction,
+        &original_content,
+    );
+
+    let (content, token_count) = gemini::generate_non_streaming(
+        &api_key,
+        &model_name,
+        &request_body,
+    )
+    .await?;
+
+    // Record usage
+    {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        let tokens = token_count.unwrap_or(0);
+        rate_limiter::record_usage(conn, tokens)?;
+    }
+
+    log::info!("Ghostwriter request completed for message {}", message_id);
+    Ok(GhostwriterResult {
+        new_content: content,
+        token_count: token_count.unwrap_or(0) as u32,
+    })
+}
+
+/// Save a Ghostwriter edit — update message content and append to history.
+#[tauri::command]
+async fn save_ghostwriter_edit(
+    state: tauri::State<'_, AppState>,
+    message_id: String,
+    new_content: String,
+    history_entry: GhostwriterEditRecord,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    // Read current history
+    let current_history_json: String = conn
+        .query_row(
+            "SELECT ghostwriter_history FROM messages WHERE id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![message_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let mut history: Vec<GhostwriterEditRecord> =
+        serde_json::from_str(&current_history_json).unwrap_or_default();
+
+    // If this is a revert (instruction == "[revert]"), pop the last entry instead of appending
+    if history_entry.instruction == "[revert]" {
+        history.pop();
+    } else {
+        history.push(history_entry);
+    }
+
+    let updated_json = serde_json::to_string(&history)
+        .map_err(|e| LoomError::Internal(format!("JSON serialize error: {}", e)))?;
+
+    conn.execute(
+        "UPDATE messages SET content = ?1, ghostwriter_history = ?2 WHERE id = ?3",
+        rusqlite::params![new_content, updated_json, message_id],
+    )?;
+
+    log::info!("Ghostwriter edit saved for message {}", message_id);
+    Ok(())
+}
+
+/// Default Ghostwriter prompt template — Doc 16 §3.3.
+const DEFAULT_GHOSTWRITER_PROMPT: &str = r#"You are assisting a writer with targeted revisions to AI-generated story text.
+
+The writer has selected a specific passage and provided an instruction.
+Your task:
+1. Rewrite ONLY the marked passage according to the instruction.
+2. The rest of the message must remain word-for-word identical.
+3. Return the COMPLETE message with the revision applied.
+4. Do not add commentary, preamble, or explanation — return only the full revised message text.
+
+Selected passage:
+<<<SELECTED>>>
+{selected_text}
+<<<END>>>
+
+Writer's instruction:
+{instruction}
+
+Original message (return this in full with only the selected passage changed):
+{original_message_content}"#;
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -852,6 +1529,35 @@ pub fn run() {
             undelete_message,
             set_story_leaf_id,
             get_message,
+            // Phase 8: Settings
+            get_settings_all,
+            save_setting,
+            sync_accent_to_world_meta,
+            reset_rate_limiter,
+            get_telemetry,
+            check_rate_limit,
+            has_api_key,
+            change_master_password,
+            // Phase 9: Control Pane
+            update_item_description,
+            get_story_settings,
+            save_story_setting,
+            update_message_feedback,
+            get_branch_info,
+            // Phase 9: Context Doc Attachment
+            attach_context_doc,
+            detach_context_doc,
+            get_context_docs,
+            // Phase 11: Source Document Editor + Templates
+            vault_get_item,
+            vault_update_item_content,
+            vault_create_item_with_content,
+            list_templates,
+            save_template,
+            delete_template,
+            // Phase 12: Ghostwriter
+            send_ghostwriter_request,
+            save_ghostwriter_edit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

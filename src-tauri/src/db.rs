@@ -102,6 +102,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
             icon            TEXT NOT NULL DEFAULT 'FileText',
             default_content TEXT NOT NULL DEFAULT '',
             is_builtin      INTEGER NOT NULL DEFAULT 0,
+            sort_order      INTEGER NOT NULL DEFAULT 0,
             created_at      TEXT NOT NULL,
             modified_at     TEXT NOT NULL
         );
@@ -160,7 +161,11 @@ pub fn seed_default_settings(conn: &Connection) -> Result<(), LoomError> {
         ("last_open_story_id", ""),
         ("img_gen_model_name", ""),
         ("tts_model_name", ""),
-        ("prompt_ghostwriter", "You are a skilled creative writing editor. The user will provide their original text and a description of the changes they want. Rewrite the text incorporating the requested changes while preserving the author's voice and style. Return ONLY the rewritten text, nothing else."),
+        ("system_instructions_2", ""),
+        ("si_slot_1_name", "SI 1"),
+        ("si_slot_2_name", "SI 2"),
+        ("active_si_slot", "1"),
+        ("prompt_ghostwriter", "You are assisting a writer with targeted revisions to AI-generated story text.\n\nThe writer has selected a specific passage and provided an instruction.\nYour task:\n1. Rewrite ONLY the marked passage according to the instruction.\n2. The rest of the message must remain word-for-word identical.\n3. Return the COMPLETE message with the revision applied.\n4. Do not add commentary, preamble, or explanation — return only the full revised message text.\n\nSelected passage:\n<<<SELECTED>>>\n{selected_text}\n<<<END>>>\n\nWriter's instruction:\n{instruction}\n\nOriginal message (return this in full with only the selected passage changed):\n{original_message_content}"),
         ("prompt_accordion_summarise", "Summarize the following conversation segment concisely. Capture the key plot points, character developments, and world-building details. Focus on information that would be needed to continue the story coherently."),
         ("prompt_accordion_fake_user", "Summarize this chapter: actions, character states, and world state at the end of the chapter."),
     ];
@@ -261,15 +266,39 @@ pub fn migrate_dev_schema(conn: &Connection) -> Result<(), LoomError> {
         }
     }
 
-    // Fix outdated model name from earlier phases
-    conn.execute(
-        "UPDATE settings SET value = 'gemini-2.5-flash' WHERE key = 'text_model_name' AND value = 'gemini-2.5-flash-preview'",
-        [],
-    ).ok();
-    conn.execute(
-        "UPDATE settings SET value = ?1 WHERE key = 'text_model_options' AND value LIKE '%flash-preview%'",
-        rusqlite::params![r#"["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]"#],
-    ).ok();
+    // Add sort_order column to templates table if missing (Phase 11).
+    // Guard: table may not exist yet on a fresh DB opened before init_schema (onboarding).
+    let templates_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='templates'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)))
+        .unwrap_or(false);
+    if templates_exists {
+        let has_sort_order: bool = conn
+            .prepare("SELECT sort_order FROM templates LIMIT 1")
+            .is_ok();
+        if !has_sort_order {
+            log::info!("Migrating templates table: adding sort_order column");
+            conn.execute_batch(
+                "ALTER TABLE templates ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;"
+            )?;
+        }
+    }
+
+    // Fix outdated model name from earlier phases (guard: settings table may not exist yet)
+    let settings_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='settings'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)))
+        .unwrap_or(false);
+    if settings_exists {
+        conn.execute(
+            "UPDATE settings SET value = 'gemini-2.5-flash' WHERE key = 'text_model_name' AND value = 'gemini-2.5-flash-preview'",
+            [],
+        ).ok();
+        conn.execute(
+            "UPDATE settings SET value = ?1 WHERE key = 'text_model_options' AND value LIKE '%flash-preview%'",
+            rusqlite::params![r#"["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]"#],
+        ).ok();
+    }
 
     Ok(())
 }
