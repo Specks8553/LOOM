@@ -330,6 +330,7 @@ mod tests {
             modificators: vec![],
             constraints: String::new(),
             output_length: None,
+            context_doc_names: vec![],
         };
 
         let user_msg = insert_user_message(&conn, "story1", None, &uc).unwrap();

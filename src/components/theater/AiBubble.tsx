@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import { AlertTriangle, RefreshCw, Trash2, MessageSquare, RotateCcw, Map as MapIcon, Bookmark } from "lucide-react";
+import { AlertTriangle, RefreshCw, Trash2, MessageSquare, RotateCcw, Map as MapIcon, Bookmark, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { marked } from "marked";
 import { formatShortTime } from "../../lib/timeUtils";
@@ -20,6 +20,7 @@ import {
   updateMessageFeedback,
   sendGhostwriterRequest,
   saveGhostwriterEdit,
+  updateMessageContent,
 } from "../../lib/tauriApi";
 import { useUiStore } from "../../stores/uiStore";
 import { useBranchMapStore } from "../../stores/branchMapStore";
@@ -59,9 +60,12 @@ export function AiBubble({
   const currentLeafId = useWorkspaceStore((s) => s.currentLeafId);
   const [hovered, setHovered] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const [feedbackValue, setFeedbackValue] = useState(message.user_feedback ?? "");
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Ghostwriter store
@@ -109,6 +113,39 @@ export function AiBubble({
       );
     }
   }, [feedbackValue, message.id, message.user_feedback]);
+
+  // ─── Direct Edit ───────────────────────────────────────────────────
+  const handleStartEdit = useCallback(() => {
+    setEditValue(message.content);
+    setEditing(true);
+    // Focus after render
+    setTimeout(() => editRef.current?.focus(), 0);
+  }, [message.content]);
+
+  const handleSaveEdit = useCallback(async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === message.content) {
+      setEditing(false);
+      return;
+    }
+    try {
+      await updateMessageContent(message.id, trimmed);
+      const store = useWorkspaceStore.getState();
+      store.setMessages(
+        store.messages.map((m) =>
+          m.id === message.id ? { ...m, content: trimmed } : m,
+        ),
+      );
+      setEditing(false);
+    } catch (e) {
+      console.error("Edit save failed:", e);
+      toast.error(`Failed to save edit: ${e}`);
+    }
+  }, [editValue, message.id, message.content]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditing(false);
+  }, []);
 
   const renderedHtml = useMemo(() => {
     if (!message.content) return "";
@@ -168,11 +205,19 @@ export function AiBubble({
         gwOriginalContent,
         storyId,
         currentLeafId ?? message.id,
+        gwSelection.startOffset,
+        gwSelection.endOffset,
       );
 
-      // Calculate word-level diff
-      const diff = computeWordDiff(gwOriginalContent, result.new_content);
-      gwSetDiff({ spans: diff, newContent: result.new_content });
+      // Stitch: context_before + rewritten passage + context_after
+      const stitchedContent =
+        gwOriginalContent.slice(0, gwSelection.startOffset) +
+        result.new_content.trim() +
+        gwOriginalContent.slice(gwSelection.endOffset);
+
+      // Calculate word-level diff against the full stitched result
+      const diff = computeWordDiff(gwOriginalContent, stitchedContent);
+      gwSetDiff({ spans: diff, newContent: stitchedContent });
     } catch (e) {
       console.error("Ghostwriter generation failed:", e);
       toast.error(`Ghostwriter failed: ${e}`);
@@ -480,6 +525,40 @@ export function AiBubble({
       );
     }
 
+    // Edit mode: textarea
+    if (editing) {
+      return (
+        <textarea
+          ref={editRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              handleSaveEdit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              handleCancelEdit();
+            }
+          }}
+          style={{
+            width: "100%",
+            fontSize: "15px",
+            fontFamily: "var(--font-theater-body)",
+            color: "var(--color-text-primary)",
+            background: "var(--color-bg-base)",
+            border: "1px solid var(--color-accent)",
+            borderRadius: "6px",
+            padding: "10px 12px",
+            outline: "none",
+            resize: "vertical",
+            minHeight: "80px",
+            lineHeight: 1.7,
+          }}
+        />
+      );
+    }
+
     // Normal: rendered markdown
     return (
       <div
@@ -512,7 +591,30 @@ export function AiBubble({
         }}
         onContextMenu={(e) => {
           if (isGhostwriterActive) return; // No context menu in GW mode
+
+          // Check if there's a text selection within this bubble
+          const sel = window.getSelection();
+          const hasTextSelection = sel && !sel.isCollapsed && sel.toString().trim().length > 0;
+
           const items: MenuItem[] = [
+            ...(hasTextSelection ? [{
+              label: "Ghostwriter with selection",
+              icon: Pencil,
+              onClick: () => {
+                const selectedText = sel!.toString();
+                const startIdx = message.content.indexOf(selectedText);
+                gwEnter(message.id, message.content);
+                if (startIdx !== -1) {
+                  gwSetSelection({
+                    startOffset: startIdx,
+                    endOffset: startIdx + selectedText.length,
+                    selectedText,
+                  });
+                }
+              },
+              disabled: isGenerating,
+            }] : []),
+            { label: "Edit", icon: Pencil, onClick: handleStartEdit, disabled: isGenerating },
             { label: "Feedback", icon: MessageSquare, onClick: () => setFeedbackOpen(!feedbackOpen) },
             { label: "Ghostwriter...", icon: RefreshCw, onClick: handleEnterGhostwriter, disabled: isGenerating },
             { label: "Regenerate", icon: RefreshCw, onClick: handleRegenerate, disabled: !isLast || isGenerating },
@@ -606,84 +708,170 @@ export function AiBubble({
           className="flex items-center gap-2"
           style={{
             padding: "4px 0 0 4px",
-            opacity: hovered ? 1 : 0,
-            pointerEvents: hovered ? "auto" : "none",
+            opacity: hovered || editing ? 1 : 0,
+            pointerEvents: hovered || editing ? "auto" : "none",
             transition: "opacity 120ms ease",
           }}
         >
-          {isLast && (
+          {editing ? (
             <>
               <ActionButton
-                icon={<RefreshCw size={16} />}
-                label="Regenerate"
-                onClick={handleRegenerate}
+                icon={<Check size={16} />}
+                label="Save (Ctrl+Enter)"
+                onClick={handleSaveEdit}
               />
               <ActionButton
-                icon={<Trash2 size={16} />}
-                label="Delete"
-                onClick={handleDelete}
+                icon={<X size={16} />}
+                label="Cancel (Esc)"
+                onClick={handleCancelEdit}
               />
             </>
-          )}
-          <ActionButton
-            label="✦ Ghostwriter"
-            onClick={handleEnterGhostwriter}
-          />
-          <ActionButton
-            icon={<MessageSquare size={16} style={hasFeedback ? { color: "var(--color-accent)" } : undefined} />}
-            label="Feedback"
-            onClick={() => setFeedbackOpen(!feedbackOpen)}
-          />
-          {hasGhostwriterHistory && (
-            <ActionButton
-              icon={<RotateCcw size={16} />}
-              label="Revert"
-              onClick={handleRevert}
-            />
+          ) : (
+            <>
+              {isLast && (
+                <>
+                  <ActionButton
+                    icon={<RefreshCw size={16} />}
+                    label="Regenerate"
+                    onClick={handleRegenerate}
+                  />
+                  <ActionButton
+                    icon={<Trash2 size={16} />}
+                    label="Delete"
+                    onClick={handleDelete}
+                  />
+                </>
+              )}
+              <ActionButton
+                icon={<Pencil size={16} />}
+                label="Edit"
+                onClick={handleStartEdit}
+              />
+              <ActionButton
+                label="✦ Ghostwriter"
+                onClick={handleEnterGhostwriter}
+              />
+              <ActionButton
+                icon={<MessageSquare size={16} style={hasFeedback ? { color: "var(--color-accent)" } : undefined} />}
+                label="Feedback"
+                onClick={() => setFeedbackOpen(!feedbackOpen)}
+              />
+              {hasGhostwriterHistory && (
+                <ActionButton
+                  icon={<RotateCcw size={16} />}
+                  label="Revert"
+                  onClick={handleRevert}
+                />
+              )}
+            </>
           )}
         </div>
       )}
 
       {/* Feedback box */}
       {feedbackOpen && (
-        <div
-          style={{
-            maxWidth: "80%",
-            marginTop: "4px",
-            padding: "8px 10px",
-            backgroundColor: "var(--color-bg-elevated)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "6px",
-          }}
-        >
-          <textarea
-            ref={feedbackRef}
-            value={feedbackValue}
-            onChange={(e) => setFeedbackValue(e.target.value)}
-            onBlur={handleFeedbackBlur}
-            placeholder="Add feedback for this response..."
-            style={{
-              width: "100%",
-              fontSize: "12px",
-              fontFamily: "var(--font-sans)",
-              color: "var(--color-text-primary)",
-              background: "var(--color-bg-base)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              padding: "6px 8px",
-              outline: "none",
-              resize: "none",
-              minHeight: "40px",
-              lineHeight: 1.4,
-            }}
-          />
-          <p style={{ fontSize: "10px", color: "var(--color-text-muted)", marginTop: "4px" }}>
-            Feedback is injected into AI context for future messages.
-          </p>
-        </div>
+        <FeedbackBox
+          feedbackRef={feedbackRef}
+          feedbackValue={feedbackValue}
+          setFeedbackValue={setFeedbackValue}
+          onSave={handleFeedbackBlur}
+          onClose={() => setFeedbackOpen(false)}
+        />
       )}
 
       {contextMenu && <ContextMenu menu={contextMenu} onClose={hideContextMenu} />}
+    </div>
+  );
+}
+
+function FeedbackBox({
+  feedbackRef,
+  feedbackValue,
+  setFeedbackValue,
+  onSave,
+  onClose,
+}: {
+  feedbackRef: React.RefObject<HTMLTextAreaElement | null>;
+  feedbackValue: string;
+  setFeedbackValue: (v: string) => void;
+  onSave: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [saved, setSaved] = useState(false);
+
+  const handleApply = useCallback(async () => {
+    await onSave();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }, [onSave]);
+
+  return (
+    <div
+      style={{
+        maxWidth: "80%",
+        marginTop: "4px",
+        padding: "8px 10px",
+        backgroundColor: "var(--color-bg-elevated)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "6px",
+      }}
+    >
+      <textarea
+        ref={feedbackRef}
+        value={feedbackValue}
+        onChange={(e) => setFeedbackValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            handleApply();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        placeholder="Add feedback for this response..."
+        style={{
+          width: "100%",
+          fontSize: "12px",
+          fontFamily: "var(--font-sans)",
+          color: "var(--color-text-primary)",
+          background: "var(--color-bg-base)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "4px",
+          padding: "6px 8px",
+          outline: "none",
+          resize: "none",
+          minHeight: "40px",
+          lineHeight: 1.4,
+        }}
+      />
+      <div className="flex items-center justify-between" style={{ marginTop: "4px" }}>
+        <p style={{ fontSize: "10px", color: "var(--color-text-muted)", margin: 0 }}>
+          {saved ? (
+            <span style={{ color: "var(--color-accent)", fontWeight: 500 }}>
+              Feedback saved
+            </span>
+          ) : (
+            "Injected into AI context for future messages."
+          )}
+        </p>
+        <button
+          onClick={handleApply}
+          style={{
+            background: "var(--color-accent)",
+            color: "var(--color-text-on-accent)",
+            border: "none",
+            borderRadius: "4px",
+            padding: "2px 10px",
+            fontSize: "11px",
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
+          title="Apply feedback (Ctrl+Enter)"
+        >
+          {saved ? "Saved" : "Apply"}
+        </button>
+      </div>
     </div>
   );
 }

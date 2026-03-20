@@ -1135,6 +1135,25 @@ async fn update_message_feedback(
     Ok(())
 }
 
+/// Update AI message content directly (manual edit, no regeneration).
+#[tauri::command]
+async fn update_message_content(
+    state: tauri::State<'_, AppState>,
+    message_id: String,
+    new_content: String,
+) -> Result<(), LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    conn.execute(
+        "UPDATE messages SET content = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+        rusqlite::params![new_content, message_id],
+    )?;
+    log::info!("Message content updated for {}", message_id);
+    Ok(())
+}
+
 /// Get branch count for a story (total branches = number of fork points + 1).
 #[tauri::command]
 async fn get_branch_info(
@@ -1328,6 +1347,8 @@ async fn send_ghostwriter_request(
     original_content: String,
     story_id: String,
     leaf_id: String,
+    selection_start: usize,
+    selection_end: usize,
 ) -> Result<GhostwriterResult, LoomError> {
     // Get API key
     let api_key = {
@@ -1335,6 +1356,18 @@ async fn send_ghostwriter_request(
             LoomError::Internal(format!("Failed to lock api key: {}", e))
         })?;
         guard.clone().ok_or(LoomError::ApiKeyMissing)?
+    };
+
+    // Compute context_before / context_after from the original AI message
+    let context_before = if selection_start <= original_content.len() {
+        &original_content[..selection_start]
+    } else {
+        ""
+    };
+    let context_after = if selection_end <= original_content.len() {
+        &original_content[selection_end..]
+    } else {
+        ""
     };
 
     // Phase 1: Load history and settings (needs conn lock)
@@ -1350,21 +1383,10 @@ async fn send_ghostwriter_request(
             return Err(LoomError::RateLimitExceeded);
         }
 
-        // Load history up to but NOT including the AI message being edited.
-        // We need the parent user message's parent_id to reconstruct the branch.
-        let ai_msg = messages::get_message(conn, &message_id)?;
-        let history = if let Some(ref parent_user_id) = ai_msg.parent_id {
-            // Get the user message's parent (grandparent of AI msg)
-            let user_msg = messages::get_message(conn, parent_user_id)?;
-            if let Some(ref grandparent_id) = user_msg.parent_id {
-                let payload = messages::load_story_messages(conn, &story_id, grandparent_id)?;
-                payload.messages
-            } else {
-                vec![]
-            }
-        } else {
-            vec![]
-        };
+        // Load history up to and INCLUDING the AI message being edited.
+        // The AI message itself is the leaf — its content provides style/tone context.
+        let payload = messages::load_story_messages(conn, &story_id, &message_id)?;
+        let history = payload.messages;
 
         // Read ghostwriter prompt template
         let prompt: String = conn
@@ -1392,7 +1414,8 @@ async fn send_ghostwriter_request(
         &history,
         &selected_text,
         &instruction,
-        &original_content,
+        context_before,
+        context_after,
     );
 
     let (content, token_count) = gemini::generate_non_streaming(
@@ -1464,22 +1487,19 @@ async fn save_ghostwriter_edit(
 }
 
 /// Default Ghostwriter prompt template — Doc 16 §3.3.
-const DEFAULT_GHOSTWRITER_PROMPT: &str = r#"You are assisting a writer with targeted revisions to AI-generated story text.
+const DEFAULT_GHOSTWRITER_PROMPT: &str = r#"You are a ghostwriter assisting a writer with targeted revisions to story text.
 
-The writer has selected a specific passage and provided an instruction.
-Your task:
-1. Rewrite ONLY the marked passage according to the instruction.
-2. The rest of the message must remain word-for-word identical.
-3. Return the COMPLETE message with the revision applied.
-4. Do not add commentary, preamble, or explanation — return only the full revised message text.
+You will receive a revision request containing three tagged sections:
 
-Selected passage:
-<<<SELECTED>>>
-{selected_text}
-<<<END>>>
+<context_before>: Text from the same AI response that immediately precedes the selection. Do NOT include this in your output.
+<selected_passage>: The text to revise. This is the ONLY part you rewrite.
+<context_after>: Text from the same AI response that immediately follows the selection. Do NOT include this in your output.
 
-Writer's instruction:
-{instruction}
+Rules:
+1. Rewrite ONLY the selected passage according to the writer's instruction.
+2. Match the tone, voice, and style of the surrounding context.
+3. Preserve paragraph structure unless the instruction explicitly asks to change it.
+4. Return ONLY the revised passage — no tags, no preamble, no commentary, no surrounding text.
 
 Original message (return this in full with only the selected passage changed):
 {original_message_content}"#;
@@ -1659,6 +1679,7 @@ pub fn run() {
             get_story_settings,
             save_story_setting,
             update_message_feedback,
+            update_message_content,
             get_branch_info,
             // Phase 9: Context Doc Attachment
             attach_context_doc,

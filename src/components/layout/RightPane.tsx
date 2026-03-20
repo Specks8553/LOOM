@@ -643,29 +643,58 @@ function SystemInstructionsSection() {
       <div className="flex items-center justify-between" style={{ marginBottom: collapsed ? "0" : "8px" }}>
         <div className="flex items-center gap-2">
           <SectionHeader>System Instructions</SectionHeader>
-          {/* SI slot toggle */}
-          <button
-            onClick={handleSlotToggle}
+          {/* SI slot pill toggle */}
+          <div
             style={{
-              background: "var(--color-bg-active)",
+              display: "inline-flex",
+              borderRadius: "10px",
               border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              padding: "1px 6px",
+              overflow: "hidden",
               fontSize: "9px",
               fontFamily: "var(--font-mono)",
               fontWeight: 600,
-              color: "var(--color-accent)",
-              cursor: "pointer",
               letterSpacing: "0.04em",
-              maxWidth: "80px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              cursor: "pointer",
             }}
-            title={`Active: ${currentName} — click to switch to ${activeSlot === "1" ? si2Name : si1Name}`}
           >
-            {currentName}
-          </button>
+            <button
+              onClick={() => { if (activeSlot !== "1") handleSlotToggle(); }}
+              style={{
+                background: activeSlot === "1" ? "var(--color-accent)" : "var(--color-bg-active)",
+                color: activeSlot === "1" ? "var(--color-text-on-accent)" : "var(--color-text-muted)",
+                border: "none",
+                padding: "2px 8px",
+                cursor: "pointer",
+                maxWidth: "70px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                transition: "background 150ms ease, color 150ms ease",
+              }}
+              title={si1Name}
+            >
+              {si1Name}
+            </button>
+            <button
+              onClick={() => { if (activeSlot !== "2") handleSlotToggle(); }}
+              style={{
+                background: activeSlot === "2" ? "var(--color-accent)" : "var(--color-bg-active)",
+                color: activeSlot === "2" ? "var(--color-text-on-accent)" : "var(--color-text-muted)",
+                border: "none",
+                borderLeft: "1px solid var(--color-border)",
+                padding: "2px 8px",
+                cursor: "pointer",
+                maxWidth: "70px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                transition: "background 150ms ease, color 150ms ease",
+              }}
+              title={si2Name}
+            >
+              {si2Name}
+            </button>
+          </div>
         </div>
         <button
           onClick={toggleCollapsed}

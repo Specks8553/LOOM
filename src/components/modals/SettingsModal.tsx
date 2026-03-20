@@ -1525,8 +1525,8 @@ function TemplatesTab() {
   const loadTemplates = useCallback(async () => {
     try {
       const list = await listTemplates();
-      // Hide built-in templates (Image) from the settings list
-      setTemplates(list.filter((t) => !t.is_builtin));
+      // Show all templates except the Image built-in (has no editable content)
+      setTemplates(list.filter((t) => !(t.is_builtin && t.slug === "image")));
     } catch (e) {
       console.error("Failed to load templates:", e);
     }
@@ -1579,11 +1579,12 @@ function TemplatesTab() {
   }, [loadTemplates]);
 
   if (editing) {
+    const isBuiltin = editing.is_builtin;
     return (
       <div className="flex flex-col gap-4">
-        <SectionHeader>{isNew ? "New Template" : "Edit Template"}</SectionHeader>
+        <SectionHeader>{isNew ? "New Template" : isBuiltin ? `Edit Built-in: ${editing.name}` : "Edit Template"}</SectionHeader>
 
-        {/* Name */}
+        {/* Name — disabled for built-in */}
         <div className="flex flex-col gap-1">
           <label style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>Name</label>
           <input
@@ -1591,7 +1592,8 @@ function TemplatesTab() {
             value={editing.name}
             onChange={(e) => setEditing({ ...editing, name: e.target.value })}
             placeholder="e.g. Character Profile"
-            autoFocus
+            autoFocus={!isBuiltin}
+            disabled={isBuiltin}
             style={{
               background: "var(--color-bg-hover)",
               border: "1px solid var(--color-border)",
@@ -1599,59 +1601,64 @@ function TemplatesTab() {
               padding: "6px 8px",
               fontSize: "13px",
               fontFamily: "var(--font-sans)",
-              color: "var(--color-text-primary)",
+              color: isBuiltin ? "var(--color-text-muted)" : "var(--color-text-primary)",
               outline: "none",
+              opacity: isBuiltin ? 0.6 : 1,
             }}
           />
         </div>
 
-        {/* Slug */}
-        <div className="flex flex-col gap-1">
-          <label style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            Slug <span style={{ color: "var(--color-text-muted)" }}>(auto-generated if empty)</span>
-          </label>
-          <input
-            type="text"
-            value={editing.slug}
-            onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
-            placeholder="character_profile"
-            style={{
-              background: "var(--color-bg-hover)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              padding: "6px 8px",
-              fontSize: "13px",
-              fontFamily: "var(--font-mono)",
-              color: "var(--color-text-primary)",
-              outline: "none",
-            }}
-          />
-        </div>
-
-        {/* Icon */}
-        <div className="flex flex-col gap-1">
-          <label style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>Icon</label>
-          <div className="flex gap-1 flex-wrap">
-            {ICON_OPTIONS.map((icon) => (
-              <button
-                key={icon}
-                onClick={() => setEditing({ ...editing, icon })}
-                style={{
-                  padding: "4px 10px",
-                  fontSize: "12px",
-                  fontFamily: "var(--font-mono)",
-                  borderRadius: "4px",
-                  border: editing.icon === icon ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
-                  backgroundColor: editing.icon === icon ? "var(--color-accent-subtle)" : "transparent",
-                  color: editing.icon === icon ? "var(--color-accent-text)" : "var(--color-text-secondary)",
-                  cursor: "pointer",
-                }}
-              >
-                {icon}
-              </button>
-            ))}
+        {/* Slug — disabled for built-in */}
+        {!isBuiltin && (
+          <div className="flex flex-col gap-1">
+            <label style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              Slug <span style={{ color: "var(--color-text-muted)" }}>(auto-generated if empty)</span>
+            </label>
+            <input
+              type="text"
+              value={editing.slug}
+              onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
+              placeholder="character_profile"
+              style={{
+                background: "var(--color-bg-hover)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "4px",
+                padding: "6px 8px",
+                fontSize: "13px",
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-text-primary)",
+                outline: "none",
+              }}
+            />
           </div>
-        </div>
+        )}
+
+        {/* Icon — disabled for built-in */}
+        {!isBuiltin && (
+          <div className="flex flex-col gap-1">
+            <label style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>Icon</label>
+            <div className="flex gap-1 flex-wrap">
+              {ICON_OPTIONS.map((icon) => (
+                <button
+                  key={icon}
+                  onClick={() => setEditing({ ...editing, icon })}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "12px",
+                    fontFamily: "var(--font-mono)",
+                    borderRadius: "4px",
+                    border: editing.icon === icon ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
+                    backgroundColor: editing.icon === icon ? "var(--color-accent-subtle)" : "transparent",
+                    color: editing.icon === icon ? "var(--color-accent-text)" : "var(--color-text-secondary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Default Content */}
         <div className="flex flex-col gap-1">
@@ -1696,7 +1703,7 @@ function TemplatesTab() {
           >
             Cancel
           </button>
-          {!isNew && (
+          {!isNew && !isBuiltin && (
             <button
               onClick={() => handleDelete(editing.id, editing.name)}
               style={{
@@ -1772,6 +1779,11 @@ function TemplatesTab() {
                 {tmpl.icon}
               </span>
               <span className="flex-1">{tmpl.name}</span>
+              {tmpl.is_builtin && (
+                <span style={{ fontSize: "9px", fontWeight: 600, color: "var(--color-text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  built-in
+                </span>
+              )}
               <span style={{ color: "var(--color-text-muted)", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
                 {tmpl.slug}
               </span>

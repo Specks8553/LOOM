@@ -168,7 +168,7 @@ pub fn seed_default_settings(conn: &Connection) -> Result<(), LoomError> {
         ("si_slot_1_name", "SI 1"),
         ("si_slot_2_name", "SI 2"),
         ("active_si_slot", "1"),
-        ("prompt_ghostwriter", "You are assisting a writer with targeted revisions to AI-generated story text.\n\nThe writer has selected a specific passage and provided an instruction.\nYour task:\n1. Rewrite ONLY the marked passage according to the instruction.\n2. The rest of the message must remain word-for-word identical.\n3. Return the COMPLETE message with the revision applied.\n4. Do not add commentary, preamble, or explanation — return only the full revised message text.\n\nSelected passage:\n<<<SELECTED>>>\n{selected_text}\n<<<END>>>\n\nWriter's instruction:\n{instruction}\n\nOriginal message (return this in full with only the selected passage changed):\n{original_message_content}"),
+        ("prompt_ghostwriter", "You are a ghostwriter assisting a writer with targeted revisions to story text.\n\nYou will receive a revision request containing three tagged sections:\n\n<context_before>: Text from the same AI response that immediately precedes the selection. Do NOT include this in your output.\n<selected_passage>: The text to revise. This is the ONLY part you rewrite.\n<context_after>: Text from the same AI response that immediately follows the selection. Do NOT include this in your output.\n\nRules:\n1. Rewrite ONLY the selected passage according to the writer's instruction.\n2. Match the tone, voice, and style of the surrounding context.\n3. Preserve paragraph structure unless the instruction explicitly asks to change it.\n4. Return ONLY the revised passage — no tags, no preamble, no commentary, no surrounding text."),
         ("prompt_accordion_summarise", "Summarize the following conversation segment concisely. Capture the key plot points, character developments, and world-building details. Focus on information that would be needed to continue the story coherently."),
         ("prompt_accordion_fake_user", "Summarize this chapter: actions, character states, and world state at the end of the chapter."),
     ];
@@ -202,19 +202,31 @@ pub fn seed_telemetry(conn: &Connection) -> Result<(), LoomError> {
 /// Seed built-in templates.
 pub fn seed_builtin_templates(conn: &Connection) -> Result<(), LoomError> {
     let now = chrono::Utc::now().to_rfc3339();
-    conn.execute(
-        "INSERT OR IGNORE INTO templates (id, slug, name, icon, default_content, is_builtin, created_at, modified_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)",
-        rusqlite::params![
-            uuid::Uuid::new_v4().to_string(),
-            "image",
-            "Image",
-            "Image",
-            "",
-            &now,
-            &now,
-        ],
+
+    let builtins = vec![
+        ("image", "Image", "Image", ""),
+        ("character_profile", "Character Profile", "User", "# {{Character Name}}\n\n## Role\n{{Protagonist / Antagonist / Supporting / ...}}\n\n## Appearance\n{{Physical description, distinctive features}}\n\n## Personality\n{{Core traits, quirks, habits}}\n\n## Backstory\n{{Key events that shaped this character}}\n\n## Motivations\n{{What drives them? What do they fear?}}\n\n## Relationships\n{{Key connections to other characters}}\n\n## Voice\n{{How they speak — formal, slang, accent, verbal tics}}\n\n## Notes\n{{Anything else relevant}}"),
+        ("world_building", "World Building", "Globe", "# {{World / Setting Name}}\n\n## Overview\n{{Brief description of the world or setting}}\n\n## Geography\n{{Key locations, climate, terrain}}\n\n## History\n{{Major historical events, eras, conflicts}}\n\n## Society & Culture\n{{Social structure, customs, beliefs, taboos}}\n\n## Magic / Technology\n{{Rules, limitations, how it shapes daily life}}\n\n## Factions & Power\n{{Who holds power? Key organisations, governments}}\n\n## Economy\n{{Currency, trade, resources}}\n\n## Notes\n{{Anything else relevant}}"),
+    ];
+
+    let mut stmt = conn.prepare(
+        "INSERT OR IGNORE INTO templates (id, slug, name, icon, default_content, is_builtin, sort_order, created_at, modified_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8)"
     )?;
+
+    for (i, (slug, name, icon, content)) in builtins.iter().enumerate() {
+        stmt.execute(rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            slug,
+            name,
+            icon,
+            content,
+            i as i32,
+            &now,
+            &now,
+        ])?;
+    }
+
     Ok(())
 }
 

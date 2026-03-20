@@ -24,6 +24,9 @@ pub struct UserContent {
     pub constraints: String,
     #[serde(default)]
     pub output_length: Option<u32>,
+    /// Names of context docs attached at send time (display only, not sent to API).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_doc_names: Vec<String>,
 }
 
 /// Message stored in DB and sent to frontend — Doc 09 §1.
@@ -341,15 +344,17 @@ pub async fn stream_generate(
 /// Build a Ghostwriter request payload.
 /// Uses a custom system prompt with selected_text, instruction, and original_content.
 pub fn build_ghostwriter_request(
-    prompt_template: &str,
+    system_prompt: &str,
     history: &[ChatMessage],
     selected_text: &str,
     instruction: &str,
-    original_content: &str,
+    context_before: &str,
+    context_after: &str,
 ) -> serde_json::Value {
     let mut contents = Vec::new();
 
-    // History messages (up to but NOT including the AI message being edited)
+    // History messages — includes the full conversation up to and including
+    // the AI message being edited (provides narrative arc + style context)
     for msg in history {
         let role = if msg.role == "user" { "user" } else { "model" };
         let text = if msg.role == "user" {
@@ -371,17 +376,11 @@ pub fn build_ghostwriter_request(
         }));
     }
 
-    // Assemble system prompt from template
-    let system_prompt = prompt_template
-        .replace("{selected_text}", selected_text)
-        .replace("{instruction}", instruction)
-        .replace("{original_message_content}", original_content);
-
-    // Add the user turn with the editing request.
-    // Gemini requires at least one user message in contents.
+    // User turn with the tagged editing request.
+    // The AI returns ONLY the rewritten selected passage — the frontend stitches it back.
     let user_turn = format!(
-        "Here is the full passage to edit:\n\n{}\n\nSelected text: \"{}\"\n\nInstruction: {}",
-        original_content, selected_text, instruction
+        "<context_before>\n{}\n</context_before>\n\n<selected_passage>\n{}\n</selected_passage>\n\n<context_after>\n{}\n</context_after>\n\nInstruction: {}",
+        context_before, selected_text, context_after, instruction
     );
     contents.push(serde_json::json!({
         "role": "user",
@@ -462,6 +461,7 @@ mod tests {
             modificators: vec!["dark".to_string(), "slow burn".to_string()],
             constraints: String::new(),
             output_length: None,
+            context_doc_names: vec![],
         };
         let result = build_user_turn_text(&uc);
         assert!(result.contains("[PLOT DIRECTION]\nShe opens the letter."));
@@ -479,6 +479,7 @@ mod tests {
             modificators: vec![],
             constraints: String::new(),
             output_length: None,
+            context_doc_names: vec![],
         };
         let result = build_user_turn_text(&uc);
         assert_eq!(result, "[PLOT DIRECTION]\nContinue the story.");
@@ -492,6 +493,7 @@ mod tests {
             modificators: vec![],
             constraints: "No dialogue.".to_string(),
             output_length: Some(500),
+            context_doc_names: vec![],
         };
         let result = build_user_turn_text(&uc);
         assert!(result.contains("[CONSTRAINTS — DO NOT INCLUDE IN OUTPUT]\nNo dialogue."));

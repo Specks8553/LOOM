@@ -430,11 +430,26 @@ pub fn save_template(conn: &Connection, template: &Template) -> Result<Template,
     )?;
 
     if exists {
-        conn.execute(
-            "UPDATE templates SET slug = ?1, name = ?2, icon = ?3, default_content = ?4, modified_at = ?5
-             WHERE id = ?6 AND is_builtin = 0",
-            rusqlite::params![template.slug, template.name, template.icon, template.default_content, now, template.id],
+        // Built-in templates: only default_content is editable
+        // Custom templates: all fields are editable
+        let is_builtin: bool = conn.query_row(
+            "SELECT is_builtin FROM templates WHERE id = ?1",
+            rusqlite::params![template.id],
+            |row| row.get::<_, i32>(0).map(|v| v != 0),
         )?;
+
+        if is_builtin {
+            conn.execute(
+                "UPDATE templates SET default_content = ?1, modified_at = ?2 WHERE id = ?3",
+                rusqlite::params![template.default_content, now, template.id],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE templates SET slug = ?1, name = ?2, icon = ?3, default_content = ?4, modified_at = ?5
+                 WHERE id = ?6",
+                rusqlite::params![template.slug, template.name, template.icon, template.default_content, now, template.id],
+            )?;
+        }
     } else {
         let sort_order: i64 = conn.query_row(
             "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM templates",

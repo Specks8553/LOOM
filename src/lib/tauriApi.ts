@@ -311,6 +311,13 @@ export interface GhostwriterResult {
   token_count: number;
 }
 
+export function updateMessageContent(
+  messageId: string,
+  newContent: string,
+): Promise<void> {
+  return invoke("update_message_content", { messageId, newContent });
+}
+
 export function sendGhostwriterRequest(
   messageId: string,
   selectedText: string,
@@ -318,6 +325,8 @@ export function sendGhostwriterRequest(
   originalContent: string,
   storyId: string,
   leafId: string,
+  selectionStart: number,
+  selectionEnd: number,
 ): Promise<GhostwriterResult> {
   return invoke<GhostwriterResult>("send_ghostwriter_request", {
     messageId,
@@ -326,6 +335,8 @@ export function sendGhostwriterRequest(
     originalContent,
     storyId,
     leafId,
+    selectionStart,
+    selectionEnd,
   });
 }
 

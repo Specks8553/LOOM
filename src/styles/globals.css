@@ -120,9 +120,9 @@ html, body, #root {
   background: var(--color-text-muted);
 }
 
-/* Selection */
+/* Selection — high contrast */
 ::selection {
-  background: var(--color-accent-subtle);
+  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -243,16 +243,19 @@ html, body, #root {
 
 /* ─── Ghostwriter Mode — Doc 16 §11 ─────────────────────────────────────────── */
 
+/* Ghostwriter border pulse — pulses outline only, not bubble content.
+   To customize: change outline-color, outline-width, or animation duration below.
+   File: src/styles/globals.css, class: .bubble-ghostwriter-active */
 @keyframes ghostwriter-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.6; }
+  0%, 100% { outline-color: var(--color-ghostwriter-frame); }
+  50%      { outline-color: transparent; }
 }
 
 .bubble-ghostwriter-active {
-  outline: 2px solid var(--color-ghostwriter-frame);
-  outline-offset: 3px;
+  outline: 2.5px solid var(--color-ghostwriter-frame);
+  outline-offset: 4px;
   border-radius: 10px;
-  animation: ghostwriter-pulse 2s ease-in-out infinite;
+  animation: ghostwriter-pulse 1.5s ease-in-out infinite;
 }
 
 /* Branch Map: active node pulse during generation — Doc 17 §9 */
