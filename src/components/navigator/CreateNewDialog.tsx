@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { X, BookOpen, Folder, FileText, Image, User, Globe } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useVaultStore } from "../../stores/vaultStore";
-import { vaultCreateItem, vaultCreateItemWithContent, vaultListItems, listTemplates } from "../../lib/tauriApi";
+import { vaultCreateItem, vaultCreateItemWithContent, vaultListItems, listTemplates, vaultUploadImage } from "../../lib/tauriApi";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import type { Template } from "../../lib/types";
 
@@ -116,7 +117,6 @@ export function CreateNewDialog() {
 
   // Separate builtin image template from user-defined templates
   const userTemplates = templates.filter((t) => !t.is_builtin);
-  const imageTemplate = templates.find((t) => t.slug === "image");
 
   // If no user templates exist, show hardcoded defaults as fallback
   const hasUserTemplates = userTemplates.length > 0;
@@ -322,16 +322,30 @@ export function CreateNewDialog() {
                 </>
               )}
 
-              {/* Image (always present, built-in) */}
+              {/* Image — opens native file picker */}
               <button
                 style={itemButtonStyle}
-                onClick={() => setActiveTemplate(
-                  imageTemplate ?? {
-                    id: "__image__", slug: "image", name: "Image",
-                    icon: "Image", default_content: "",
-                    is_builtin: true, created_at: "", modified_at: "",
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const selected = await open({
+                      multiple: false,
+                      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+                    });
+                    if (!selected) return;
+                    const filePath = typeof selected === "string" ? selected : selected;
+                    // Extract filename without extension for the item name
+                    const segments = filePath.replace(/\\/g, "/").split("/");
+                    const fileName = segments[segments.length - 1]?.replace(/\.[^.]+$/, "") || "Untitled Image";
+                    await vaultUploadImage(filePath, fileName, getParentId());
+                    const refreshed = await vaultListItems();
+                    setItems(refreshed);
+                    close();
+                  } catch (e) {
+                    console.error("Failed to upload image:", e);
+                    setError(String(e));
                   }
-                )}
+                }}
                 {...hoverHandlers}
               >
                 <Image size={16} style={{ color: "var(--color-text-muted)" }} />

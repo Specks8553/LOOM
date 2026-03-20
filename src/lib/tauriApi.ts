@@ -3,7 +3,7 @@
  * Per CLAUDE.md: no raw invoke() scattered through components.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { WorldMeta, VaultItemMeta, VaultItem, UserContent, ChatMessage, StoryPayload, StreamDone, Template, ContextDoc, BranchMapData, Checkpoint, BranchDeletionResult } from "./types";
+import type { WorldMeta, VaultItemMeta, VaultItem, UserContent, ChatMessage, StoryPayload, StreamDone, Template, ContextDoc, BranchMapData, Checkpoint, BranchDeletionResult, AccordionSegment } from "./types";
 
 // ─── Auth & Config ────────────────────────────────────────────────────────────
 
@@ -382,4 +382,40 @@ export function deleteCheckpointCmd(storyId: string, checkpointId: string): Prom
 
 export function deleteBranchFrom(storyId: string, modelMsgId: string): Promise<BranchDeletionResult> {
   return invoke<BranchDeletionResult>("delete_branch_from", { storyId, modelMsgId });
+}
+
+// ─── Phase 14: Accordion ───────────────────────────────────────────────────
+
+export function getAccordionSegments(storyId: string): Promise<AccordionSegment[]> {
+  return invoke<AccordionSegment[]>("get_accordion_segments", { storyId });
+}
+
+export function summariseSegmentCmd(
+  segmentId: string,
+  storyId: string,
+  leafId: string,
+): Promise<string> {
+  return invoke<string>("summarise_segment", { segmentId, storyId, leafId });
+}
+
+export function setSegmentCollapsed(
+  segmentId: string,
+  storyId: string,
+  collapsed: boolean,
+): Promise<void> {
+  return invoke("set_segment_collapsed", { segmentId, storyId, collapsed });
+}
+
+// ─── Phase 15: Image Upload ───────────────────────────────────────────────
+
+export function vaultUploadImage(
+  srcPath: string,
+  name: string,
+  parentId: string | null,
+): Promise<VaultItemMeta> {
+  return invoke<VaultItemMeta>("vault_upload_image", { srcPath, name, parentId });
+}
+
+export function vaultGetAssetPath(itemId: string): Promise<string> {
+  return invoke<string>("vault_get_asset_path", { itemId });
 }

@@ -37,7 +37,11 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
             sort_order   INTEGER NOT NULL DEFAULT 0,
             created_at   TEXT NOT NULL,
             modified_at  TEXT NOT NULL,
-            deleted_at   TEXT
+            deleted_at   TEXT,
+            asset_path   TEXT,
+            asset_meta   TEXT,
+            file_api_uri TEXT,
+            file_api_uploaded_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_items_parent  ON items(parent_id);
         CREATE INDEX IF NOT EXISTS idx_items_type    ON items(item_type);
@@ -84,18 +88,23 @@ pub fn init_schema(conn: &Connection) -> Result<(), LoomError> {
         CREATE INDEX IF NOT EXISTS idx_checkpoints_story ON checkpoints(story_id);
         CREATE INDEX IF NOT EXISTS idx_checkpoints_after_msg ON checkpoints(after_message_id);
 
-        -- Accordion segment summaries
+        -- Accordion segment summaries — Doc 18 §11
         CREATE TABLE IF NOT EXISTS accordion_segments (
-            id             TEXT PRIMARY KEY,
-            story_id       TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-            start_msg_id   TEXT NOT NULL REFERENCES messages(id),
-            end_msg_id     TEXT NOT NULL REFERENCES messages(id),
-            summary_user   TEXT NOT NULL DEFAULT '',
-            summary_model  TEXT NOT NULL DEFAULT '',
-            token_count    INTEGER,
-            created_at     TEXT NOT NULL
+            id              TEXT PRIMARY KEY,
+            story_id        TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            start_cp_id     TEXT NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+            end_cp_id       TEXT NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+            summary         TEXT,
+            is_collapsed    INTEGER NOT NULL DEFAULT 0,
+            is_stale        INTEGER NOT NULL DEFAULT 0,
+            branch_leaf_id  TEXT,
+            summarised_at   TEXT,
+            created_at      TEXT NOT NULL,
+            modified_at     TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_accordion_story ON accordion_segments(story_id);
+        CREATE INDEX IF NOT EXISTS idx_accordion_story    ON accordion_segments(story_id);
+        CREATE INDEX IF NOT EXISTS idx_accordion_end_cp   ON accordion_segments(end_cp_id);
+        CREATE INDEX IF NOT EXISTS idx_accordion_branch   ON accordion_segments(branch_leaf_id);
 
         -- User-defined Source Document templates
         CREATE TABLE IF NOT EXISTS templates (
@@ -347,6 +356,59 @@ pub fn migrate_dev_schema(conn: &Connection) -> Result<(), LoomError> {
                 )?;
             }
         }
+    }
+
+    // ── Accordion segments migration (Phase 14: old schema used start_msg_id/end_msg_id) ──
+    let as_exists = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='accordion_segments'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)))
+        .unwrap_or(false);
+    if as_exists {
+        let as_sql: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='accordion_segments'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(sql) = as_sql {
+            if sql.contains("start_msg_id") || !sql.contains("start_cp_id") {
+                log::info!("Migrating accordion_segments table to Phase 14 (Doc 18 §11) schema");
+                conn.execute_batch(
+                    "DROP TABLE IF EXISTS accordion_segments;
+                     CREATE TABLE IF NOT EXISTS accordion_segments (
+                         id              TEXT PRIMARY KEY,
+                         story_id        TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                         start_cp_id     TEXT NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+                         end_cp_id       TEXT NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+                         summary         TEXT,
+                         is_collapsed    INTEGER NOT NULL DEFAULT 0,
+                         is_stale        INTEGER NOT NULL DEFAULT 0,
+                         branch_leaf_id  TEXT,
+                         summarised_at   TEXT,
+                         created_at      TEXT NOT NULL,
+                         modified_at     TEXT NOT NULL
+                     );
+                     CREATE INDEX IF NOT EXISTS idx_accordion_story    ON accordion_segments(story_id);
+                     CREATE INDEX IF NOT EXISTS idx_accordion_end_cp   ON accordion_segments(end_cp_id);
+                     CREATE INDEX IF NOT EXISTS idx_accordion_branch   ON accordion_segments(branch_leaf_id);"
+                )?;
+            }
+        }
+    }
+
+    // Phase 15: Add image asset columns to items table
+    let has_asset_path = conn
+        .prepare("SELECT asset_path FROM items LIMIT 1")
+        .is_ok();
+    if !has_asset_path {
+        log::info!("Migrating items table: adding image asset columns (Phase 15)");
+        conn.execute_batch(
+            "ALTER TABLE items ADD COLUMN asset_path TEXT;
+             ALTER TABLE items ADD COLUMN asset_meta TEXT;
+             ALTER TABLE items ADD COLUMN file_api_uri TEXT;
+             ALTER TABLE items ADD COLUMN file_api_uploaded_at TEXT;"
+        )?;
     }
 
     Ok(())

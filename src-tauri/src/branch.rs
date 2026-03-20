@@ -43,14 +43,18 @@ pub struct Checkpoint {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccordionSegmentInfo {
+pub struct AccordionSegment {
     pub id: String,
     pub story_id: String,
-    pub start_msg_id: String,
-    pub end_msg_id: String,
-    pub has_summary: bool,
-    pub token_count: Option<u32>,
+    pub start_cp_id: String,
+    pub end_cp_id: String,
+    pub summary: Option<String>,
+    pub is_collapsed: bool,
+    pub is_stale: bool,
+    pub branch_leaf_id: Option<String>,
+    pub summarised_at: Option<String>,
     pub created_at: String,
+    pub modified_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,7 +62,7 @@ pub struct BranchMapData {
     pub nodes: Vec<BranchMapNode>,
     pub edges: Vec<BranchMapEdge>,
     pub checkpoints: Vec<Checkpoint>,
-    pub accordion_segments: Vec<AccordionSegmentInfo>,
+    pub accordion_segments: Vec<AccordionSegment>,
     pub current_leaf_id: String,
 }
 
@@ -230,7 +234,7 @@ fn ensure_start_checkpoint(conn: &Connection, story_id: &str) -> Result<(), Loom
 }
 
 /// Load all checkpoints for a story.
-fn load_checkpoints(conn: &Connection, story_id: &str) -> Result<Vec<Checkpoint>, LoomError> {
+pub fn load_checkpoints(conn: &Connection, story_id: &str) -> Result<Vec<Checkpoint>, LoomError> {
     let mut stmt = conn.prepare(
         "SELECT id, story_id, after_message_id, name, is_start, created_at, modified_at
          FROM checkpoints
@@ -253,53 +257,190 @@ fn load_checkpoints(conn: &Connection, story_id: &str) -> Result<Vec<Checkpoint>
     rows.collect::<Result<Vec<_>, _>>().map_err(LoomError::from)
 }
 
-/// Load accordion segments for a story (read-only for Phase 13).
-fn load_accordion_segments(
+pub fn load_accordion_segments(
     conn: &Connection,
     story_id: &str,
-) -> Result<Vec<AccordionSegmentInfo>, LoomError> {
+) -> Result<Vec<AccordionSegment>, LoomError> {
     let mut stmt = conn.prepare(
-        "SELECT id, story_id, start_msg_id, end_msg_id,
-                (CASE WHEN summary_user != '' OR summary_model != '' THEN 1 ELSE 0 END) AS has_summary,
-                token_count, created_at
+        "SELECT id, story_id, start_cp_id, end_cp_id, summary,
+                is_collapsed, is_stale, branch_leaf_id, summarised_at,
+                created_at, modified_at
          FROM accordion_segments
          WHERE story_id = ?1
          ORDER BY created_at ASC",
     )?;
 
     let rows = stmt.query_map(rusqlite::params![story_id], |row| {
-        Ok(AccordionSegmentInfo {
+        Ok(AccordionSegment {
             id: row.get(0)?,
             story_id: row.get(1)?,
-            start_msg_id: row.get(2)?,
-            end_msg_id: row.get(3)?,
-            has_summary: row.get::<_, i32>(4)? != 0,
-            token_count: row.get(5)?,
-            created_at: row.get(6)?,
+            start_cp_id: row.get(2)?,
+            end_cp_id: row.get(3)?,
+            summary: row.get(4)?,
+            is_collapsed: row.get::<_, i32>(5)? != 0,
+            is_stale: row.get::<_, i32>(6)? != 0,
+            branch_leaf_id: row.get(7)?,
+            summarised_at: row.get(8)?,
+            created_at: row.get(9)?,
+            modified_at: row.get(10)?,
         })
     })?;
 
     rows.collect::<Result<Vec<_>, _>>().map_err(LoomError::from)
 }
 
+/// Set an accordion segment's collapsed state — Doc 18 §5.
+pub fn set_segment_collapsed(
+    conn: &Connection,
+    segment_id: &str,
+    collapsed: bool,
+) -> Result<(), LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let rows = conn.execute(
+        "UPDATE accordion_segments SET is_collapsed = ?1, modified_at = ?2 WHERE id = ?3",
+        rusqlite::params![collapsed as i32, &now, segment_id],
+    )?;
+    if rows == 0 {
+        return Err(LoomError::ItemNotFound(format!("Segment {} not found", segment_id)));
+    }
+    Ok(())
+}
+
+/// Save a summary for an accordion segment — Doc 18 §4.4.
+pub fn save_segment_summary(
+    conn: &Connection,
+    segment_id: &str,
+    summary: &str,
+) -> Result<(), LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE accordion_segments SET summary = ?1, summarised_at = ?2, is_stale = 0, modified_at = ?3
+         WHERE id = ?4",
+        rusqlite::params![summary, &now, &now, segment_id],
+    )?;
+    Ok(())
+}
+
+/// Mark a segment as stale — Doc 18 §7.3.
+pub fn mark_segment_stale(
+    conn: &Connection,
+    segment_id: &str,
+) -> Result<(), LoomError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE accordion_segments SET is_stale = 1, modified_at = ?1 WHERE id = ?2",
+        rusqlite::params![&now, segment_id],
+    )?;
+    Ok(())
+}
+
+/// Find which accordion segment a message belongs to, given checkpoints.
+/// Returns the segment if the message is inside a collapsed segment.
+pub fn find_collapsed_segment_for_message(
+    message_id: &str,
+    segments: &[AccordionSegment],
+    checkpoints: &[Checkpoint],
+    branch_messages: &[crate::gemini::ChatMessage],
+    current_leaf_id: &str,
+) -> Option<AccordionSegment> {
+    // Build a position map: message_id → index in the branch
+    let pos: std::collections::HashMap<&str, usize> = branch_messages
+        .iter()
+        .enumerate()
+        .map(|(i, m)| (m.id.as_str(), i))
+        .collect();
+
+    let msg_pos = pos.get(message_id)?;
+
+    for seg in segments {
+        if !seg.is_collapsed || seg.summary.is_none() {
+            continue;
+        }
+        // Check branch_leaf_id: if set, only applies to that branch
+        if let Some(ref blid) = seg.branch_leaf_id {
+            if blid != current_leaf_id {
+                continue;
+            }
+        }
+
+        // Find the position range for this segment:
+        // start_cp after_message_id → end_cp after_message_id
+        let start_cp = checkpoints.iter().find(|c| c.id == seg.start_cp_id);
+        let end_cp = checkpoints.iter().find(|c| c.id == seg.end_cp_id);
+
+        let start_pos = match start_cp {
+            Some(cp) => match &cp.after_message_id {
+                Some(mid) => pos.get(mid.as_str()).map(|p| p + 1), // segment starts AFTER this message
+                None => Some(0), // start checkpoint → from beginning
+            },
+            None => continue,
+        };
+
+        let end_pos = match end_cp {
+            Some(cp) => match &cp.after_message_id {
+                Some(mid) => pos.get(mid.as_str()).copied(), // segment ends AT this message (inclusive)
+                None => continue, // end checkpoint with no after_message_id is unusual
+            },
+            None => continue,
+        };
+
+        if let (Some(sp), Some(ep)) = (start_pos, end_pos) {
+            if *msg_pos >= sp && *msg_pos <= ep {
+                return Some(seg.clone());
+            }
+        }
+    }
+
+    None
+}
+
 /// Create a new checkpoint after a specific message.
+/// Also auto-creates an accordion_segment between the previous checkpoint and
+/// this new one (Doc 18 §3.1).
 pub fn create_checkpoint(
     conn: &Connection,
     story_id: &str,
     after_message_id: Option<&str>,
     name: &str,
 ) -> Result<Checkpoint, LoomError> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let cp_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "INSERT INTO checkpoints (id, story_id, after_message_id, name, is_start, created_at, modified_at)
          VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)",
-        rusqlite::params![&id, story_id, after_message_id, name, &now, &now],
+        rusqlite::params![&cp_id, story_id, after_message_id, name, &now, &now],
     )?;
 
+    // Auto-create accordion segment: find the previous checkpoint for this story.
+    // "Previous" = the checkpoint whose after_message_id comes before this one
+    // in the message chain, OR the start checkpoint (after_message_id IS NULL).
+    // For simplicity, use the most recently created non-start checkpoint before this,
+    // or the start checkpoint if this is the second checkpoint.
+    let prev_cp_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM checkpoints
+             WHERE story_id = ?1 AND id != ?2
+             ORDER BY
+                CASE WHEN is_start = 1 THEN 0 ELSE 1 END,
+                created_at DESC
+             LIMIT 1",
+            rusqlite::params![story_id, &cp_id],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(prev_id) = prev_cp_id {
+        let seg_id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO accordion_segments (id, story_id, start_cp_id, end_cp_id, created_at, modified_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![&seg_id, story_id, &prev_id, &cp_id, &now, &now],
+        )?;
+    }
+
     Ok(Checkpoint {
-        id,
+        id: cp_id,
         story_id: story_id.to_string(),
         after_message_id: after_message_id.map(|s| s.to_string()),
         name: name.to_string(),
@@ -338,10 +479,51 @@ pub fn delete_checkpoint(conn: &Connection, id: &str) -> Result<(), LoomError> {
         return Err(LoomError::Validation("Cannot delete the Start checkpoint.".to_string()));
     }
 
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Doc 18 §3.2: Merge adjacent accordion segments.
+    // Segment A ends at this checkpoint (end_cp_id = id).
+    // Segment B starts at this checkpoint (start_cp_id = id).
+    // Merged segment: A.start_cp_id → B.end_cp_id, summary = NULL, is_collapsed = 0.
+    let seg_a: Option<(String, String)> = conn
+        .query_row(
+            "SELECT id, start_cp_id FROM accordion_segments WHERE end_cp_id = ?1 LIMIT 1",
+            rusqlite::params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+
+    let seg_b: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT id, end_cp_id, story_id FROM accordion_segments WHERE start_cp_id = ?1 LIMIT 1",
+            rusqlite::params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok();
+
+    match (&seg_a, &seg_b) {
+        (Some((a_id, a_start)), Some((b_id, b_end, seg_story_id))) => {
+            // Both exist — delete both and create merged segment
+            conn.execute("DELETE FROM accordion_segments WHERE id = ?1", rusqlite::params![a_id])?;
+            conn.execute("DELETE FROM accordion_segments WHERE id = ?1", rusqlite::params![b_id])?;
+            let merged_id = uuid::Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO accordion_segments (id, story_id, start_cp_id, end_cp_id, created_at, modified_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![&merged_id, seg_story_id, a_start, b_end, &now, &now],
+            )?;
+        }
+        (Some((a_id, _)), None) => {
+            conn.execute("DELETE FROM accordion_segments WHERE id = ?1", rusqlite::params![a_id])?;
+        }
+        (None, Some((b_id, _, _))) => {
+            conn.execute("DELETE FROM accordion_segments WHERE id = ?1", rusqlite::params![b_id])?;
+        }
+        (None, None) => {}
+    }
+
     // Delete the checkpoint
     conn.execute("DELETE FROM checkpoints WHERE id = ?1", rusqlite::params![id])?;
-
-    // TODO Phase 14: merge adjacent accordion segments here
 
     Ok(())
 }

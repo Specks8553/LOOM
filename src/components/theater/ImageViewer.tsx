@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { vaultUpdateItemContent } from "../../lib/tauriApi";
+import { vaultUpdateItemContent, vaultGetAssetPath } from "../../lib/tauriApi";
+import InlineImage from "../shared/InlineImage";
 
 /**
  * Lightbox-style viewer for Image-type source documents.
@@ -19,6 +20,14 @@ export function ImageViewer() {
 
   const [saveFlash, setSaveFlash] = useState(false);
   const [showGuard, setShowGuard] = useState(false);
+  const [assetAbsPath, setAssetAbsPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeDocId) return;
+    vaultGetAssetPath(activeDocId)
+      .then(setAssetAbsPath)
+      .catch(() => setAssetAbsPath(null));
+  }, [activeDocId]);
 
   const handleSave = useCallback(async () => {
     if (!activeDocId) return;
@@ -104,25 +113,28 @@ export function ImageViewer() {
         </div>
       </div>
 
-      {/* Image placeholder + caption */}
+      {/* Image display + caption */}
       <div className="flex-1 flex flex-col items-center justify-center overflow-auto" style={{ padding: "32px" }}>
-        {/* Placeholder since image file support requires asset protocol */}
-        <div
-          className="flex flex-col items-center justify-center"
-          style={{
-            width: "400px",
-            height: "300px",
-            backgroundColor: "var(--color-bg-elevated)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "8px",
-            color: "var(--color-text-muted)",
-          }}
-        >
-          <ImageIcon size={48} style={{ opacity: 0.3 }} />
-          <p style={{ fontSize: "12px", marginTop: "12px" }}>
-            Image preview available in production build
-          </p>
-        </div>
+        {assetAbsPath ? (
+          <InlineImage assetPath={assetAbsPath} alt={docName} />
+        ) : (
+          <div
+            className="flex flex-col items-center justify-center"
+            style={{
+              width: "400px",
+              height: "300px",
+              backgroundColor: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "8px",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <ImageIcon size={48} style={{ opacity: 0.3 }} />
+            <p style={{ fontSize: "12px", marginTop: "12px" }}>
+              Loading image...
+            </p>
+          </div>
+        )}
 
         {/* Caption */}
         <div className="flex items-center gap-2 mt-4" style={{ width: "400px" }}>

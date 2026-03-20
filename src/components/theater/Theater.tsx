@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import { Bookmark } from "lucide-react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { Bookmark, FileText, Minimize2, Maximize2 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
+import { useAccordionStore } from "../../stores/accordionStore";
 import {
   getStoryLeafId,
   loadBranchMap,
@@ -12,9 +13,11 @@ import {
 } from "../../lib/tauriApi";
 import { UserBubble } from "./UserBubble";
 import { AiBubble } from "./AiBubble";
+import { AccordionSummaryCard } from "./AccordionSummaryCard";
 import { InputArea } from "./InputArea";
 import { EmptyStory } from "../empty/EmptyStory";
-import type { Checkpoint, StreamChunk, StreamDone } from "../../lib/types";
+import { ContextMenu, useContextMenu } from "../shared/ContextMenu";
+import type { AccordionSegment, Checkpoint, StreamChunk, StreamDone } from "../../lib/types";
 
 /**
  * Theater: message display + input area.
@@ -38,6 +41,13 @@ export function Theater() {
 
   const items = useVaultStore((s) => s.items);
   const storyItem = items.find((i) => i.id === activeStoryId);
+
+  const accordionSegments = useAccordionStore((s) => s.segments);
+  const accordionLoad = useAccordionStore((s) => s.load);
+  const accordionClear = useAccordionStore((s) => s.clear);
+  const accordionSummarise = useAccordionStore((s) => s.summarise);
+  const accordionCollapse = useAccordionStore((s) => s.collapse);
+  const accordionExpand = useAccordionStore((s) => s.expand);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
@@ -70,10 +80,11 @@ export function Theater() {
     loadMessages();
   }, [loadMessages]);
 
-  // Load checkpoints for Theater dividers
+  // Load checkpoints + accordion segments for Theater dividers
   useEffect(() => {
     if (!activeStoryId || !currentLeafId) {
       setCheckpoints([]);
+      accordionClear();
       return;
     }
     loadBranchMap(activeStoryId).then((data) => {
@@ -81,9 +92,10 @@ export function Theater() {
     }).catch(() => {
       setCheckpoints([]);
     });
-  }, [activeStoryId, currentLeafId]);
+    accordionLoad(activeStoryId);
+  }, [activeStoryId, currentLeafId, accordionLoad, accordionClear]);
 
-  // Refresh checkpoints when branch map updates
+  // Refresh checkpoints + segments when branch map updates
   useEffect(() => {
     if (!activeStoryId) return;
     const unlisten = listen<string>("branch_map_updated", (event) => {
@@ -91,10 +103,11 @@ export function Theater() {
         loadBranchMap(activeStoryId).then((data) => {
           setCheckpoints(data.checkpoints);
         }).catch(() => {});
+        accordionLoad(activeStoryId);
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [activeStoryId, currentLeafId]);
+  }, [activeStoryId, currentLeafId, accordionLoad]);
 
   // Reload the current branch (used after delete, regenerate, edit)
   const reloadBranch = useCallback(
@@ -209,12 +222,6 @@ export function Theater() {
     el.scrollTop = el.scrollHeight;
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Token estimation (chars / 4) — Doc 09 §12.1
-  const estimatedTokens = messages.reduce((sum, m) => {
-    if (m.token_count != null) return sum + m.token_count;
-    return sum + Math.ceil(m.content.length / 4);
-  }, 0);
-
   // Build a lookup for sibling counts: parent_id → count
   const siblingCountMap = new Map<string, number>();
   for (const sc of siblingCounts) {
@@ -231,9 +238,78 @@ export function Theater() {
   // Start checkpoint (after_message_id is null)
   const startCheckpoint = checkpoints.find((cp) => cp.is_start);
 
+  // Build collapsed segment ranges: message index → segment
+  // A segment spans from (start_cp.after_message_id + 1) to (end_cp.after_message_id) inclusive
+  const { collapsedMsgMap, segmentMsgCounts } = useMemo(() => {
+    const map = new Map<number, AccordionSegment>();
+    const counts = new Map<string, number>();
+
+    if (checkpoints.length === 0 || accordionSegments.length === 0) {
+      return { collapsedMsgMap: map, segmentMsgCounts: counts };
+    }
+
+    // Position map: message_id → index
+    const pos = new Map<string, number>();
+    messages.forEach((m, i) => pos.set(m.id, i));
+
+    for (const seg of accordionSegments) {
+      if (!seg.is_collapsed || !seg.summary) continue;
+      // Check branch_leaf_id: if set, only applies to that branch
+      if (seg.branch_leaf_id && seg.branch_leaf_id !== currentLeafId) continue;
+
+      const startCp = checkpoints.find((c) => c.id === seg.start_cp_id);
+      const endCp = checkpoints.find((c) => c.id === seg.end_cp_id);
+      if (!startCp || !endCp) continue;
+
+      // Determine start position
+      let startPos: number;
+      if (startCp.after_message_id) {
+        const p = pos.get(startCp.after_message_id);
+        if (p === undefined) continue;
+        startPos = p + 1; // segment starts AFTER this message
+      } else {
+        startPos = 0; // start checkpoint → from beginning
+      }
+
+      // Determine end position
+      if (!endCp.after_message_id) continue;
+      const endPos = pos.get(endCp.after_message_id);
+      if (endPos === undefined) continue;
+
+      let msgCount = 0;
+      for (let i = startPos; i <= endPos; i++) {
+        map.set(i, seg);
+        msgCount++;
+      }
+      counts.set(seg.id, msgCount);
+    }
+
+    return { collapsedMsgMap: map, segmentMsgCounts: counts };
+  }, [messages, checkpoints, accordionSegments, currentLeafId]);
+
+  // Token estimation accounting for collapsed segments — Doc 09 §12.1
+  const estimatedTokens = messages.reduce((sum, m, idx) => {
+    const seg = collapsedMsgMap.get(idx);
+    if (seg) {
+      // For collapsed messages, only count the summary tokens once (on first msg of segment)
+      const startCp = checkpoints.find((c) => c.id === seg.start_cp_id);
+      const firstIdx = startCp?.after_message_id
+        ? (messages.findIndex((mm) => mm.id === startCp.after_message_id) + 1)
+        : 0;
+      if (idx === firstIdx && seg.summary) {
+        return sum + Math.ceil(seg.summary.length / 4);
+      }
+      return sum; // skip other messages in collapsed segment
+    }
+    if (m.token_count != null) return sum + m.token_count;
+    return sum + Math.ceil(m.content.length / 4);
+  }, 0);
+
   if (!activeStoryId) return null;
 
   const lastMsgIdx = messages.length - 1;
+  // Track which segments have already rendered their summary card
+  const renderedSegments = new Set<string>();
 
   return (
     <div className="flex flex-col h-full">
@@ -286,15 +362,56 @@ export function Theater() {
         >
           {/* Start checkpoint divider */}
           {startCheckpoint && messages.length > 0 && (
-            <TheaterCheckpointDivider checkpoint={startCheckpoint} />
+            <TheaterCheckpointDivider
+              checkpoint={startCheckpoint}
+              segments={accordionSegments}
+              storyId={activeStoryId}
+              leafId={currentLeafId}
+              onSummarise={accordionSummarise}
+              onCollapse={accordionCollapse}
+              onExpand={accordionExpand}
+            />
           )}
           {messages.map((msg, idx) => {
             const isLast = idx === lastMsgIdx;
             const parentKey = msg.parent_id ?? "__root__";
             const hasSiblings = (siblingCountMap.get(parentKey) ?? 0) > 1;
-
-            // Check if there's a checkpoint after this message (model messages)
             const cpAfter = checkpointAfterMap.get(msg.id);
+
+            // Check if this message is inside a collapsed segment
+            const collapsedSeg = collapsedMsgMap.get(idx);
+            if (collapsedSeg) {
+              if (renderedSegments.has(collapsedSeg.id)) {
+                // Already rendered the summary card for this segment — skip
+                return null;
+              }
+              // First message of collapsed segment — render the summary card
+              renderedSegments.add(collapsedSeg.id);
+              const endCp = checkpoints.find((c) => c.id === collapsedSeg.end_cp_id);
+              return (
+                <div key={`accordion-${collapsedSeg.id}`}>
+                  <AccordionSummaryCard
+                    segment={collapsedSeg}
+                    checkpoint={endCp}
+                    messageCount={segmentMsgCounts.get(collapsedSeg.id) ?? 0}
+                    storyId={activeStoryId}
+                    leafId={currentLeafId ?? ""}
+                  />
+                  {/* Show the end checkpoint divider after the card */}
+                  {endCp && (
+                    <TheaterCheckpointDivider
+                      checkpoint={endCp}
+                      segments={accordionSegments}
+                      storyId={activeStoryId}
+                      leafId={currentLeafId}
+                      onSummarise={accordionSummarise}
+                      onCollapse={accordionCollapse}
+                      onExpand={accordionExpand}
+                    />
+                  )}
+                </div>
+              );
+            }
 
             if (msg.role === "user") {
               return (
@@ -307,7 +424,17 @@ export function Theater() {
                     onReloadBranch={reloadBranch}
                     storyId={activeStoryId}
                   />
-                  {cpAfter && <TheaterCheckpointDivider checkpoint={cpAfter} />}
+                  {cpAfter && (
+                    <TheaterCheckpointDivider
+                      checkpoint={cpAfter}
+                      segments={accordionSegments}
+                      storyId={activeStoryId}
+                      leafId={currentLeafId}
+                      onSummarise={accordionSummarise}
+                      onCollapse={accordionCollapse}
+                      onExpand={accordionExpand}
+                    />
+                  )}
                 </div>
               );
             }
@@ -322,7 +449,17 @@ export function Theater() {
                 onReloadBranch={reloadBranch}
                 storyId={activeStoryId}
               />
-              {cpAfter && <TheaterCheckpointDivider checkpoint={cpAfter} />}
+              {cpAfter && (
+                <TheaterCheckpointDivider
+                  checkpoint={cpAfter}
+                  segments={accordionSegments}
+                  storyId={activeStoryId}
+                  leafId={currentLeafId}
+                  onSummarise={accordionSummarise}
+                  onCollapse={accordionCollapse}
+                  onExpand={accordionExpand}
+                />
+              )}
               </div>
             );
           })}
@@ -335,20 +472,81 @@ export function Theater() {
   );
 }
 
-function TheaterCheckpointDivider({ checkpoint }: { checkpoint: Checkpoint }) {
+interface CheckpointDividerProps {
+  checkpoint: Checkpoint;
+  segments: AccordionSegment[];
+  storyId: string;
+  leafId: string | null;
+  onSummarise: (segmentId: string, storyId: string, leafId: string) => Promise<void>;
+  onCollapse: (segmentId: string, storyId: string) => Promise<void>;
+  onExpand: (segmentId: string, storyId: string) => Promise<void>;
+}
+
+function TheaterCheckpointDivider({
+  checkpoint,
+  segments,
+  storyId,
+  leafId,
+  onSummarise,
+  onCollapse,
+  onExpand,
+}: CheckpointDividerProps) {
+  const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
+
+  // Find the segment that ends at this checkpoint (the "previous chapter")
+  const prevSegment = segments.find((s) => s.end_cp_id === checkpoint.id);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!prevSegment || !leafId) return;
+    const items = [];
+
+    if (!prevSegment.summary || prevSegment.is_stale) {
+      items.push({
+        label: "Summarise previous chapter",
+        icon: FileText,
+        onClick: () => onSummarise(prevSegment.id, storyId, leafId),
+      });
+    }
+
+    if (prevSegment.is_collapsed) {
+      items.push({
+        label: "Expand chapter",
+        icon: Maximize2,
+        onClick: () => onExpand(prevSegment.id, storyId),
+      });
+    } else if (prevSegment.summary) {
+      items.push({
+        label: "Collapse chapter",
+        icon: Minimize2,
+        onClick: () => onCollapse(prevSegment.id, storyId),
+      });
+    }
+
+    if (items.length > 0) {
+      showContextMenu(e, items);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-3 my-4 px-2 select-none">
-      <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
-      <div className="flex items-center gap-1.5">
-        <Bookmark size={12} style={{ color: "var(--color-checkpoint)" }} />
-        <span
-          className="text-[11px] font-medium uppercase tracking-wider"
-          style={{ color: "var(--color-checkpoint)" }}
-        >
-          {checkpoint.name}
-        </span>
+    <>
+      <div
+        className="flex items-center gap-3 my-4 px-2 select-none"
+        style={{ cursor: prevSegment ? "context-menu" : undefined }}
+        onContextMenu={handleContextMenu}
+      >
+        <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
+        <div className="flex items-center gap-1.5">
+          <Bookmark size={12} style={{ color: "var(--color-checkpoint)" }} />
+          <span
+            className="text-[11px] font-medium uppercase tracking-wider"
+            style={{ color: "var(--color-checkpoint)" }}
+          >
+            {checkpoint.name}
+          </span>
+        </div>
+        <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
       </div>
-      <div className="flex-1 h-px" style={{ background: "var(--color-checkpoint)" }} />
-    </div>
+      {contextMenu && <ContextMenu menu={contextMenu} onClose={hideContextMenu} />}
+    </>
   );
 }

@@ -1,11 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Send, Square, ChevronDown, ChevronRight, AlertTriangle, Paperclip, X } from "lucide-react";
+import { Send, Square, ChevronDown, ChevronRight, AlertTriangle, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
-import { sendMessage, cancelGeneration, checkRateLimit, detachContextDoc, vaultGetItem } from "../../lib/tauriApi";
+import { sendMessage, cancelGeneration, checkRateLimit, detachContextDoc, vaultGetItem, vaultGetAssetPath } from "../../lib/tauriApi";
 import { TagInput } from "../shared/TagInput";
-import type { UserContent, ChatMessage, RateLimitStatus } from "../../lib/types";
+import type { UserContent, ChatMessage, RateLimitStatus, ImageBlock } from "../../lib/types";
 
 /**
  * Three-field input area — Doc 09 §4.1 / Doc 02 §6.1.
@@ -33,6 +34,9 @@ export function InputArea() {
   const [extrasExpanded, setExtrasExpanded] = useState(false);
   const [outputLength, setOutputLength] = useState(0);
   const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
+  const [imageBlocks, setImageBlocks] = useState<ImageBlock[]>([]);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [imageThumbPaths, setImageThumbPaths] = useState<Record<string, string>>({});
 
   const plotRef = useRef<HTMLTextAreaElement>(null);
   const bgRef = useRef<HTMLTextAreaElement>(null);
@@ -51,6 +55,19 @@ export function InputArea() {
     const interval = setInterval(refresh, 10000);
     return () => { mounted = false; clearInterval(interval); };
   }, [isGenerating]);
+
+  // Resolve absolute paths for image block thumbnails
+  useEffect(() => {
+    for (const block of imageBlocks) {
+      if (!imageThumbPaths[block.item_id]) {
+        vaultGetAssetPath(block.item_id)
+          .then((absPath) => {
+            setImageThumbPaths((prev) => ({ ...prev, [block.item_id]: absPath }));
+          })
+          .catch(() => {});
+      }
+    }
+  }, [imageBlocks]);
 
   // Auto-resize plot direction textarea
   useEffect(() => {
@@ -75,6 +92,7 @@ export function InputArea() {
       constraints: constraints.trim(),
       output_length: outputLength === 0 ? null : outputLength,
       context_doc_names: docNames.length > 0 ? docNames : undefined,
+      image_blocks: imageBlocks.length > 0 ? imageBlocks : undefined,
     };
 
     // Save current values for restore on failure
@@ -89,6 +107,7 @@ export function InputArea() {
     setBackgroundInfo("");
     setModTags([]);
     setConstraints("");
+    setImageBlocks([]);
 
     // Optimistic UI: create placeholder messages
     const tempUserId = `temp-user-${Date.now()}`;
@@ -325,7 +344,48 @@ export function InputArea() {
         </div>
       )}
 
-      {/* Action row: Length slider + Send/Stop */}
+      {/* Image block chips */}
+      {imageBlocks.length > 0 && (
+        <div className="flex flex-wrap gap-1" style={{ marginTop: "6px" }}>
+          {imageBlocks.map((block) => {
+            const absPath = imageThumbPaths[block.item_id];
+            const itemMeta = items.find((i) => i.id === block.item_id);
+            return (
+              <div
+                key={block.item_id}
+                className="flex items-center gap-1.5"
+                style={{
+                  padding: "3px 6px 3px 3px",
+                  borderRadius: "4px",
+                  backgroundColor: "var(--color-bg-hover)",
+                  border: "1px solid var(--color-border-subtle)",
+                  fontSize: "11px",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                {absPath ? (
+                  <img
+                    src={convertFileSrc(absPath)}
+                    alt=""
+                    style={{ width: 20, height: 20, objectFit: "cover", borderRadius: 2 }}
+                  />
+                ) : (
+                  <ImageIcon size={14} style={{ color: "var(--color-text-muted)" }} />
+                )}
+                <span className="truncate" style={{ maxWidth: 100 }}>{itemMeta?.name ?? "Image"}</span>
+                <button
+                  onClick={() => setImageBlocks((prev) => prev.filter((b) => b.item_id !== block.item_id))}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", padding: 0, display: "flex" }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Action row: Length slider + Image button + Send/Stop */}
       <div className="flex items-center gap-2" style={{ marginTop: "8px" }}>
         {/* Length slider (compact) */}
         <span
@@ -383,6 +443,27 @@ export function InputArea() {
             border: none;
           }
         `}</style>
+
+        {/* Image attach button */}
+        <button
+          onClick={() => setShowImagePicker(true)}
+          title="Attach images"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: imageBlocks.length > 0 ? "var(--color-accent)" : "var(--color-text-muted)",
+            padding: "4px",
+            display: "flex",
+            alignItems: "center",
+            borderRadius: "4px",
+            transition: "color 150ms ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-text-primary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = imageBlocks.length > 0 ? "var(--color-accent)" : "var(--color-text-muted)"; }}
+        >
+          <ImageIcon size={16} />
+        </button>
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -566,6 +647,173 @@ export function InputArea() {
           </div>
         </>
       )}
+
+      {/* Image picker modal */}
+      {showImagePicker && (
+        <ImagePickerModal
+          selectedIds={imageBlocks.map((b) => b.item_id)}
+          onConfirm={(blocks) => {
+            setImageBlocks(blocks);
+            setShowImagePicker(false);
+          }}
+          onClose={() => setShowImagePicker(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Modal grid for picking Image vault items to attach inline. */
+function ImagePickerModal({
+  selectedIds,
+  onConfirm,
+  onClose,
+}: {
+  selectedIds: string[];
+  onConfirm: (blocks: ImageBlock[]) => void;
+  onClose: () => void;
+}) {
+  const items = useVaultStore((s) => s.items);
+  const imageItems = items.filter((i) => i.item_type === "Image" && !i.deleted_at);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
+  const [thumbPaths, setThumbPaths] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    for (const item of imageItems) {
+      if (!thumbPaths[item.id]) {
+        vaultGetAssetPath(item.id)
+          .then((p) => setThumbPaths((prev) => ({ ...prev, [item.id]: p })))
+          .catch(() => {});
+      }
+    }
+  }, [imageItems.length]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleConfirm = () => {
+    const blocks: ImageBlock[] = imageItems
+      .filter((i) => selected.has(i.id) && i.asset_path)
+      .map((i) => ({ item_id: i.id, asset_path: i.asset_path! }));
+    onConfirm(blocks);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 200 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+    >
+      <div
+        className="flex flex-col"
+        style={{
+          width: 480,
+          maxHeight: "70vh",
+          backgroundColor: "var(--color-bg-elevated)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "8px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="flex items-center justify-between px-4 shrink-0"
+          style={{ height: 40, borderBottom: "1px solid var(--color-border-subtle)" }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Attach Images
+          </span>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", display: "flex", padding: 4 }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-3">
+          {imageItems.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-muted)", textAlign: "center", padding: 24 }}>
+              No images in vault. Upload images via Navigator first.
+            </p>
+          ) : (
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))" }}>
+              {imageItems.map((item) => {
+                const absPath = thumbPaths[item.id];
+                const isSelected = selected.has(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => toggle(item.id)}
+                    className="flex flex-col items-center gap-1"
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      border: isSelected ? "2px solid var(--color-accent)" : "2px solid transparent",
+                      backgroundColor: isSelected ? "var(--color-bg-active)" : "var(--color-bg-hover)",
+                      cursor: "pointer",
+                      transition: "border-color 150ms ease",
+                    }}
+                  >
+                    {absPath ? (
+                      <img
+                        src={convertFileSrc(absPath)}
+                        alt={item.name}
+                        style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 4 }}
+                      />
+                    ) : (
+                      <div
+                        className="flex items-center justify-center"
+                        style={{ width: "100%", height: 70, backgroundColor: "var(--color-bg-pane)", borderRadius: 4 }}
+                      >
+                        <ImageIcon size={24} style={{ color: "var(--color-text-muted)", opacity: 0.4 }} />
+                      </div>
+                    )}
+                    <span
+                      className="truncate w-full text-center"
+                      style={{ fontSize: 10, color: "var(--color-text-secondary)" }}
+                    >
+                      {item.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div
+          className="flex items-center justify-end gap-2 px-4 shrink-0"
+          style={{ height: 44, borderTop: "1px solid var(--color-border-subtle)" }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              background: "none", border: "none", padding: "6px 14px",
+              fontSize: 13, color: "var(--color-text-secondary)", cursor: "pointer", borderRadius: 6,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            style={{
+              backgroundColor: "var(--color-accent)", color: "var(--color-text-on-accent)",
+              border: "none", borderRadius: 6, padding: "6px 14px",
+              fontSize: 13, fontWeight: 500, cursor: "pointer",
+            }}
+          >
+            Attach {selected.size > 0 ? `(${selected.size})` : ""}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

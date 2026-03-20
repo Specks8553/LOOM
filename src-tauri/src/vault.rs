@@ -16,13 +16,15 @@ pub struct VaultItemMeta {
     pub created_at: String,
     pub modified_at: String,
     pub deleted_at: Option<String>,
+    pub asset_path: Option<String>,
+    pub asset_meta: Option<String>,
 }
 
 /// List all non-deleted vault items.
 pub fn list_items(conn: &Connection) -> Result<Vec<VaultItemMeta>, LoomError> {
     let mut stmt = conn.prepare(
         "SELECT id, parent_id, item_type, item_subtype, name, description, sort_order,
-                created_at, modified_at, deleted_at
+                created_at, modified_at, deleted_at, asset_path, asset_meta
          FROM items WHERE deleted_at IS NULL
          ORDER BY sort_order ASC, name ASC"
     )?;
@@ -39,6 +41,8 @@ pub fn list_items(conn: &Connection) -> Result<Vec<VaultItemMeta>, LoomError> {
             created_at: row.get(7)?,
             modified_at: row.get(8)?,
             deleted_at: row.get(9)?,
+            asset_path: row.get(10)?,
+            asset_meta: row.get(11)?,
         })
     })?.filter_map(|r| r.ok()).collect();
 
@@ -49,7 +53,7 @@ pub fn list_items(conn: &Connection) -> Result<Vec<VaultItemMeta>, LoomError> {
 pub fn list_trash(conn: &Connection) -> Result<Vec<VaultItemMeta>, LoomError> {
     let mut stmt = conn.prepare(
         "SELECT id, parent_id, item_type, item_subtype, name, description, sort_order,
-                created_at, modified_at, deleted_at
+                created_at, modified_at, deleted_at, asset_path, asset_meta
          FROM items WHERE deleted_at IS NOT NULL
          ORDER BY deleted_at DESC"
     )?;
@@ -66,6 +70,8 @@ pub fn list_trash(conn: &Connection) -> Result<Vec<VaultItemMeta>, LoomError> {
             created_at: row.get(7)?,
             modified_at: row.get(8)?,
             deleted_at: row.get(9)?,
+            asset_path: row.get(10)?,
+            asset_meta: row.get(11)?,
         })
     })?.filter_map(|r| r.ok()).collect();
 
@@ -150,6 +156,8 @@ pub fn create_item(
         created_at: now.clone(),
         modified_at: now,
         deleted_at: None,
+        asset_path: None,
+        asset_meta: None,
     })
 }
 
@@ -253,9 +261,25 @@ pub fn restore_item(conn: &Connection, id: &str) -> Result<(), LoomError> {
 }
 
 /// Permanently delete a vault item and all its children.
-pub fn purge_item(conn: &Connection, id: &str) -> Result<(), LoomError> {
-    // Delete children first (recursive via foreign key would also work with CASCADE
-    // but we do explicit for safety)
+/// If world_dir is provided, also deletes asset files for Image items.
+pub fn purge_item(conn: &Connection, id: &str, world_dir: Option<&std::path::Path>) -> Result<(), LoomError> {
+    // Collect asset paths to delete (children + self)
+    if let Some(dir) = world_dir {
+        let mut stmt = conn.prepare(
+            "SELECT asset_path FROM items WHERE (id = ?1 OR parent_id = ?1) AND item_type = 'Image' AND asset_path IS NOT NULL"
+        )?;
+        let paths: Vec<String> = stmt.query_map(rusqlite::params![id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        for path in paths {
+            let full = dir.join(&path);
+            if let Err(e) = std::fs::remove_file(&full) {
+                log::warn!("Failed to delete asset file {:?}: {}", full, e);
+            }
+        }
+    }
+
+    // Delete children first
     conn.execute(
         "DELETE FROM items WHERE parent_id = ?1",
         rusqlite::params![id],
@@ -284,13 +308,15 @@ pub struct VaultItem {
     pub created_at: String,
     pub modified_at: String,
     pub deleted_at: Option<String>,
+    pub asset_path: Option<String>,
+    pub asset_meta: Option<String>,
 }
 
 /// Get a single vault item including its content.
 pub fn get_item(conn: &Connection, id: &str) -> Result<VaultItem, LoomError> {
     conn.query_row(
         "SELECT id, parent_id, item_type, item_subtype, name, content, description,
-                sort_order, created_at, modified_at, deleted_at
+                sort_order, created_at, modified_at, deleted_at, asset_path, asset_meta
          FROM items WHERE id = ?1",
         rusqlite::params![id],
         |row| {
@@ -306,6 +332,8 @@ pub fn get_item(conn: &Connection, id: &str) -> Result<VaultItem, LoomError> {
                 created_at: row.get(8)?,
                 modified_at: row.get(9)?,
                 deleted_at: row.get(10)?,
+                asset_path: row.get(11)?,
+                asset_meta: row.get(12)?,
             })
         },
     )
@@ -377,6 +405,102 @@ pub fn create_item_with_content(
         created_at: now.clone(),
         modified_at: now,
         deleted_at: None,
+        asset_path: None,
+        asset_meta: None,
+    })
+}
+
+// ─── Image Upload ────────────────────────────────────────────────────────────
+
+/// Upload an image to the vault. Validates format/size, copies to assets/, inserts DB row.
+pub fn upload_image(
+    conn: &Connection,
+    world_dir: &std::path::Path,
+    src_path: &str,
+    name: &str,
+    parent_id: Option<&str>,
+) -> Result<VaultItemMeta, LoomError> {
+    let src = std::path::Path::new(src_path);
+    let bytes = std::fs::read(src)
+        .map_err(|e| LoomError::Internal(format!("Failed to read image file: {}", e)))?;
+
+    // Validate size ≤ 10 MB
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err(LoomError::Validation("Image exceeds 10 MB limit".to_string()));
+    }
+
+    // Detect format
+    let format = image::guess_format(&bytes)
+        .map_err(|_| LoomError::Validation("Unsupported image format".to_string()))?;
+
+    let (mime, ext) = match format {
+        image::ImageFormat::Png => ("image/png", "png"),
+        image::ImageFormat::Jpeg => ("image/jpeg", "jpg"),
+        image::ImageFormat::WebP => ("image/webp", "webp"),
+        image::ImageFormat::Gif => ("image/gif", "gif"),
+        _ => return Err(LoomError::Validation("Unsupported image format. Use PNG, JPEG, WebP, or GIF.".to_string())),
+    };
+
+    // Get dimensions
+    let reader = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .map_err(|e| LoomError::Internal(format!("Failed to read image dimensions: {}", e)))?;
+    let (width, height) = reader.into_dimensions()
+        .map_err(|e| LoomError::Internal(format!("Failed to decode image dimensions: {}", e)))?;
+
+    // Generate ID, create assets dir, copy file
+    let id = uuid::Uuid::new_v4().to_string();
+    let assets_dir = world_dir.join("assets");
+    std::fs::create_dir_all(&assets_dir)
+        .map_err(|e| LoomError::Internal(format!("Failed to create assets dir: {}", e)))?;
+
+    let asset_filename = format!("{}.{}", id, ext);
+    let asset_rel_path = format!("assets/{}", asset_filename);
+    let dest = assets_dir.join(&asset_filename);
+    std::fs::write(&dest, &bytes)
+        .map_err(|e| LoomError::Internal(format!("Failed to write asset file: {}", e)))?;
+
+    // Build asset_meta JSON
+    let asset_meta = serde_json::json!({
+        "mime": mime,
+        "width": width,
+        "height": height,
+        "size_bytes": bytes.len(),
+    }).to_string();
+
+    // Determine sort_order
+    let sort_order: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM items
+         WHERE parent_id IS ?1 AND deleted_at IS NULL",
+        rusqlite::params![parent_id],
+        |row| row.get(0),
+    )?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO items (id, story_id, parent_id, item_type, item_subtype, name, content,
+                           description, sort_order, created_at, modified_at, deleted_at,
+                           asset_path, asset_meta)
+         VALUES (?1, NULL, ?2, 'Image', NULL, ?3, '', NULL, ?4, ?5, ?6, NULL, ?7, ?8)",
+        rusqlite::params![id, parent_id, name, sort_order, now, now, asset_rel_path, asset_meta],
+    )?;
+
+    log::info!("Image uploaded: id={}, path={}", id, asset_rel_path);
+
+    Ok(VaultItemMeta {
+        id,
+        parent_id: parent_id.map(|s| s.to_string()),
+        item_type: "Image".to_string(),
+        item_subtype: None,
+        name: name.to_string(),
+        description: None,
+        sort_order,
+        created_at: now.clone(),
+        modified_at: now,
+        deleted_at: None,
+        asset_path: Some(asset_rel_path),
+        asset_meta: Some(asset_meta),
     })
 }
 
@@ -587,8 +711,10 @@ pub fn detach_context_doc(
 pub struct ContextDoc {
     pub id: String,
     pub name: String,
+    pub item_type: String,
     pub item_subtype: Option<String>,
     pub content: String,
+    pub asset_path: Option<String>,
 }
 
 /// Get all attached context docs for a story (full content included).
@@ -613,8 +739,10 @@ pub fn get_context_docs(
                 docs.push(ContextDoc {
                     id: item.id,
                     name: item.name,
+                    item_type: item.item_type,
                     item_subtype: item.item_subtype,
                     content: item.content,
+                    asset_path: item.asset_path,
                 });
             }
         }
@@ -688,7 +816,7 @@ mod tests {
     fn test_purge_item() {
         let conn = test_db();
         let item = create_item(&conn, "Story", "ToPurge", None, None).unwrap();
-        purge_item(&conn, &item.id).unwrap();
+        purge_item(&conn, &item.id, None).unwrap();
         assert_eq!(list_items(&conn).unwrap().len(), 0);
         assert_eq!(list_trash(&conn).unwrap().len(), 0);
     }

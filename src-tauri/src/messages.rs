@@ -331,6 +331,7 @@ mod tests {
             constraints: String::new(),
             output_length: None,
             context_doc_names: vec![],
+            image_blocks: vec![],
         };
 
         let user_msg = insert_user_message(&conn, "story1", None, &uc).unwrap();

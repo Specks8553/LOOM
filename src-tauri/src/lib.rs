@@ -467,7 +467,67 @@ async fn vault_purge_item(
         LoomError::Internal(format!("Failed to lock connection: {}", e))
     })?;
     let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
-    vault::purge_item(conn, &id)
+
+    // Resolve world_dir for asset cleanup
+    let world_dir = {
+        let wid_guard = state.active_world_id.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock active_world_id: {}", e))
+        })?;
+        wid_guard.as_ref().map(|wid| world::world_dir_path(wid)).transpose()?
+    };
+
+    vault::purge_item(conn, &id, world_dir.as_deref())
+}
+
+/// Upload an image to the vault.
+#[tauri::command]
+async fn vault_upload_image(
+    src_path: String,
+    name: String,
+    parent_id: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<vault::VaultItemMeta, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    let world_dir = {
+        let wid_guard = state.active_world_id.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock active_world_id: {}", e))
+        })?;
+        let wid = wid_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        world::world_dir_path(wid)?
+    };
+
+    vault::upload_image(conn, &world_dir, &src_path, &name, parent_id.as_deref())
+}
+
+/// Resolve an item's asset_path to an absolute filesystem path.
+#[tauri::command]
+async fn vault_get_asset_path(
+    item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+    let item = vault::get_item(conn, &item_id)?;
+    let asset_path = item.asset_path.ok_or_else(|| {
+        LoomError::Validation(format!("Item {} has no asset_path", item_id))
+    })?;
+
+    let world_dir = {
+        let wid_guard = state.active_world_id.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock active_world_id: {}", e))
+        })?;
+        let wid = wid_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        world::world_dir_path(wid)?
+    };
+
+    Ok(world_dir.join(asset_path).to_string_lossy().to_string())
 }
 
 /// Batch update sort order for vault items.
@@ -511,8 +571,8 @@ async fn send_message(
         guard.clone().ok_or(LoomError::ApiKeyMissing)?
     };
 
-    // Phase 1: Insert user message + read history + load context docs (needs conn lock)
-    let (user_msg, history, system_instructions, model_name, context_docs) = {
+    // Phase 1: Insert user message + read history + load context docs + accordion data (needs conn lock)
+    let (user_msg, history, system_instructions, model_name, context_docs, world_dir) = {
         let conn_guard = state.active_conn.lock().map_err(|e| {
             LoomError::Internal(format!("Failed to lock connection: {}", e))
         })?;
@@ -565,38 +625,167 @@ async fn send_message(
             .unwrap_or_else(|_| "gemini-2.5-flash".to_string());
 
         // Load attached context docs (Doc 12 §7: inline in current turn, not in history)
-        let ctx_docs = vault::get_context_docs(conn, &story_id)?;
-        let context_docs: Vec<gemini::ContextDocContent> = ctx_docs
-            .into_iter()
-            .map(|d| gemini::ContextDocContent {
-                name: d.name,
-                content: d.content,
-            })
-            .collect();
+        let context_docs = vault::get_context_docs(conn, &story_id)?;
 
-        (user_msg, history, sys_instr, model, context_docs)
-    }; // conn lock dropped here
+        // Load Accordion data for history substitution — Doc 18 §6
+        let accordion_segments = branch::load_accordion_segments(conn, &story_id)?;
+        let checkpoints = branch::load_checkpoints(conn, &story_id)?;
+        let fake_user_prompt: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'prompt_accordion_fake_user'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
-    // Check rate limits before making the API call
-    {
-        let conn_guard = state.active_conn.lock().map_err(|e| {
-            LoomError::Internal(format!("Failed to lock connection: {}", e))
-        })?;
-        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        // Apply Accordion substitution
+        let current_lid = leaf_id.as_deref().unwrap_or("");
+        let history = gemini::build_history_with_accordion(
+            &history,
+            &accordion_segments,
+            &checkpoints,
+            current_lid,
+            fake_user_prompt.as_deref(),
+        );
+
+        // Check rate limits
         let status = rate_limiter::check_rate_limit(conn)?;
         if !status.can_proceed {
             return Err(LoomError::RateLimitExceeded);
         }
+
+        // Resolve world_dir for asset reading
+        let world_dir = {
+            let wid_guard = state.active_world_id.lock().map_err(|e| {
+                LoomError::Internal(format!("Failed to lock active_world_id: {}", e))
+            })?;
+            let wid = wid_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+            world::world_dir_path(wid)?
+        };
+
+        (user_msg, history, sys_instr, model, context_docs, world_dir)
+    }; // conn lock dropped here
+
+    // Phase 2: Build parts arrays for user turn + context docs (no conn lock — async File API)
+    let user_turn_text = gemini::build_user_turn_text(&user_content);
+    let mut user_turn_parts = vec![serde_json::json!({ "text": user_turn_text })];
+
+    // Build inline image parts for user message image_blocks — Doc 19 PATCH
+    // Step 1: Read all cache info while holding the lock briefly
+    let image_block_infos: Vec<(gemini::ImageBlock, Option<gemini::FileApiCacheInfo>)> = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        user_content.image_blocks.iter().map(|block| {
+            let info = gemini::read_file_api_cache_info(conn, &block.item_id).ok();
+            (block.clone(), info)
+        }).collect()
+    }; // conn lock dropped
+
+    // Step 2: Process each image block (async File API calls happen without lock)
+    for (block, info_opt) in &image_block_infos {
+        let file_path = world_dir.join(&block.asset_path);
+        match std::fs::read(&file_path) {
+            Ok(bytes) => {
+                let mime = info_opt.as_ref()
+                    .map(|i| i.mime.clone())
+                    .unwrap_or_else(|| "image/jpeg".to_string());
+
+                if bytes.len() <= 4 * 1024 * 1024 {
+                    // Inline base64 (≤4MB)
+                    use base64::Engine;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                    user_turn_parts.push(serde_json::json!({
+                        "inline_data": {
+                            "mime_type": mime,
+                            "data": b64,
+                        }
+                    }));
+                } else if let Some(info) = info_opt {
+                    // File API upload (>4MB)
+                    match gemini::resolve_file_api_uri(info, &world_dir, &api_key).await {
+                        Ok((uri, mime, needs_update)) => {
+                            if needs_update {
+                                let conn_guard = state.active_conn.lock().map_err(|e| {
+                                    LoomError::Internal(format!("Failed to lock connection: {}", e))
+                                })?;
+                                let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+                                let _ = gemini::save_file_api_uri(conn, &block.item_id, &uri);
+                            }
+                            user_turn_parts.push(serde_json::json!({
+                                "file_data": {
+                                    "mime_type": mime,
+                                    "file_uri": uri,
+                                }
+                            }));
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to upload image block {} to File API: {}", block.item_id, e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to read image block asset {}: {}", block.asset_path, e);
+            }
+        }
     }
 
-    // Phase 2: Build request and stream (no conn lock held)
-    let user_turn_text = gemini::build_user_turn_text(&user_content);
+    // Build context doc parts — text docs as text, image docs via File API
+    let mut context_doc_parts: Vec<serde_json::Value> = Vec::new();
+
+    // Read File API cache info for image context docs (brief lock)
+    let image_doc_infos: Vec<(usize, gemini::FileApiCacheInfo)> = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        context_docs.iter().enumerate()
+            .filter(|(_, d)| d.item_type == "Image")
+            .filter_map(|(i, d)| gemini::read_file_api_cache_info(conn, &d.id).ok().map(|info| (i, info)))
+            .collect()
+    }; // conn lock dropped
+
+    for doc in &context_docs {
+        if doc.item_type == "Image" {
+            // Find pre-read cache info
+            if let Some((_, info)) = image_doc_infos.iter().find(|(_, inf)| inf.item_id == doc.id) {
+                match gemini::resolve_file_api_uri(info, &world_dir, &api_key).await {
+                    Ok((uri, mime, needs_update)) => {
+                        if needs_update {
+                            let conn_guard = state.active_conn.lock().map_err(|e| {
+                                LoomError::Internal(format!("Failed to lock connection: {}", e))
+                            })?;
+                            let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+                            let _ = gemini::save_file_api_uri(conn, &doc.id, &uri);
+                        }
+                        context_doc_parts.push(serde_json::json!({
+                            "file_data": {
+                                "mime_type": mime,
+                                "file_uri": uri,
+                            }
+                        }));
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to upload image context doc {} to File API: {}", doc.id, e);
+                    }
+                }
+            }
+        } else {
+            // Text context doc
+            context_doc_parts.push(serde_json::json!({
+                "text": format!("[CONTEXT DOC: {}]\n{}", doc.name, doc.content)
+            }));
+        }
+    }
+
     let request_body = gemini::build_gemini_request(
         &system_instructions,
         &history,
-        &user_turn_text,
+        &user_turn_parts,
         user_content.output_length,
-        &context_docs,
+        &context_doc_parts,
     );
 
     // Create cancellation channel
@@ -1613,6 +1802,188 @@ async fn delete_branch_from(
     Ok(result)
 }
 
+// ─── Accordion (Phase 14) ─────────────────────────────────────────────────────
+
+/// Set an accordion segment's collapsed state — Doc 18 §5.
+#[tauri::command]
+async fn set_segment_collapsed(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    segment_id: String,
+    story_id: String,
+    collapsed: bool,
+) -> Result<(), LoomError> {
+    use tauri::Emitter;
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    branch::set_segment_collapsed(conn, &segment_id, collapsed)?;
+    let _ = app.emit("branch_map_updated", &story_id);
+    Ok(())
+}
+
+/// Get all accordion segments for a story — Doc 18 §13.
+#[tauri::command]
+async fn get_accordion_segments(
+    state: tauri::State<'_, AppState>,
+    story_id: String,
+) -> Result<Vec<branch::AccordionSegment>, LoomError> {
+    let conn_guard = state.active_conn.lock().map_err(|e| {
+        LoomError::Internal(format!("Failed to lock connection: {}", e))
+    })?;
+    let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+    branch::load_accordion_segments(conn, &story_id)
+}
+
+/// Summarise an accordion segment via Gemini — Doc 18 §4.
+/// Sends the messages within the segment to Gemini for summarisation (non-streaming).
+/// Returns the generated summary text.
+#[tauri::command]
+async fn summarise_segment(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    segment_id: String,
+    story_id: String,
+    leaf_id: String,
+) -> Result<String, LoomError> {
+    use tauri::Emitter;
+
+    // Get API key
+    let api_key = {
+        let guard = state.api_key.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock api key: {}", e))
+        })?;
+        guard.clone().ok_or(LoomError::ApiKeyMissing)?
+    };
+
+    // Load segment + checkpoints + messages (needs conn lock)
+    let (segment, summarise_prompt, model_name, messages_in_segment) = {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+
+        // Check rate limit
+        let status = rate_limiter::check_rate_limit(conn)?;
+        if !status.can_proceed {
+            return Err(LoomError::RateLimitExceeded);
+        }
+
+        // Load the segment
+        let segments = branch::load_accordion_segments(conn, &story_id)?;
+        let segment = segments
+            .into_iter()
+            .find(|s| s.id == segment_id)
+            .ok_or_else(|| LoomError::ItemNotFound(format!("Segment {}", segment_id)))?;
+
+        // Load checkpoints
+        let checkpoints = branch::load_checkpoints(conn, &story_id)?;
+
+        // Load branch messages
+        let payload = messages::load_story_messages(conn, &story_id, &leaf_id)?;
+        let all_msgs = payload.messages;
+
+        // Find the range of messages in this segment
+        let start_cp = checkpoints.iter().find(|c| c.id == segment.start_cp_id);
+        let end_cp = checkpoints.iter().find(|c| c.id == segment.end_cp_id);
+
+        let start_pos = match start_cp {
+            Some(cp) => match &cp.after_message_id {
+                Some(mid) => all_msgs.iter().position(|m| m.id == *mid).map(|p| p + 1),
+                None => Some(0),
+            },
+            None => Some(0),
+        };
+
+        let end_pos = match end_cp {
+            Some(cp) => match &cp.after_message_id {
+                Some(mid) => all_msgs.iter().position(|m| m.id == *mid),
+                None => None,
+            },
+            None => None,
+        };
+
+        let segment_msgs: Vec<gemini::ChatMessage> = match (start_pos, end_pos) {
+            (Some(sp), Some(ep)) if ep >= sp => all_msgs[sp..=ep].to_vec(),
+            (Some(sp), None) => all_msgs[sp..].to_vec(),
+            _ => vec![],
+        };
+
+        // Get summarise prompt from settings
+        let prompt: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'prompt_accordion_summarise'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| {
+                "Summarise the following story chapter. Capture: all plot events, the state of each character at the end of the chapter, and the state of the world/setting at the end of the chapter. Write in past tense, third person. Be specific — the summary must be sufficient for the AI to continue the story without reading the original messages. Do not add commentary or meta-text — output only the summary.".to_string()
+            });
+
+        let model: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'text_model_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "gemini-2.5-flash".to_string());
+
+        (segment, prompt, model, segment_msgs)
+    }; // conn lock dropped
+
+    // Build Gemini request: system instruction = summarise prompt, contents = segment messages
+    let mut contents = Vec::new();
+    for msg in &messages_in_segment {
+        let role = if msg.role == "user" { "user" } else { "model" };
+        let text = if msg.role == "user" && msg.content_type == "json_user" {
+            match serde_json::from_str::<gemini::UserContent>(&msg.content) {
+                Ok(uc) => gemini::build_user_turn_text(&uc),
+                Err(_) => msg.content.clone(),
+            }
+        } else {
+            msg.content.clone()
+        };
+        contents.push(serde_json::json!({
+            "role": role,
+            "parts": [{ "text": text }]
+        }));
+    }
+
+    // Add a user turn requesting the summary (this is needed for valid Gemini alternation)
+    contents.push(serde_json::json!({
+        "role": "user",
+        "parts": [{ "text": "Please summarise the conversation above according to the system instructions." }]
+    }));
+
+    let body = serde_json::json!({
+        "contents": contents,
+        "system_instruction": {
+            "parts": [{ "text": &summarise_prompt }]
+        }
+    });
+
+    // Call Gemini (non-streaming)
+    let (summary, token_count) = gemini::generate_non_streaming(&api_key, &model_name, &body).await?;
+
+    // Save summary to DB
+    {
+        let conn_guard = state.active_conn.lock().map_err(|e| {
+            LoomError::Internal(format!("Failed to lock connection: {}", e))
+        })?;
+        let conn = conn_guard.as_ref().ok_or(LoomError::NoActiveConnection)?;
+        branch::save_segment_summary(conn, &segment_id, &summary)?;
+
+        // Record rate limiter usage
+        let tokens = token_count.unwrap_or_else(|| (summary.len() as i64) / 4);
+        rate_limiter::record_usage(conn, tokens)?;
+    }
+
+    let _ = app.emit("branch_map_updated", &story_id);
+
+    Ok(summary)
+}
+
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1652,6 +2023,8 @@ pub fn run() {
             vault_soft_delete,
             vault_restore_item,
             vault_purge_item,
+            vault_upload_image,
+            vault_get_asset_path,
             vault_update_sort_order,
             // Phase 6: Conversation engine
             send_message,
@@ -1701,6 +2074,10 @@ pub fn run() {
             rename_checkpoint,
             delete_checkpoint,
             delete_branch_from,
+            // Phase 14: Accordion
+            summarise_segment,
+            set_segment_collapsed,
+            get_accordion_segments,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LOOM");

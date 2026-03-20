@@ -22,9 +22,25 @@ export interface VaultItemMeta {
   created_at: string;
   modified_at: string;
   deleted_at: string | null;
+  asset_path: string | null;
+  asset_meta: string | null;
 }
 
 // ─── Conversation Types — Doc 09 §1 ─────────────────────────────────────────
+
+/** Inline image reference in a user message — Doc 19 PATCH. */
+export interface ImageBlock {
+  item_id: string;
+  asset_path: string;
+}
+
+/** Asset metadata stored as JSON in items.asset_meta. */
+export interface AssetMeta {
+  mime: string;
+  width: number;
+  height: number;
+  size_bytes: number;
+}
 
 /** Three-field user input per Doc 09 §4.1. */
 export interface UserContent {
@@ -35,6 +51,8 @@ export interface UserContent {
   output_length: number | null;
   /** Names of context docs attached at send time (display only, not sent to API). */
   context_doc_names?: string[];
+  /** Image blocks attached inline to this user message — Doc 19 PATCH. */
+  image_blocks?: ImageBlock[];
 }
 
 /** Message stored in DB — Doc 09 §1.3. */
@@ -85,8 +103,10 @@ export interface StreamDone {
 export interface ContextDoc {
   id: string;
   name: string;
+  item_type: string;
   item_subtype: string | null;
   content: string;
+  asset_path: string | null;
 }
 
 // ─── Phase 11: Source Document Types ─────────────────────────────────────────
@@ -104,6 +124,8 @@ export interface VaultItem {
   created_at: string;
   modified_at: string;
   deleted_at: string | null;
+  asset_path: string | null;
+  asset_meta: string | null;
 }
 
 /** Source Document template. */
@@ -166,21 +188,25 @@ export interface Checkpoint {
   modified_at: string;
 }
 
-export interface AccordionSegmentInfo {
+export interface AccordionSegment {
   id: string;
   story_id: string;
-  start_msg_id: string;
-  end_msg_id: string;
-  has_summary: boolean;
-  token_count: number | null;
+  start_cp_id: string;
+  end_cp_id: string;
+  summary: string | null;
+  is_collapsed: boolean;
+  is_stale: boolean;
+  branch_leaf_id: string | null;
+  summarised_at: string | null;
   created_at: string;
+  modified_at: string;
 }
 
 export interface BranchMapData {
   nodes: BranchMapNode[];
   edges: BranchMapEdge[];
   checkpoints: Checkpoint[];
-  accordion_segments: AccordionSegmentInfo[];
+  accordion_segments: AccordionSegment[];
   current_leaf_id: string;
 }
 
@@ -200,5 +226,6 @@ export function parseUserContent(content: string): UserContent {
     constraints: raw.constraints ?? "",
     output_length: raw.output_length ?? null,
     context_doc_names: raw.context_doc_names ?? [],
+    image_blocks: raw.image_blocks ?? [],
   };
 }

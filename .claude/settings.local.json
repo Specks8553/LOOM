@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__memory__read_graph",
+      "Bash(cargo --version)",
+      "Bash(npm --version)",
+      "Bash(cargo tauri:*)",
+      "Bash(npx @tauri-apps/cli --version)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(npm create:*)",
+      "Bash(shopt -s dotglob)",
+      "Bash(mv ./--project-name/* .)",
+      "Bash(rmdir \"./--project-name\")",
+      "Bash(rtk git:*)",
+      "Bash(grep -n \"send_message\" /d/Proj/LOOM/src-tauri/src/*.rs)"
+    ]
+  }
+}

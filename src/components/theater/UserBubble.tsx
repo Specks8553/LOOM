@@ -1,11 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Brain, Palette, Pencil, ShieldAlert, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { parseUserContent } from "../../lib/types";
 import { SiblingNav } from "./SiblingNav";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { sendMessage, deleteMessageCmd } from "../../lib/tauriApi";
+import { sendMessage, deleteMessageCmd, vaultGetAssetPath } from "../../lib/tauriApi";
 import { TagInput } from "../shared/TagInput";
+import InlineImage from "../shared/InlineImage";
 import type { ChatMessage, UserContent } from "../../lib/types";
 
 interface UserBubbleProps {
@@ -46,6 +47,19 @@ export function UserBubble({
   const [editConstraints, setEditConstraints] = useState(uc.constraints ?? "");
 
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
+
+  // Resolve image block absolute paths
+  const [imgAbsPaths, setImgAbsPaths] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!uc.image_blocks || uc.image_blocks.length === 0) return;
+    for (const block of uc.image_blocks) {
+      if (!imgAbsPaths[block.item_id]) {
+        vaultGetAssetPath(block.item_id)
+          .then((p) => setImgAbsPaths((prev) => ({ ...prev, [block.item_id]: p })))
+          .catch(() => {});
+      }
+    }
+  }, [uc.image_blocks]);
 
   const handleStartEdit = useCallback(() => {
     setEditPlot(uc.plot_direction);
@@ -358,6 +372,18 @@ export function UserBubble({
         >
           {uc.plot_direction}
         </p>
+
+        {/* Inline images — Doc 19 PATCH */}
+        {uc.image_blocks && uc.image_blocks.length > 0 && (
+          <div className="flex flex-wrap gap-2" style={{ marginTop: "8px" }}>
+            {uc.image_blocks.map((block) => {
+              const absPath = imgAbsPaths[block.item_id];
+              return absPath ? (
+                <InlineImage key={block.item_id} assetPath={absPath} />
+              ) : null;
+            })}
+          </div>
+        )}
 
         {/* Pills row */}
         {(uc.background_information.trim() || uc.modificators.length > 0 || (uc.constraints ?? "").trim() || (uc.context_doc_names && uc.context_doc_names.length > 0)) && (
