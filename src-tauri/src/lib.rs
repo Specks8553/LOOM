@@ -722,12 +722,14 @@ async fn send_message(
                         }
                         Err(e) => {
                             log::warn!("Failed to upload image block {} to File API: {}", block.item_id, e);
+                            let _ = app.emit("image_upload_warning", format!("Image could not be sent: {}", e));
                         }
                     }
                 }
             }
             Err(e) => {
                 log::warn!("Failed to read image block asset {}: {}", block.asset_path, e);
+                let _ = app.emit("image_upload_warning", format!("Image file not found: {}", block.asset_path));
             }
         }
     }
@@ -769,6 +771,7 @@ async fn send_message(
                     }
                     Err(e) => {
                         log::warn!("Failed to upload image context doc {} to File API: {}", doc.id, e);
+                        let _ = app.emit("image_upload_warning", format!("Image context doc could not be sent: {}", e));
                     }
                 }
             }

@@ -17,6 +17,7 @@ import {
 import type { VaultItemMeta } from "../../lib/types";
 import { useVaultStore } from "../../stores/vaultStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   vaultRenameItem,
   vaultSoftDelete,
@@ -24,6 +25,7 @@ import {
   vaultListItems,
   vaultUpdateSortOrder,
   vaultGetItem,
+  vaultGetAssetPath,
   attachContextDoc,
   detachContextDoc,
 } from "../../lib/tauriApi";
@@ -113,6 +115,25 @@ export function VaultTreeNode({
   const rowRef = useRef<HTMLDivElement>(null);
 
   const isFolder = item.item_type === "Folder";
+  const isImage = item.item_type === "Image";
+
+  // Hover thumbnail for Image items — Doc 19 §3
+  const [thumbSrc, setThumbSrc] = useState<string | null>(null);
+  const [thumbPos, setThumbPos] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!isImage || !isHovered) { setThumbPos(null); return; }
+    // Resolve asset path on first hover
+    if (!thumbSrc) {
+      vaultGetAssetPath(item.id)
+        .then((p) => setThumbSrc(convertFileSrc(p)))
+        .catch(() => {});
+    }
+    if (rowRef.current) {
+      const rect = rowRef.current.getBoundingClientRect();
+      setThumbPos({ x: rect.right + 8, y: rect.top });
+    }
+    return () => setThumbPos(null);
+  }, [isImage, isHovered, item.id]);
 
   // Focus input when entering rename mode
   useEffect(() => {
@@ -609,6 +630,36 @@ export function VaultTreeNode({
           onSelect={handleMoveToFolder}
           onClose={() => setFolderPicker(null)}
         />
+      )}
+
+      {/* Image hover thumbnail — Doc 19 §3 */}
+      {isImage && thumbSrc && thumbPos && isHovered && (
+        <div
+          style={{
+            position: "fixed",
+            left: thumbPos.x,
+            top: thumbPos.y,
+            zIndex: 150,
+            pointerEvents: "none",
+            backgroundColor: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "6px",
+            padding: "4px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          }}
+        >
+          <img
+            src={thumbSrc}
+            alt={item.name}
+            style={{
+              width: 160,
+              height: 120,
+              objectFit: "cover",
+              borderRadius: "4px",
+              display: "block",
+            }}
+          />
+        </div>
       )}
 
       {/* Children (expanded folder contents) */}

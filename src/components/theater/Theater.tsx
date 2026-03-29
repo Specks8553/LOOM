@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { Bookmark, FileText, Minimize2, Maximize2 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useVaultStore } from "../../stores/vaultStore";
 import { useAccordionStore } from "../../stores/accordionStore";
@@ -181,6 +182,15 @@ export function Theater() {
       unlistenDone?.();
     };
   }, [appendStreamDelta, finalizeStream]);
+
+  // Listen for image upload warnings — Doc 19 §5
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<string>("image_upload_warning", (event) => {
+      toast.warning(event.payload);
+    }).then((un) => { unlisten = un; });
+    return () => { unlisten?.(); };
+  }, []);
 
   // Persist leaf_id on every change — Doc 09 §2.4
   useEffect(() => {

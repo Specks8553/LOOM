@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
-import { Brain, Palette, Pencil, ShieldAlert, Paperclip } from "lucide-react";
+import { Brain, Palette, Pencil, ShieldAlert, Paperclip, X } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { parseUserContent } from "../../lib/types";
 import { SiblingNav } from "./SiblingNav";
@@ -45,6 +46,7 @@ export function UserBubble({
   const [editBg, setEditBg] = useState(uc.background_information);
   const [editModTags, setEditModTags] = useState<string[]>(uc.modificators);
   const [editConstraints, setEditConstraints] = useState(uc.constraints ?? "");
+  const [editImageBlocks, setEditImageBlocks] = useState(uc.image_blocks ?? []);
 
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
 
@@ -66,6 +68,7 @@ export function UserBubble({
     setEditBg(uc.background_information);
     setEditModTags([...uc.modificators]);
     setEditConstraints(uc.constraints ?? "");
+    setEditImageBlocks([...(uc.image_blocks ?? [])]);
     setEditing(true);
   }, [uc]);
 
@@ -84,6 +87,7 @@ export function UserBubble({
       modificators: editModTags,
       constraints: editConstraints.trim(),
       output_length: null,
+      image_blocks: editImageBlocks.length > 0 ? editImageBlocks : undefined,
     };
 
     setEditing(false);
@@ -160,6 +164,7 @@ export function UserBubble({
     editBg,
     editModTags,
     editConstraints,
+    editImageBlocks,
     storyId,
     message.id,
     message.parent_id,
@@ -276,6 +281,43 @@ export function UserBubble({
               outline: "none",
             }}
           />
+          {/* Image block chips (removable in edit mode) */}
+          {editImageBlocks.length > 0 && (
+            <div className="flex flex-wrap gap-1" style={{ marginTop: "6px" }}>
+              {editImageBlocks.map((block) => {
+                const absPath = imgAbsPaths[block.item_id];
+                return (
+                  <div
+                    key={block.item_id}
+                    className="flex items-center gap-1"
+                    style={{
+                      padding: "2px 6px 2px 2px",
+                      borderRadius: "4px",
+                      backgroundColor: "var(--color-bg-hover)",
+                      border: "1px solid var(--color-border-subtle)",
+                      fontSize: "11px",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {absPath ? (
+                      <img
+                        src={convertFileSrc(absPath)}
+                        alt=""
+                        style={{ width: 18, height: 18, objectFit: "cover", borderRadius: 2 }}
+                      />
+                    ) : null}
+                    <button
+                      onClick={() => setEditImageBlocks((prev) => prev.filter((b) => b.item_id !== block.item_id))}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", padding: 0, display: "flex" }}
+                      title="Remove image"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {/* Buttons */}
           <div
             className="flex items-center justify-end gap-2"
