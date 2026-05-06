@@ -1,5 +1,8 @@
 # Common Pitfalls & PRD Reference
 
+> **v1.0 reference.** v2.0 contributors: see [`docs-v2/dev/24-coding-standards.md`](../../docs-v2/dev/24-coding-standards.md) (rules) and [`docs-v2/V1-LESSONS.md`](../../docs-v2/V1-LESSONS.md) (anti-patterns to avoid). The lookup table and pitfalls below still apply to any v1-codebase work until v2.0 ships.
+
+
 ## PRD Quick Reference
 
 When in doubt, read the PRD. The documents are implementation-ready — they contain

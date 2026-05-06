@@ -13,7 +13,17 @@
       "Bash(mv ./--project-name/* .)",
       "Bash(rmdir \"./--project-name\")",
       "Bash(rtk git:*)",
-      "Bash(grep -n \"send_message\" /d/Proj/LOOM/src-tauri/src/*.rs)"
+      "Bash(grep -n \"send_message\" /d/Proj/LOOM/src-tauri/src/*.rs)",
+      "mcp__serena__activate_project",
+      "Bash(OPENSSL_DIR=\"C:/Users/Adrian/scoop/apps/openssl/current\" rtk cargo check)",
+      "Bash(OPENSSL_DIR=\"C:/Users/Adrian/scoop/apps/openssl/current\" rtk cargo test)",
+      "Bash(rtk tsc *)",
+      "Bash(rtk cargo *)",
+      "Bash(rtk ls *)",
+      "Bash(mkdir -p D:/Proj/LOOM2/.claude/commands)",
+      "Bash(rmdir D:/Proj/LOOM2/Documentation/Planning)",
+      "Bash(rmdir D:/Proj/LOOM2/Documentation)",
+      "Read(//d/Proj/LOOM2/**)"
     ]
   }
 }

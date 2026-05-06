@@ -26,7 +26,7 @@ Then per task: read the spec doc(s) the phase references. The PRD lookup table b
 ## Project structure
 
 ```
-D:\Proj\LOOM\
+D:\Proj\LOOM2\
 ├── CLAUDE.md                          ← you are here
 ├── .claude/
 │   ├── commands/
@@ -54,7 +54,7 @@ D:\Proj\LOOM\
 └── package.json
 ```
 
-The repo lives at `D:\Proj\LOOM\`. Auto-memory for this project lives at `C:\Users\Adrian\.claude\projects\D--Proj-LOOM\memory\`.
+The repo lives at `D:\Proj\LOOM2\`. Auto-memory for this project lives at `C:\Users\Adrian\.claude\projects\D--Proj-LOOM2\memory\` — the v1 memory dir at `D--Proj-LOOM\memory\` is read-only historical reference.
 
 ***
 
@@ -287,7 +287,7 @@ Before marking a phase complete:
 
 ## Platform notes
 
-- **Development OS:** Windows. Repo at `D:\Proj\LOOM\`. Use Unix shell syntax in Bash (`/dev/null`, forward slashes); PowerShell available where it fits better.
+- **Development OS:** Windows. Repo at `D:\Proj\LOOM2\`. Use Unix shell syntax in Bash (`/dev/null`, forward slashes); PowerShell available where it fits better.
 - **Target platforms:** macOS (arm64 + x86_64), Windows x86_64, Linux x86_64.
 - **Minimum window:** 1100×700px (enforced in `tauri.conf.json`). Auto-collapse Control Pane below 1200px.
 - **Windows OpenSSL setup:** `OPENSSL_DIR="C:/Users/Adrian/scoop/apps/openssl/current"` must be set for cargo. SQLCipher's `bundled` feature compiles OpenSSL from source on first build (~5 min).

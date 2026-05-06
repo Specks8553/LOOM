@@ -1,5 +1,8 @@
 # Code Standards
 
+> **v1.0 standards.** v2.0 contributors: see [`docs-v2/dev/24-coding-standards.md`](../../docs-v2/dev/24-coding-standards.md). The rules below still govern any v1-codebase maintenance until v2.0 ships.
+
+
 ## Rust
 
 - **Edition 2021.** Use idiomatic Rust — `Result<T, LoomError>`, `?` operator, no unwrap() in production paths.
