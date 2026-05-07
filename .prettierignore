@@ -6,3 +6,4 @@ src/lib/types.ts
 pnpm-lock.yaml
 docs-v2/
 old-archive.zip
+.claude/

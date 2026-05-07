@@ -1,5 +1,5 @@
-import { useAppStore } from '@/stores/appStore';
 import { devSetAppPhase } from '@/lib/tauriApi/appPhase';
+import { useAppStore } from '@/stores/appStore';
 
 /** Phase 0 placeholder. Real layout (Doc 10) lands in subsequent phases. */
 export function WorkspaceShell() {

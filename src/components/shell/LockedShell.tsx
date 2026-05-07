@@ -1,5 +1,5 @@
-import { useAppStore } from '@/stores/appStore';
 import { devSetAppPhase } from '@/lib/tauriApi/appPhase';
+import { useAppStore } from '@/stores/appStore';
 
 /** Phase 0 placeholder. The real lock screen lands in Phase 1 (Doc 13). */
 export function LockedShell() {

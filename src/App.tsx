@@ -1,8 +1,9 @@
 import { Toaster } from 'sonner';
-import { useAppStore } from '@/stores/appStore';
-import { OnboardingShell } from '@/components/shell/OnboardingShell';
+
 import { LockedShell } from '@/components/shell/LockedShell';
+import { OnboardingShell } from '@/components/shell/OnboardingShell';
 import { WorkspaceShell } from '@/components/shell/WorkspaceShell';
+import { useAppStore } from '@/stores/appStore';
 
 export function App() {
   const phase = useAppStore((s) => s.appPhase);

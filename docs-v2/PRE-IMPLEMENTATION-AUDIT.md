@@ -252,27 +252,33 @@
 
 These are restated from `IMPROVEMENT-BACKLOG.md` because the audit confirmed they are real prerequisites for v2.0 implementation, not just nice-to-haves.
 
-- [ ] **SB-1 — R2: Typed `AppSettingKey` / `StoryStateKey` enums.**
+- [x] **SB-1 — R2: Typed `AppSettingKey` / `StoryStateKey` enums.**
   Without these, the `prompt_handover_seed` class of drift (HB-5) recurs every time a setting is added. Land before any settings-touching command.
+  (2026-05-07 — `AppSettingKey` + `StoryStateKey` enums in `src-tauri/src/db/settings.rs`; `get_setting<T>` generic accessor; Phase 0 scaffold.)
 
-- [ ] **SB-2 — R3: ESLint `no-cross-store-imports` rule.**
+- [x] **SB-2 — R3: ESLint `no-cross-store-imports` rule.**
   Doc 06's "stores never import each other" rule is convention-only without this. Land before the second store is wired.
+  (2026-05-07 — `eslint-rules/no-cross-store-imports.js` + `eslint-rules/__fixtures__/` + `scripts/check-eslint-fixture.mjs`; fixture test passes — deliberate cross-store import fires the rule.)
 
-- [ ] **SB-3 — R4: `ts-rs` (or `specta`) for TypeScript type generation.**
+- [x] **SB-3 — R4: `ts-rs` (or `specta`) for TypeScript type generation.**
   Auto-fixes the missing-interface class (IP-9: `ResolvedSettings`, `Telemetry`, `AliveCacheRow`, `UnlockResult`, `WorldMetaPatch`, `GhostwriterEditRecord`, `GhostwriterResponse`, `RevertResult`). Land in the first implementation session — retrofitting is much more expensive.
+  (2026-05-07 — `ts-rs` wired; `tests/ts_rs_export.rs` generates `src/lib/types.ts`; `pnpm check:types` drift-check passes.)
 
-- [ ] **SB-4 — R7: Cancellation token lifecycle spec in Doc 05.**
+- [x] **SB-4 — R7: Cancellation token lifecycle spec in Doc 05.**
   Doc 15, Doc 16, Doc 17 all reference `tokio_util::CancellationToken` / `AbortHandle`. Doc 05's `AppState.cancel_tx` is a single `Mutex<Option<Sender<bool>>>` — must clarify per-request lifecycle and document the "next request creates a fresh token; cancel of the old one is a no-op on the new" invariant.
   **Owner doc:** `architecture/05-backend-modules.md` §Cancellation Lifecycle (new subsection).
+  (2026-05-07 — `AppState.cancel_tx: Mutex<Option<CancellationToken>>` in `state.rs`; `with_cancel_tx` helper; per-request lifecycle per Doc 05.)
 
-- [ ] **SB-5 — R17: Lock-access helper (`with_active_conn`, `with_master_key`, etc.).**
+- [x] **SB-5 — R17: Lock-access helper (`with_active_conn`, `with_master_key`, etc.).**
   v1.0 had 118 occurrences of the four-line lock-and-format-error idiom. v2.0 must land the helper before the first command, otherwise the boilerplate compounds and the lock-ordering rule becomes inspection-only.
   **Owner doc:** `architecture/05-backend-modules.md` §AppState (canonical access pattern) + `dev/24-coding-standards.md` (forbid raw `.lock()` on AppState fields).
+  (2026-05-07 — `with_active_conn`, `with_master_key`, `with_api_key`, `with_cancel_tx` on `AppState` in `state.rs`; all Tauri commands use these helpers.)
 
-- [ ] **SB-6 — R18: Versioned schema migration system.**
+- [x] **SB-6 — R18: Versioned schema migration system.**
   Doc 03 §Migration Strategy is one line ("clean rewrite, no migration required"). True v1→v2; not true going forward. `templates.creator_instructions` and `messages.deleted_at` are reserved for v2.1 and *will* require a migration.
   **Resolution lean:** add a `schema_migrations` table + numbered SQL files under `db/migrations/`. The initial v2.0 schema is `001_initial.sql`. Land before any post-launch DDL change.
   **Owner doc:** `foundation/03-data-model.md` §Migration Strategy + `architecture/05-backend-modules.md` §db.
+  (2026-05-07 — `db/migrations.rs` + `migrations/world/001_initial.sql` + `migrations/app/001_initial.sql`; 21/21 Rust tests pass including migration round-trip.)
 
 ---
 

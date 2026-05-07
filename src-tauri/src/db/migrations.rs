@@ -191,8 +191,8 @@ mod tests {
 
     #[test]
     fn epoch_components_for_known_timestamp() {
-        // 2026-05-06 00:00:00 UTC = 1778457600 seconds.
-        let (y, mo, d, h, mi, s) = epoch_to_components(1778457600);
+        // 2026-05-06 00:00:00 UTC = 1778025600 seconds.
+        let (y, mo, d, h, mi, s) = epoch_to_components(1778025600);
         assert_eq!((y, mo, d, h, mi, s), (2026, 5, 6, 0, 0, 0));
     }
 }

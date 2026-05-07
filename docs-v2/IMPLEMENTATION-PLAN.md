@@ -43,7 +43,7 @@
 
 ## Phase 0 — Substrate
 
-**Status:** In progress (last touched 2026-05-06)
+**Status:** Complete (2026-05-07)
 
 **Goal:** Land the rails that prevent v1.0-style drift from recurring. No feature code; pure tooling, type generation, lock helpers, migrations, and the project scaffold.
 
@@ -70,20 +70,21 @@
 10. **App phase shell.** `appStore.appPhase` state machine (`onboarding | locked | workspace`) and three top-level routes — purely conditional rendering, no router lib (D-05).
 
 **Testable Checkpoints:**
-- [ ] `cargo build --release` succeeds on Windows with `OPENSSL_DIR` set; `tsc --noEmit` clean; `eslint .` clean; `prettier --check` clean.
-- [ ] `cargo test` runs and passes the substrate unit tests (lock helper, migrations applier, settings enum round-trip).
-- [ ] `ts-rs` generates `src/lib/types.ts` from Rust structs; `npm run check:types` fails when the file is out of date and passes when regenerated.
-- [ ] Cross-store import fixture (`appStore` importing `vaultStore`) fails ESLint with `no-cross-store-imports`.
-- [ ] `001_initial.sql` applies to a fresh encrypted DB; `schema_migrations` row recorded; re-running boot is a no-op.
-- [ ] `tracing` log output for a representative command does not contain master key, API key, or message content (manual `grep` check on captured logs).
-- [ ] `husky` pre-commit hook blocks a deliberate clippy warning on a staged file.
-- [ ] `appStore.appPhase` transitions from `onboarding` → `locked` → `workspace` driven by stub commands; conditional rendering switches the top-level component.
-- [ ] PRE-IMPLEMENTATION-AUDIT.md SB-1, SB-2, SB-3, SB-4, SB-5, SB-6 all ticked with notes.
+- [x] `cargo build --release` succeeds on Windows with `OPENSSL_DIR` set; `tsc --noEmit` clean; `eslint .` clean; `prettier --check` clean.
+- [x] `cargo test` runs and passes the substrate unit tests (lock helper, migrations applier, settings enum round-trip).
+- [x] `ts-rs` generates `src/lib/types.ts` from Rust structs; `npm run check:types` fails when the file is out of date and passes when regenerated.
+- [x] Cross-store import fixture (`appStore` importing `vaultStore`) fails ESLint with `no-cross-store-imports`.
+- [x] `001_initial.sql` applies to a fresh encrypted DB; `schema_migrations` row recorded; re-running boot is a no-op.
+- [x] `tracing` log output for a representative command does not contain master key, API key, or message content (manual `grep` check on captured logs).
+- [x] `husky` pre-commit hook blocks a deliberate clippy warning on a staged file.
+- [x] `appStore.appPhase` transitions from `onboarding` → `locked` → `workspace` driven by stub commands; conditional rendering switches the top-level component.
+- [x] PRE-IMPLEMENTATION-AUDIT.md SB-1, SB-2, SB-3, SB-4, SB-5, SB-6 all ticked with notes.
 
 **Out of scope:** Any feature command (auth, vault, world CRUD); any UI beyond the three-phase shell; any visual styling beyond importing the Tailwind v4 base layer.
 
 **Resumption notes:**
-*(empty — phase not started)*
+- 2026-05-06: Scaffold committed (`c9479db`). All SB items implemented in Rust; React shell with 3-phase conditional rendering; ts-rs wired; ESLint custom rule + fixture; husky + lint-staged; migrations runner.
+- 2026-05-07: Full verification pass. Fixed `bundled-sqlcipher` feature (was two separate features — linker error on Windows). Fixed epoch timestamp in migration test. Removed `eslint-plugin-tailwindcss` (incompatible with Tailwind v4). Added `eslint-import-resolver-typescript` + `eslint-import-resolver-node` (missing from devDeps). Scoped `recommendedTypeChecked` to `src/**` only. Fixed `vite.config.ts` `as const` type. Added `src/vite-env.d.ts`. All 9 checkpoints verified; SB-1..SB-6 ticked. Phase complete.
 
 ---
 

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+
 import type { AppPhase } from '@/lib/types';
 
 /** Read the current app phase from the backend. */

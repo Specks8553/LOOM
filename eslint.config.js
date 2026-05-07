@@ -2,30 +2,30 @@
 //   - @typescript-eslint/recommended-type-checked
 //   - react-hooks/recommended
 //   - import/order, import/no-restricted-paths (store boundary — SB-2)
-//   - eslint-plugin-tailwindcss with no-arbitrary-value allowing [--color-*]
 //   - no-floating-promises (error), no-explicit-any (error)
+// Note: eslint-plugin-tailwindcss dropped — incompatible with Tailwind v4.
 
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import importPlugin from 'eslint-plugin-import';
-import tailwind from 'eslint-plugin-tailwindcss';
 
 export default tseslint.config(
-  { ignores: ['dist', 'src-tauri/target', 'node_modules', 'src/lib/types.ts'] },
+  { ignores: ['dist', 'src-tauri/target', 'node_modules', 'src/lib/types.ts', '.claude/'] },
 
+  // Base JS rules for all files.
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tailwind.configs['flat/recommended'],
 
+  // Type-checked TS rules scoped to source files only (requires tsconfig coverage).
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
       parserOptions: {
-        project: ['./tsconfig.app.json', './tsconfig.node.json'],
+        project: ['./tsconfig.app.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -34,10 +34,6 @@ export default tseslint.config(
       import: importPlugin,
     },
     settings: {
-      tailwindcss: {
-        callees: ['cn', 'clsx'],
-        config: 'src/globals.css',
-      },
       'import/resolver': {
         typescript: { project: './tsconfig.app.json' },
         node: true,
@@ -65,10 +61,6 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
 
-      // Tailwind: allow --color-* arbitrary tokens (Doc 24 §Token Usage).
-      'tailwindcss/no-arbitrary-value': 'off',
-      'tailwindcss/classnames-order': 'warn',
-
       // Imports.
       'import/order': [
         'warn',
@@ -90,7 +82,12 @@ export default tseslint.config(
     },
   },
 
-  // The fixture file deliberately violates SB-2; we run it through a
-  // separate config to assert the rule fires. Don't lint it here.
+  // Node.js scripts (tools, not source) need Node globals.
+  {
+    files: ['scripts/**/*.mjs', 'scripts/**/*.js', 'eslint-rules/**/*.js'],
+    languageOptions: { globals: globals.node },
+  },
+
+  // The fixture file deliberately violates SB-2; run through its own config.
   { ignores: ['eslint-rules/__fixtures__/**'] },
 );

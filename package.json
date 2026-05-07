@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2.1.0",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.0",
@@ -40,6 +41,8 @@
     "@typescript-eslint/parser": "^8.18.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.16.0",
+    "eslint-import-resolver-node": "^0.3.10",
+    "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-tailwindcss": "^3.17.5",
@@ -48,15 +51,24 @@
     "lint-staged": "^15.2.10",
     "prettier": "^3.4.2",
     "tailwindcss": "^4.0.0",
-    "@tailwindcss/vite": "^4.0.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.0",
     "vite": "^7.0.0"
   },
   "lint-staged": {
-    "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
-    "*.{js,cjs,mjs}": ["eslint --fix", "prettier --write"],
-    "*.{json,md,css}": ["prettier --write"],
-    "src-tauri/src/**/*.rs": ["cargo fmt --manifest-path src-tauri/Cargo.toml --"]
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,cjs,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ],
+    "src-tauri/src/**/*.rs": [
+      "cargo fmt --manifest-path src-tauri/Cargo.toml --"
+    ]
   }
 }
