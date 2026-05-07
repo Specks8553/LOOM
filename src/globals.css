@@ -1,0 +1,31 @@
+@import 'tailwindcss';
+
+/* Doc 08 (Design Tokens) is the single source of truth for all values below.
+ * Tokens land in their own commits during the visual-polish phase. The seed
+ * here is the minimum needed to render the three-phase shell. */
+@theme {
+  --color-bg: #0a0a0a;
+  --color-bg-soft: #141414;
+  --color-text-primary: #e5e5e5;
+  --color-text-muted: #888888;
+  --color-border: #262626;
+  --color-accent: #7c3aed;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

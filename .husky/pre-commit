@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Doc 24 §Pre-commit. Fast — only changed files. Heavy clippy runs in CI.
+
+pnpm exec lint-staged
+pnpm exec tsc --noEmit

@@ -43,7 +43,7 @@
 
 ## Phase 0 — Substrate
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-06)
 
 **Goal:** Land the rails that prevent v1.0-style drift from recurring. No feature code; pure tooling, type generation, lock helpers, migrations, and the project scaffold.
 

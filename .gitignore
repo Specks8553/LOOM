@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+!dist/.gitkeep
+!dist/index.html
+dist-ssr/
+src-tauri/target/
+src-tauri/gen/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+*.iml
+
+# env / secrets (never commit)
+.env
+.env.local
+.env.*.local
+
+# local user state
+app_config.json
+*.loom-backup
+
+# Real production icons land in Phase 13 (Doc 26). The placeholder
+# `src-tauri/icons/icon.ico` IS committed so tauri-build runs out of the box.
