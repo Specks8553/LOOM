@@ -25,4 +25,15 @@ export default defineConfig(() => ({
     minify: !process.env.TAURI_ENV_DEBUG ? ('esbuild' as const) : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
+  test: {
+    environment: 'happy-dom',
+    globals: false,
+    setupFiles: ['src/__tests__/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/stores/**', 'src/lib/**'],
+      exclude: ['src/lib/types.ts'],
+    },
+  },
 }));

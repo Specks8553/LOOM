@@ -1,7 +1,8 @@
 # LOOM 2.0 — Documentation Index
 
-> **Status:** In progress — planning phase closing; implementation phase opening
-> **Last updated:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted: 14 phases (0 Substrate → 0.5 Doc 25 Testing → 1 Auth → 2 Vault/Worlds → 3 Conversation Engine story-mode → 4 Modes → 5 Source Documents → 6 Caching → 7 Accordion → 8 Ghostwriter → 9 Feedback → 10 Media slim → 11 Settings/Themes → 12 Visual polish → 13 Build/Release/Doc 26). Each phase has Status / Goal / Inputs / Scope / Testable Checkpoints / Out of Scope / Resumption notes. `_new_claude.md` §The phase model amended: `Resumption notes:` must be updated **live, not at session end** — sessions end abruptly. Document Map below adds `IMPLEMENTATION-PLAN.md` as the canonical phase ledger.
+> **Status:** In progress — implementation phase open; Phase 0 and Phase 0.5 complete
+> **Last updated:** 2026-05-07 — Doc 25 (Testing Strategy) complete; D-19 (Testing Strategy umbrella) added; ST-3 ticked. Vitest + wiremock + happy-dom tooling landed; all recipes demonstrated by passing canary tests; Playwright E2E deferred to v2.0.x. Phase 0 complete (2026-05-07): all 9 checkpoints ticked, SB-1..SB-6 closed.
+> **Earlier:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted: 14 phases (0 Substrate → 0.5 Doc 25 Testing → 1 Auth → 2 Vault/Worlds → 3 Conversation Engine story-mode → 4 Modes → 5 Source Documents → 6 Caching → 7 Accordion → 8 Ghostwriter → 9 Feedback → 10 Media slim → 11 Settings/Themes → 12 Visual polish → 13 Build/Release/Doc 26). Each phase has Status / Goal / Inputs / Scope / Testable Checkpoints / Out of Scope / Resumption notes. `_new_claude.md` §The phase model amended: `Resumption notes:` must be updated **live, not at session end** — sessions end abruptly. Document Map below adds `IMPLEMENTATION-PLAN.md` as the canonical phase ledger.
 > **Earlier:** 2026-05-04 — Doc 24 (Coding Standards) complete; D-18 (Coding Standards umbrella) added; ST-2 closed. Three enforcement tiers (🔴 Linted / 🟡 Reviewed / ⚪ Convention); `tracing` over `log`; `safecommand!` macro dropped; Conventional Commits; `ts-rs` generated `types.ts` committed with CI drift-check; husky + lint-staged pre-commit; SB-1..SB-3, SB-5, SB-6 substrate items have rule home + `<!-- SB-N -->` anchors here (code lands in Phase 0); SB-4 (cancellation lifecycle) deferred to a dedicated Doc 05 amendment pass; v1.0 anti-pattern appendix (13 items) with Forbidden / Preferred snippet pairs. Doc 05 (lock-helper rule cross-ref, `tracing` note, cancellation cross-ref), Doc 06 (`types.ts` SoT line, ESLint enforcement note on §Store Rules) amended; PRE-IMPLEMENTATION-AUDIT ST-2 ticked; IMPROVEMENT-BACKLOG R3 / R5 / R13 / R19 closed, R2 / R4 / R17 / R18 marked "spec'd in Doc 24 — code pending Phase 0"; v1 rule files in `.claude/rules/` annotated with v2.0 banners.
 > **Earlier:** 2026-05-04 — Doc 28 (Feedback) complete; D-17 (Feedback umbrella) added; per-bubble inline strip is the sole affordance, v1's right-pane Feedback Overlay dropped; explicit Apply / Cancel (no auto-save on blur); `--color-feedback` triad (default `#f59e0b`, world-overridable, does not track accent); Doc 11 §Escape Chain fully rewritten (CD-6 closed) — priority 5 = Feedback edit; Doc 03 (`feedback_color` key, `ResolvedSettings`), Doc 06 (`workspaceStore.feedbackEditingMessageId` + 3 actions), Doc 07 (`update_feedback` notes), Doc 08 (token triad), Doc 11 (escape chain), Doc 15 (cross-ref Doc 28), Doc 20 (Features tab row, ThemeSnapshot, applyTheme writes), Doc 27 (bubble-strip placement) amended; PRE-IMPLEMENTATION-AUDIT CD-13 added + ticked, CD-6 ticked.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution batch (PRE-IMPLEMENTATION-AUDIT.md): 6 of 7 Hard Blockers, 11 of 12 Cross-Doc Inconsistencies, all Schema/IPC drift, and the Doc 21 deferral resolved. Touched docs: 02 (CD-10), 03 (HB-1, HB-2, HB-5, CD-2, CD-9, IP-3, IP-9, SD-6), 04 (CD-11), 05 (HB-6, HB-7), 06 (CD-7, CD-8), 07 (HB-4), 08 (CD-1, CD-2, CD-3), 09 (CD-4), 10 (CD-5), 11 (HB-3 only — full CD-6 Escape Chain rewrite pending Feedback design pass / CD-13), 14 (IP-3, CD-7), 17 (HB-1, CD-2), 18 (HB-2, CD-8, IP-8), 19 (IP-2), 20 (CD-1, CD-2), 21 (status flipped to Deferred to v2.0.x — ST-1), 22 (CD-12), 23 (CD-9). CD-6 escape-chain rewrite and the new CD-13 (Feedback affordance spec) are scheduled for the next session.
@@ -70,7 +71,7 @@ Navigation hub and decision log for LOOM 2.0. All architectural decisions are re
 | Doc | Title | Status |
 |---|---|---|
 | [24](dev/24-coding-standards.md) | Coding Standards | Complete |
-| [25](dev/25-testing-strategy.md) | Testing Strategy | Stub |
+| [25](dev/25-testing-strategy.md) | Testing Strategy | Complete |
 | [26](dev/26-build-and-release.md) | Build and Release | Stub |
 
 ---
@@ -509,6 +510,31 @@ src-tauri/src/
 **Rationale:** Doc 24 collects the rule home for every code-discipline item that was scattered across Doc 05 (lock ordering, `LoomError` use, command shape), Doc 06 (no cross-store imports, IPC wrappers, selector rule), Doc 08 (token usage), V1-LESSONS (the 13 anti-patterns), and IMPROVEMENT-BACKLOG (R-items). The three-tier enforcement model makes "what fails CI vs. what review catches vs. what reviewers note as a smell" explicit at the point of each rule, which is the v1.0 deficit — rules without enforcement clarity are rules without teeth. Dropping `safecommand!` and forbidding raw `.lock()` are the two hardest commitments: each is the only way to prevent the v1.0 "convention drift" pattern from recurring (the 118-occurrence boilerplate accumulated *despite* the convention being known). The Anti-pattern Appendix is the doc's most reusable section — Forbidden / Preferred snippet pairs are inspectable shape, not aspirational prose. Substrate items (SB-1..SB-3, SB-5, SB-6) have their rule home here today; their tooling implementation lands in the Phase 0 substrate session and closes the SB-N items at that point. SB-4 (cancellation lifecycle) is the only item that genuinely warrants its own design pass before specification — bundling it here would skip the Discovery → Picture-back → Numbered Qs discipline that the cancellation surface needs.
 
 **Affects:** Doc 24 (full spec); Doc 05 (cross-references for lock-helper rule, `tracing`, cancellation lifecycle — full SB-4 / SB-5 contract land in follow-up Doc 05 amendment); Doc 06 (`types.ts` source-of-truth line revised to reflect ts-rs; §Store Rules links to Doc 24 §No Cross-Store Imports for ESLint enforcement); PRE-IMPLEMENTATION-AUDIT.md (ST-2 ticked); IMPROVEMENT-BACKLOG.md (R3 / R5 / R13 / R19 closed; R2 / R4 / R17 / R18 marked "spec'd in Doc 24 — code pending Phase 0"); `.claude/rules/code-standards.md` and `.claude/rules/pitfalls-and-reference.md` (v2.0 redirect banners).
+
+---
+
+### D-19 — Testing Strategy Umbrella (2026-05-07)
+
+**Decision:** Doc 25 (Testing Strategy) is fully specified. Umbrella decision covering the v2.0 test architecture:
+
+| Sub-decision | Locked value |
+|---|---|
+| Rust test runner | `cargo test` (standard); unit tests alongside module in `#[cfg(test)]`; integration tests in `src-tauri/tests/` |
+| TS test runner | **Vitest 4.x** — native ESM + Vite integration; single config in `vite.config.ts` under the `test` key |
+| DOM environment | **`happy-dom`** — faster than jsdom; no native deps; sufficient for LOOM's component tests which mock IPC anyway |
+| Globals | **`globals: false`** — all Vitest APIs explicitly imported; avoids global scope pollution |
+| Component test library | **`@testing-library/react`** + `@testing-library/jest-dom` (matchers extended via `expect.extend`) |
+| In-memory SQLite fixture | `Connection::open_in_memory()` + `apply_pending(MigrationRoot::World\|App)` — same migration runner, non-encrypted, fully isolated per test |
+| Gemini HTTP mock | **`wiremock`** — ergonomic async mock server; SSE-compatible; `MockServer::start().await` in each async integration test |
+| IPC mock boundary | Mock `@tauri-apps/api/core` (not the typed wrapper) via `vi.mock('@tauri-apps/api/core')` — wrapper's type-narrowing runs as real code; typed values from `src/lib/types.ts` ensure type drift is caught |
+| Real Gemini calls in tests | **Never.** No API key in CI; no E2E call path. HTTP boundary is always mocked |
+| Coverage thresholds | **Not enforced by CI in v2.0.** Module-class targets (exhaustive for `security/`, high for `services/history`, `rate_limiter`, `settings`, `cache`) are the contract; numeric enforcement deferred to v2.1 |
+| Playwright E2E | **Deferred to v2.0.x.** `tauri-driver` setup adds CI complexity not warranted until surface is stable |
+| CI matrix | PR: fast gates only (build + unit + lint); merge-to-main: adds Windows Tauri build + doc tests; nightly: all three platform builds |
+
+**Rationale:** Vitest over Jest because it is Vite-native (zero extra config for the ESM + `@` alias setup already present) and faster in watch mode. `happy-dom` over `jsdom` because LOOM's component tests mock the IPC layer and don't rely on real browser APIs — `happy-dom` is faster with no native deps. `globals: false` matches the broader project convention of explicit imports. `wiremock` was chosen (over `httpmock`, `mockito`) because Doc 24 already names it, it handles async SSE-style chunked responses cleanly, and its `MockServer` lifecycle matches `tokio::test` naturally. The "mock at the IPC wrapper boundary, not the typed-wrapper boundary" rule is the critical one: it means the wrapper function is real code under test, which catches import drift, type errors, and wrong command names — the failure modes that matter.
+
+**Affects:** Doc 25 (full spec); PRE-IMPLEMENTATION-AUDIT.md (ST-3 ticked); `vite.config.ts` (test block added); `package.json` (`pnpm test` + `pnpm test:ui` scripts; vitest + @testing-library/react + happy-dom devDeps); `src-tauri/Cargo.toml` (wiremock + reqwest devDeps); `src-tauri/tests/canary.rs` + `tests/gemini_sse_mock.rs` (canary + SSE recipe tests); `src/__tests__/setup.ts` + `appStore.test.ts` + `ipc_mock.test.tsx` (canary + IPC recipe tests).
 
 ---
 

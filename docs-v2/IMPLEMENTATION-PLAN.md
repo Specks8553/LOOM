@@ -90,7 +90,7 @@
 
 ## Phase 0.5 — Testing Strategy (Doc 25)
 
-**Status:** Not started
+**Status:** Complete (2026-05-07)
 
 **Goal:** Land Doc 25 (Testing Strategy) end-to-end before the first feature commit. Audit ST-3 closes here. This is a planning pass following the COWORKING.md rhythm — Discovery → Picture-back → Numbered Qs → Write → Propagate.
 
@@ -112,16 +112,16 @@
 7. CI matrix: which targets run on PR vs main vs nightly.
 
 **Testable Checkpoints:**
-- [ ] Doc 25 written end-to-end; `00-INDEX.md` Document Map row flipped to Complete; D-NN umbrella added if a real architectural decision came out of the pass (else amend-only).
-- [ ] PRE-IMPLEMENTATION-AUDIT.md ST-3 ticked with resolution-log entry.
-- [ ] One canary unit test (Rust) and one canary component test (Vitest) committed and passing — proves the recipes work, not just describe them.
-- [ ] Gemini SSE mock recipe demonstrated by a passing test that streams 3 chunks.
-- [ ] Tauri IPC mock recipe demonstrated by a passing component test that asserts `invoke` was called with typed args.
+- [x] Doc 25 written end-to-end; `00-INDEX.md` Document Map row flipped to Complete; D-NN umbrella added if a real architectural decision came out of the pass (else amend-only).
+- [x] PRE-IMPLEMENTATION-AUDIT.md ST-3 ticked with resolution-log entry.
+- [x] One canary unit test (Rust) and one canary component test (Vitest) committed and passing — proves the recipes work, not just describe them.
+- [x] Gemini SSE mock recipe demonstrated by a passing test that streams 3 chunks.
+- [x] Tauri IPC mock recipe demonstrated by a passing component test that asserts `invoke` was called with typed args.
 
 **Out of scope:** Writing comprehensive test suites for every module (those land per-feature). Playwright E2E implementation if deferred.
 
 **Resumption notes:**
-*(empty — phase not started)*
+- 2026-05-07: Doc 25 written end-to-end. Added `wiremock` + `reqwest` dev-deps (Rust). Canary: `tests/canary.rs` (3 in-memory DB invariants). Gemini SSE mock: `tests/gemini_sse_mock.rs` (2 tests, 3-chunk stream). Installed vitest 4.1.5 + @testing-library/react + happy-dom. `vite.config.ts` test block added. Canary: `appStore.test.ts` (2 store invariants). IPC mock: `ipc_mock.test.tsx` (1 component test, invoke verified with typed args). All 27 Rust + 3 TS tests pass. Phase complete.
 
 ---
 

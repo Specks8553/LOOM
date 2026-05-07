@@ -226,7 +226,7 @@
   - **Resolution lean:** draft Doc 24 in the same session that lands the substrate tooling. Source content from CLAUDE.md `.claude/rules/code-standards.md` and `pitfalls-and-reference.md` (≈80% of the content already exists in those rule files).
   - **Owner doc:** `dev/24-coding-standards.md`.
 
-- [ ] **ST-3 — Doc 25 (Testing Strategy): skeleton only.**
+- [x] **ST-3 — Doc 25 (Testing Strategy): skeleton only.**
   - Missing: concrete commands (`cargo test`, `vitest run`) and coverage targets.
   - Missing: in-memory SQLite fixture pattern (non-encrypted for unit tests).
   - Missing: Gemini SSE mock recipe.
@@ -234,6 +234,7 @@
   - Missing: Playwright E2E plan (or decision to skip).
   - **Resolution lean:** can lag substrate by 1–2 sessions; write before the first feature command lands.
   - **Owner doc:** `dev/25-testing-strategy.md`.
+  - (2026-05-07 — Doc 25 written end-to-end in Phase 0.5; all recipes demonstrated by passing canary tests; Playwright E2E explicitly deferred to v2.0.x with rationale.)
 
 - [ ] **ST-4 — Doc 26 (Build and Release): skeleton only.**
   - Missing: Windows OpenSSL setup steps (CLAUDE.md MEMORY.md has `OPENSSL_DIR=...` not migrated).
