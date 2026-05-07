@@ -23,10 +23,7 @@ pub fn get_app_phase(state: State<'_, AppState>) -> Result<AppPhase, LoomError> 
 /// Dev-only phase driver. In release builds this is a `Forbidden` no-op so
 /// the surface stays present for the IPC contract but cannot be abused.
 #[tauri::command]
-pub fn dev_set_app_phase(
-    state: State<'_, AppState>,
-    phase: AppPhase,
-) -> Result<(), LoomError> {
+pub fn dev_set_app_phase(state: State<'_, AppState>, phase: AppPhase) -> Result<(), LoomError> {
     if !cfg!(debug_assertions) {
         return Err(LoomError::Forbidden(
             "dev_set_app_phase is disabled in release builds".into(),

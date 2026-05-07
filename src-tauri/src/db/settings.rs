@@ -156,8 +156,15 @@ mod tests {
         set_app_setting(&c, AppSettingKey::CacheTtlSecs, "not-a-number").unwrap();
         let err = get_app_setting::<u32>(&c, AppSettingKey::CacheTtlSecs).unwrap_err();
         match err {
-            LoomError::Validation { validation_kind, key, .. } => {
-                assert!(matches!(validation_kind, ValidationKind::InvalidSettingValue));
+            LoomError::Validation {
+                validation_kind,
+                key,
+                ..
+            } => {
+                assert!(matches!(
+                    validation_kind,
+                    ValidationKind::InvalidSettingValue
+                ));
                 assert_eq!(key.as_deref(), Some("cache_ttl_secs"));
             }
             other => panic!("expected Validation, got {other:?}"),

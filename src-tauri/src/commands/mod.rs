@@ -5,3 +5,4 @@
 //! feature domains land in their respective phases.
 
 pub mod app_phase;
+pub mod auth;

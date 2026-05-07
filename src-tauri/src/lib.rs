@@ -33,6 +33,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_phase::get_app_phase,
             commands::app_phase::dev_set_app_phase,
+            commands::auth::check_onboarding,
+            commands::auth::setup_vault,
+            commands::auth::unlock_vault,
+            commands::auth::lock_vault,
+            commands::auth::change_password,
+            commands::auth::set_api_key,
+            commands::auth::has_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

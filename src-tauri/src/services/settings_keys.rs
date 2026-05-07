@@ -62,41 +62,41 @@ impl AppSettingKey {
     /// Canonical column key (the literal `app_settings.key` value).
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ApiKey                       => "api_key",
-            Self::TextModelName                => "text_model_name",
-            Self::GenTemperature               => "gen_temperature",
-            Self::GenTopP                      => "gen_top_p",
-            Self::GenTopK                      => "gen_top_k",
-            Self::GenMaxOutputTokens           => "gen_max_output_tokens",
-            Self::GenSummariseTemperature      => "gen_summarise_temperature",
-            Self::GenSummariseTopP             => "gen_summarise_top_p",
-            Self::GenSummariseTopK             => "gen_summarise_top_k",
-            Self::GenSummariseMaxOutputTokens  => "gen_summarise_max_output_tokens",
-            Self::AccentColor                  => "accent_color",
-            Self::BodyFont                     => "body_font",
-            Self::AutoLockSecs                 => "auto_lock_secs",
-            Self::RateLimitRpm                 => "rate_limit_rpm",
-            Self::RateLimitTpm                 => "rate_limit_tpm",
-            Self::RateLimitRpd                 => "rate_limit_rpd",
-            Self::ContextTokenLimit            => "context_token_limit",
-            Self::ImgGenProviderId             => "img_gen_provider_id",
-            Self::ImgGenDefaultWidth           => "img_gen_default_width",
-            Self::ImgGenDefaultHeight          => "img_gen_default_height",
-            Self::TtsModelName                 => "tts_model_name",
-            Self::CacheTtlSecs                 => "cache_ttl_secs",
-            Self::CacheMinTokens               => "cache_min_tokens",
-            Self::StorySi                      => "story_si",
-            Self::HandoverSi                   => "handover_si",
-            Self::ConsultingSi                 => "consulting_si",
-            Self::AuxSlot1Name                 => "aux_slot_1_name",
-            Self::AuxSlot1Content              => "aux_slot_1_content",
-            Self::AuxSlot2Name                 => "aux_slot_2_name",
-            Self::AuxSlot2Content              => "aux_slot_2_content",
-            Self::PromptGhostwriter            => "prompt_ghostwriter",
-            Self::PromptAccordionSummarise     => "prompt_accordion_summarise",
-            Self::PromptAccordionFakeUser      => "prompt_accordion_fake_user",
-            Self::PromptHandoverSeed           => "prompt_handover_seed",
-            Self::PromptConsultingSeed         => "prompt_consulting_seed",
+            Self::ApiKey => "api_key",
+            Self::TextModelName => "text_model_name",
+            Self::GenTemperature => "gen_temperature",
+            Self::GenTopP => "gen_top_p",
+            Self::GenTopK => "gen_top_k",
+            Self::GenMaxOutputTokens => "gen_max_output_tokens",
+            Self::GenSummariseTemperature => "gen_summarise_temperature",
+            Self::GenSummariseTopP => "gen_summarise_top_p",
+            Self::GenSummariseTopK => "gen_summarise_top_k",
+            Self::GenSummariseMaxOutputTokens => "gen_summarise_max_output_tokens",
+            Self::AccentColor => "accent_color",
+            Self::BodyFont => "body_font",
+            Self::AutoLockSecs => "auto_lock_secs",
+            Self::RateLimitRpm => "rate_limit_rpm",
+            Self::RateLimitTpm => "rate_limit_tpm",
+            Self::RateLimitRpd => "rate_limit_rpd",
+            Self::ContextTokenLimit => "context_token_limit",
+            Self::ImgGenProviderId => "img_gen_provider_id",
+            Self::ImgGenDefaultWidth => "img_gen_default_width",
+            Self::ImgGenDefaultHeight => "img_gen_default_height",
+            Self::TtsModelName => "tts_model_name",
+            Self::CacheTtlSecs => "cache_ttl_secs",
+            Self::CacheMinTokens => "cache_min_tokens",
+            Self::StorySi => "story_si",
+            Self::HandoverSi => "handover_si",
+            Self::ConsultingSi => "consulting_si",
+            Self::AuxSlot1Name => "aux_slot_1_name",
+            Self::AuxSlot1Content => "aux_slot_1_content",
+            Self::AuxSlot2Name => "aux_slot_2_name",
+            Self::AuxSlot2Content => "aux_slot_2_content",
+            Self::PromptGhostwriter => "prompt_ghostwriter",
+            Self::PromptAccordionSummarise => "prompt_accordion_summarise",
+            Self::PromptAccordionFakeUser => "prompt_accordion_fake_user",
+            Self::PromptHandoverSeed => "prompt_handover_seed",
+            Self::PromptConsultingSeed => "prompt_consulting_seed",
         }
     }
 
@@ -106,28 +106,28 @@ impl AppSettingKey {
     /// on first run via the seed migration / restore-default helpers.
     pub const fn default_value(self) -> &'static str {
         match self {
-            Self::TextModelName               => "gemini-2.5-flash",
-            Self::GenTemperature              => "1.0",
-            Self::GenTopP                     => "0.95",
-            Self::GenTopK                     => "40",
-            Self::GenMaxOutputTokens          => "8192",
-            Self::GenSummariseTemperature     => "0.3",
-            Self::GenSummariseTopP            => "0.95",
-            Self::GenSummariseTopK            => "40",
+            Self::TextModelName => "gemini-2.5-flash",
+            Self::GenTemperature => "1.0",
+            Self::GenTopP => "0.95",
+            Self::GenTopK => "40",
+            Self::GenMaxOutputTokens => "8192",
+            Self::GenSummariseTemperature => "0.3",
+            Self::GenSummariseTopP => "0.95",
+            Self::GenSummariseTopK => "40",
             Self::GenSummariseMaxOutputTokens => "2048",
-            Self::AccentColor                 => "#7c3aed",
-            Self::BodyFont                    => "serif",
-            Self::AutoLockSecs                => "900",
-            Self::RateLimitRpm                => "10",
-            Self::RateLimitTpm                => "250000",
-            Self::RateLimitRpd                => "1500",
-            Self::ContextTokenLimit           => "128000",
-            Self::ImgGenDefaultWidth          => "1024",
-            Self::ImgGenDefaultHeight         => "1024",
-            Self::CacheTtlSecs                => "3600",
-            Self::CacheMinTokens              => "4096",
-            Self::AuxSlot1Name                => "Slot 1",
-            Self::AuxSlot2Name                => "Slot 2",
+            Self::AccentColor => "#7c3aed",
+            Self::BodyFont => "serif",
+            Self::AutoLockSecs => "900",
+            Self::RateLimitRpm => "10",
+            Self::RateLimitTpm => "250000",
+            Self::RateLimitRpd => "1500",
+            Self::ContextTokenLimit => "128000",
+            Self::ImgGenDefaultWidth => "1024",
+            Self::ImgGenDefaultHeight => "1024",
+            Self::CacheTtlSecs => "3600",
+            Self::CacheMinTokens => "4096",
+            Self::AuxSlot1Name => "Slot 1",
+            Self::AuxSlot2Name => "Slot 2",
             // Empty string defaults — keys that are populated at runtime or by user input.
             Self::ApiKey
             | Self::ImgGenProviderId
@@ -149,21 +149,21 @@ impl AppSettingKey {
 impl StoryStateKey {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ContextDocIds    => "context_doc_ids",
-            Self::ActiveMode       => "active_mode",
-            Self::ActiveSessionId  => "active_session_id",
-            Self::ActiveAuxSlot    => "active_aux_slot",
-            Self::Draft            => "draft",
+            Self::ContextDocIds => "context_doc_ids",
+            Self::ActiveMode => "active_mode",
+            Self::ActiveSessionId => "active_session_id",
+            Self::ActiveAuxSlot => "active_aux_slot",
+            Self::Draft => "draft",
         }
     }
 
     pub const fn default_value(self) -> &'static str {
         match self {
-            Self::ContextDocIds   => "[]",
-            Self::ActiveMode      => "story",
+            Self::ContextDocIds => "[]",
+            Self::ActiveMode => "story",
             Self::ActiveSessionId => "",
-            Self::ActiveAuxSlot   => "1",
-            Self::Draft           => "{}",
+            Self::ActiveAuxSlot => "1",
+            Self::Draft => "{}",
         }
     }
 }
@@ -235,6 +235,10 @@ mod tests {
         let mut sorted = keys.clone();
         sorted.sort_unstable();
         sorted.dedup();
-        assert_eq!(keys.len(), sorted.len(), "duplicate AppSettingKey column keys");
+        assert_eq!(
+            keys.len(),
+            sorted.len(),
+            "duplicate AppSettingKey column keys"
+        );
     }
 }

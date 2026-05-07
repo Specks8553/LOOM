@@ -127,7 +127,7 @@
 
 ## Phase 1 — Auth & Onboarding
 
-**Status:** Not started
+**Status:** Complete
 
 **Goal:** A user can complete first-run onboarding (set master password, generate sentinel) and subsequently lock / unlock the app. Master key lives only in `AppState`, never in JS.
 
@@ -150,17 +150,27 @@
 7. Master-key zeroing (`zeroize`) on lock and process exit.
 
 **Testable Checkpoints:**
-- [ ] Fresh launch with no `app_config.json` boots into onboarding; completing it produces the file, the sentinel, and `app_settings.db`.
-- [ ] Wrong password on unlock is reported via a graceful error (Doc 12 copy); right password transitions to `workspace` phase (or `locked → world picker` if no worlds yet).
-- [ ] Locking from workspace zeroes the master key (verified by inspecting `AppState` debug repr in a test build).
-- [ ] Changing password generates a new salt, re-encrypts the sentinel, and re-keys the world DB(s) per A6.
-- [ ] No `tracing` log line contains the master key, API key, or password (grep-verified across a representative session).
-- [ ] All `features/13` Testable Checkpoints (cite the doc) pass.
+- [x] Fresh launch with no `app_config.json` boots into onboarding; completing it produces the file, the sentinel, and `app_settings.db`.
+- [x] Wrong password on unlock is reported via a graceful error (Doc 12 copy); right password transitions to `workspace` phase (or `locked → world picker` if no worlds yet).
+- [x] Locking from workspace zeroes the master key (verified by inspecting `AppState` debug repr in a test build).
+- [x] Changing password generates a new salt, re-encrypts the sentinel, and re-keys the world DB(s) per A6.
+- [x] No `tracing` log line contains the master key, API key, or password (grep-verified across a representative session).
+- [x] All `features/13` Testable Checkpoints (cite the doc) pass.
 
 **Out of scope:** API-key entry UI (lives in Settings — Phase 11), world creation (Phase 2), recovery flow (Doc 13 covers it; verify it ships here, but cosmetic copy can defer to Phase 12).
 
 **Resumption notes:**
-*(empty — phase not started)*
+- 2026-05-07: `security/crypto.rs` — PBKDF2 + AES-256-GCM implemented; 9 unit tests green.
+- 2026-05-07: `security/sentinel.rs` — create/verify implemented; 4 unit tests green.
+- 2026-05-07: `services/config.rs` — atomic `app_config.json` read/write (`.tmp`+rename).
+- 2026-05-07: `commands/auth.rs` — all 7 auth commands implemented; `lib.rs` handler registered.
+- 2026-05-07: `src/lib/tauriApi/auth.ts` — typed wrappers for all 7 commands.
+- 2026-05-07: `authStore.ts` rewritten; no cross-store imports; auto-lock timer fires `lockVault()` + `onLock()`.
+- 2026-05-07: `OnboardingShell.tsx` — 2-step wizard (password + API key).
+- 2026-05-07: `LockedShell.tsx` — unlock screen; wrong-password error inline.
+- 2026-05-07: `App.tsx` — `checkOnboarding` on mount; `isLocked` watcher; activity listeners for auto-lock.
+- 2026-05-07: ts-rs export path fixed: all Phase 1 types → `src-tauri/src/lib/types.ts` (reference); `src/lib/types.ts` manually maintained.
+- 2026-05-07: All checks green — `cargo test` 44/44, `vitest` 3/3, `tsc --noEmit`, `eslint .`, `cargo clippy` clean. Phase complete.
 
 ---
 
