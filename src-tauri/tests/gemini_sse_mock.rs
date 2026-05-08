@@ -49,9 +49,15 @@ async fn gemini_sse_streams_three_chunks() {
     assert_eq!(resp.status(), 200);
     let body = resp.text().await.unwrap();
 
-    assert!(body.contains(r#""text":"Hello""#), "chunk 1 missing from body");
+    assert!(
+        body.contains(r#""text":"Hello""#),
+        "chunk 1 missing from body"
+    );
     assert!(body.contains(r#""text":", ""#), "chunk 2 missing from body");
-    assert!(body.contains(r#""text":"world""#), "chunk 3 missing from body");
+    assert!(
+        body.contains(r#""text":"world""#),
+        "chunk 3 missing from body"
+    );
 }
 
 #[test]

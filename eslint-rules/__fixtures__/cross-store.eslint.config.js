@@ -26,8 +26,7 @@ export default [
             {
               target: './eslint-rules/__fixtures__',
               from: './src/stores',
-              message:
-                'SB-2: stores must not import each other (Doc 24 §No Cross-Store Imports).',
+              message: 'SB-2: stores must not import each other (Doc 24 §No Cross-Store Imports).',
             },
           ],
         },

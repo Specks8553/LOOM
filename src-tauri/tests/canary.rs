@@ -44,7 +44,10 @@ fn app_schema_applies_and_settings_table_exists() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(count, 1, "app_settings table must exist after app migration");
+    assert_eq!(
+        count, 1,
+        "app_settings table must exist after app migration"
+    );
 }
 
 #[test]
