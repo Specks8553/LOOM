@@ -30,6 +30,7 @@ export type WorldEntry = {
   id: string;
   name: string;
   db_path: string;
+  world_meta_path: string;
 };
 
 /** Full `app_config.json` payload. */
@@ -44,4 +45,60 @@ export type AppConfig = {
 export type UnlockResult = {
   has_api_key: boolean;
   auto_lock_secs: bigint;
+};
+
+// --- Phase 2A — Worlds ---
+
+/** `world_meta.json` payload — Doc 03 §`world_meta.json`. Display cache for the World Picker. */
+export type WorldMeta = {
+  id: string;
+  name: string;
+  tags: string[];
+  accent_color: string;
+  cover_image_path: string | null;
+  created_at: string;
+  modified_at: string;
+};
+
+/**
+ * Patch payload for `update_world_meta` — Doc 03 §IPC Payload and Result Types.
+ * Optional fields; pass `null` on `cover_image_path` to clear it. Omit a field
+ * to leave it untouched.
+ */
+export type WorldMetaPatch = {
+  name?: string;
+  tags?: string[];
+  accent_color?: string;
+  /** `null` clears, `string` sets, omit to leave untouched. */
+  cover_image_path?: string | null;
+};
+
+/** Doc 03 §`items`. Vault tree node — Story / Folder / SourceDocument / Image. */
+export type VaultItemType = 'Story' | 'Folder' | 'SourceDocument' | 'Image';
+
+export type ImageAssetMeta = {
+  width: number;
+  height: number;
+  mime_type: string;
+};
+
+/**
+ * Doc 03 §IPC Payload and Result Types `VaultItemMeta`. Returned by
+ * `list_items`, `create_item`, etc. Image-only fields are null for other
+ * item types.
+ */
+export type VaultItemMeta = {
+  id: string;
+  parent_id: string | null;
+  item_type: VaultItemType;
+  item_subtype: string | null;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  modified_at: string;
+  deleted_at: string | null;
+  asset_path: string | null;
+  asset_meta: ImageAssetMeta | null;
+  file_api_uri: string | null;
 };

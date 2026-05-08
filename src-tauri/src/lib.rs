@@ -40,6 +40,11 @@ pub fn run() {
             commands::auth::change_password,
             commands::auth::set_api_key,
             commands::auth::has_api_key,
+            commands::vault::list_worlds,
+            commands::vault::create_world,
+            commands::vault::open_world,
+            commands::vault::delete_world,
+            commands::vault::update_world_meta,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

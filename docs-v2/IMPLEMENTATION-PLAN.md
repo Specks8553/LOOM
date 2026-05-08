@@ -176,7 +176,7 @@
 
 ## Phase 2 — Vault & Worlds
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-08)
 
 **Goal:** A user can create, rename, switch, and delete Worlds; vault tree CRUD works for folders and items; World Backup (.loom-backup zip) round-trips.
 
@@ -205,7 +205,9 @@
 **Out of scope:** Source document content editing (Phase 5); paperclip attach/detach UI (Phase 5 — model lands here, the UI affordance lands with DocEditor).
 
 **Resumption notes:**
-*(empty — phase not started)*
+- 2026-05-08: 2A — `services/world.rs` (create/open/list/update_meta/delete + `WorldMeta` / `WorldMetaPatch`), `commands/vault.rs` (5 thin handlers), `db/connection.rs` (shared SQLCipher open helper, refactored from `commands/auth.rs`), `services/config::WorldEntry` extended with `world_meta_path` (serde default for forward compat). Added `chrono` dep for ISO 8601 timestamps. 50 cargo tests pass (4 new world-validation tests + 2 new ts-rs binding tests). Frontend: `vaultStore` per Doc 06 §vaultStore (full shape locked; items half stubbed for 2C), `tauriApi/vault.ts` typed wrappers, `App.tsx` post-unlock auto-loads worlds and clears on lock.
+- 2026-05-08: 2B — `<LeftPane>` / `<Theater>` / `<RightPane>` / `<PaneDivider>` per Doc 10. `appStore.rightPaneCollapsed` + toggle. Persisted widths (left 200-260-360, right 240-280-400) via localStorage. WorkspaceShell composes the three panes with placeholder bodies (Navigator/Theater/Control fill in 2C+). Verified via Vite preview at 1280×800: shell renders, right-pane collapse toggles via state, both dividers present in expanded mode and only the left one in collapsed mode.
+- 2026-05-08: SPLIT POINT — pausing here per agreed rhythm. Resume with 2C (vault item CRUD + Navigator) when ready.
 
 ---
 

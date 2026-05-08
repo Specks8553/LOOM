@@ -6,3 +6,4 @@
 
 pub mod app_phase;
 pub mod auth;
+pub mod vault;

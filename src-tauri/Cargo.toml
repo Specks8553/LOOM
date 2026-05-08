@@ -43,6 +43,7 @@ rand = "0.8"
 hex = "0.4"
 zeroize = "1"
 uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 
 # Type generation (SB-3)
 ts-rs = { version = "10", features = ["serde-compat", "no-serde-warnings"] }

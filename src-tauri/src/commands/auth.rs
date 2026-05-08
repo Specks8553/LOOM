@@ -5,14 +5,14 @@
 //!
 //! Master key and API key never appear in return values or log output.
 
-use rusqlite::Connection;
 use serde::Serialize;
 use tauri::{Manager, State};
 use tracing::{debug, info};
 use ts_rs::TS;
 use zeroize::Zeroize;
 
-use crate::db::migrations::{apply_pending, MigrationRoot};
+use crate::db::connection::{open_and_migrate, open_encrypted};
+use crate::db::migrations::MigrationRoot;
 use crate::db::settings::{get_app_setting, set_app_setting};
 use crate::error::LoomError;
 use crate::security::{crypto, sentinel};
@@ -27,25 +27,6 @@ use crate::state::AppState;
 pub struct UnlockResult {
     pub has_api_key: bool,
     pub auto_lock_secs: u64,
-}
-
-/// Open a SQLCipher connection and apply PRAGMA key immediately.
-///
-/// `key` must be a 32-byte master key. The hex-encoded key is passed to SQLCipher
-/// using the `x'<hex>'` syntax. The key bytes are NOT logged.
-fn open_encrypted_db(path: &std::path::Path, key: &[u8; 32]) -> Result<Connection, LoomError> {
-    let conn = Connection::open(path).map_err(|e| LoomError::Database(e.to_string()))?;
-    let key_hex = hex::encode(key);
-    conn.execute_batch(&format!("PRAGMA key = \"x'{key_hex}'\";"))
-        .map_err(|e| LoomError::Crypto(format!("PRAGMA key failed: {e}")))?;
-    Ok(conn)
-}
-
-/// Apply the full app-settings schema to a connection and return it.
-fn provision_app_db(path: &std::path::Path, key: &[u8; 32]) -> Result<Connection, LoomError> {
-    let mut conn = open_encrypted_db(path, key)?;
-    apply_pending(&mut conn, MigrationRoot::App)?;
-    Ok(conn)
 }
 
 /// Returns `true` if onboarding is complete (`app_config.json` exists).
@@ -102,7 +83,7 @@ pub fn setup_vault(
         .join("app_settings.db");
 
     std::fs::create_dir_all(settings_path.parent().unwrap()).map_err(LoomError::from)?;
-    let settings_conn = provision_app_db(&settings_path, &key)?;
+    let settings_conn = open_and_migrate(&settings_path, &key, MigrationRoot::App)?;
 
     // 5. Write API key if provided.
     if let Some(ref api_key_str) = api_key {
@@ -154,10 +135,10 @@ pub fn unlock_vault(
         .join("app_settings.db");
 
     let settings_conn = if settings_path.exists() {
-        open_encrypted_db(&settings_path, &key)?
+        open_encrypted(&settings_path, &key)?
     } else {
         // DB missing (e.g. first unlock after reinstall without config wipe).
-        provision_app_db(&settings_path, &key)?
+        open_and_migrate(&settings_path, &key, MigrationRoot::App)?
     };
 
     // 4. Load API key into AppState (bytes never cross IPC boundary).
@@ -292,7 +273,7 @@ pub fn change_password(
 
 /// Open `path` with `from` as the SQLCipher key, then rekey to `to`.
 fn rekey_db_file(path: &std::path::Path, from: &[u8; 32], to: &[u8; 32]) -> Result<(), LoomError> {
-    let conn = open_encrypted_db(path, from)?;
+    let conn = open_encrypted(path, from)?;
     let to_hex = hex::encode(to);
     conn.execute_batch(&format!("PRAGMA rekey = \"x'{to_hex}'\";"))
         .map_err(|e| LoomError::Database(format!("rekey failed: {e}")))?;

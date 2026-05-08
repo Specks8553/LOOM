@@ -19,14 +19,19 @@ use crate::security::sentinel::Sentinel;
 
 const CONFIG_FILE: &str = "app_config.json";
 
-/// Represents one entry in the worlds registry (Phase 2 adds world creation; Phase 1
-/// initialises with an empty list).
+/// Represents one entry in the worlds registry. Doc 03 §IPC Payload and Result
+/// Types — `WorldEntry { id, name, db_path, world_meta_path }`. Older
+/// `app_config.json` files written by Phase 1 setup_vault contained an empty
+/// `worlds` array, so `world_meta_path` defaults to empty string for forward
+/// compatibility (no world entries existed in those files).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../src/lib/types.ts")]
 pub struct WorldEntry {
     pub id: String,
     pub name: String,
     pub db_path: String,
+    #[serde(default)]
+    pub world_meta_path: String,
 }
 
 /// Full `app_config.json` payload.

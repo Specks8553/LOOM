@@ -7,6 +7,7 @@ import { WorkspaceShell } from '@/components/shell/WorkspaceShell';
 import { checkOnboarding } from '@/lib/tauriApi/auth';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useVaultStore } from '@/stores/vaultStore';
 
 export function App() {
   const phase = useAppStore((s) => s.appPhase);
@@ -29,6 +30,17 @@ export function App() {
       setAppPhase('locked');
     }
   }, [isLocked, phase, setAppPhase]);
+
+  // On entering workspace: load the world list. On leaving (lock): clear vault state.
+  const refreshWorlds = useVaultStore((s) => s.refreshWorlds);
+  const clearVault = useVaultStore((s) => s.clear);
+  useEffect(() => {
+    if (phase === 'workspace') {
+      void refreshWorlds().catch(console.error);
+    } else {
+      clearVault();
+    }
+  }, [phase, refreshWorlds, clearVault]);
 
   // Activity listener for auto-lock reset (Doc 13 §Auto-Lock).
   const scrollThrottle = useRef<ReturnType<typeof setTimeout> | null>(null);

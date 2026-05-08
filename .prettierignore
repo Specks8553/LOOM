@@ -3,6 +3,7 @@ node_modules/
 src-tauri/target/
 src-tauri/gen/
 src/lib/types.ts
+src-tauri/src/lib/types.ts
 pnpm-lock.yaml
 docs-v2/
 old-archive.zip

@@ -3,57 +3,40 @@
 /**
  * Full `app_config.json` payload.
  */
-export type AppConfig = {
-  worlds: Array<WorldEntry>;
-  active_world_id: string | null;
-  salt_hex: string;
-  key_check: Sentinel;
-};
+export type AppConfig = { worlds: Array<WorldEntry>, active_world_id: string | null, salt_hex: string, key_check: Sentinel, };
 
 /**
  * Three-state app phase (D-05). Conditional rendering on this field is the
  * only "router" the frontend uses.
  */
-export type AppPhase = 'onboarding' | 'locked' | 'workspace';
+export type AppPhase = "onboarding" | "locked" | "workspace";
 
 /**
  * Single error type for every Tauri command (Doc 05 §LoomError).
  * Eleven variants — adding a twelfth requires a Doc 05 amendment.
  */
-export type LoomError =
-  | ({ kind: 'crypto' } & string)
-  | ({ kind: 'database' } & string)
-  | ({ kind: 'not_found' } & string)
-  | { kind: 'validation'; validation_kind: ValidationKind; key: string | null; reason: string }
-  | ({ kind: 'forbidden' } & string)
-  | ({ kind: 'api_error' } & string)
-  | ({ kind: 'cache_create' } & string)
-  | ({ kind: 'rate_limited' } & string)
-  | ({ kind: 'io' } & string)
-  | ({ kind: 'serialization' } & string)
-  | ({ kind: 'internal' } & string);
+export type LoomError = { "kind": "crypto" } & string | { "kind": "database" } & string | { "kind": "not_found" } & string | { "kind": "validation", validation_kind: ValidationKind, key: string | null, reason: string, } | { "kind": "forbidden" } & string | { "kind": "api_error" } & string | { "kind": "cache_create" } & string | { "kind": "rate_limited" } & string | { "kind": "io" } & string | { "kind": "serialization" } & string | { "kind": "internal" } & string;
 
 /**
  * Sentinel payload stored in `app_config.json`.
  */
-export type Sentinel = { nonce_hex: string; ciphertext_hex: string };
+export type Sentinel = { nonce_hex: string, ciphertext_hex: string, };
 
 /**
  * Result returned by `unlock_vault`.
  */
-export type UnlockResult = { has_api_key: boolean; auto_lock_secs: bigint };
+export type UnlockResult = { has_api_key: boolean, auto_lock_secs: bigint, };
 
 /**
  * Structured discriminator for `LoomError::Validation` (Doc 05).
  */
-export type ValidationKind =
-  | 'generic'
-  | 'invalid_setting_value'
-  | 'no_baseline'
-  | 'protected_sentinel';
+export type ValidationKind = "generic" | "invalid_setting_value" | "no_baseline" | "protected_sentinel";
 
 /**
- * Represents one entry in the worlds registry (Phase 2 adds world creation; Phase 1
- * initialises with an empty list).
+ * Represents one entry in the worlds registry. Doc 03 §IPC Payload and Result
+ * Types — `WorldEntry { id, name, db_path, world_meta_path }`. Older
+ * `app_config.json` files written by Phase 1 setup_vault contained an empty
+ * `worlds` array, so `world_meta_path` defaults to empty string for forward
+ * compatibility (no world entries existed in those files).
  */
-export type WorldEntry = { id: string; name: string; db_path: string };
+export type WorldEntry = { id: string, name: string, db_path: string, world_meta_path: string, };
