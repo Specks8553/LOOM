@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 pub mod access;
 
@@ -36,6 +37,24 @@ impl Default for AppState {
             active_world_id: Mutex::new(None),
             cancel_tx: Mutex::new(None),
             app_phase: Mutex::new(crate::AppPhase::Onboarding),
+        }
+    }
+}
+
+/// Zero secrets on app shutdown (Doc 02 §Red Lines: master key zeroed on lock
+/// **and app close**). `lock_vault` already zeroes during normal operation;
+/// this catches the unlocked-process-exit path.
+impl Drop for AppState {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.master_key.lock() {
+            if let Some(ref mut key) = *guard {
+                key.zeroize();
+            }
+        }
+        if let Ok(mut guard) = self.api_key.lock() {
+            if let Some(ref mut key) = *guard {
+                key.zeroize();
+            }
         }
     }
 }

@@ -8,16 +8,12 @@ use tauri::State;
 use tracing::info;
 
 use crate::error::LoomError;
-use crate::state::AppState;
+use crate::state::{access, AppState};
 use crate::AppPhase;
 
 #[tauri::command]
 pub fn get_app_phase(state: State<'_, AppState>) -> Result<AppPhase, LoomError> {
-    let guard = state
-        .app_phase
-        .lock()
-        .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-    Ok(*guard)
+    access::read_app_phase(&state)
 }
 
 /// Dev-only phase driver. In release builds this is a `Forbidden` no-op so
@@ -29,11 +25,6 @@ pub fn dev_set_app_phase(state: State<'_, AppState>, phase: AppPhase) -> Result<
             "dev_set_app_phase is disabled in release builds".into(),
         ));
     }
-    let mut guard = state
-        .app_phase
-        .lock()
-        .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
     info!(?phase, "dev_set_app_phase");
-    *guard = phase;
-    Ok(())
+    access::set_app_phase(&state, phase)
 }

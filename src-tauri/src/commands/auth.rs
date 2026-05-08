@@ -18,6 +18,7 @@ use crate::error::LoomError;
 use crate::security::{crypto, sentinel};
 use crate::services::config::{self, AppConfig};
 use crate::services::settings_keys::AppSettingKey;
+use crate::state::access;
 use crate::state::AppState;
 
 /// Result returned by `unlock_vault`.
@@ -110,28 +111,10 @@ pub fn setup_vault(
         }
     }
 
-    // 6. Store key + conn in AppState.
-    {
-        let mut mk = state
-            .master_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *mk = Some(key);
-    }
-    {
-        let mut ak = state
-            .api_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *ak = api_key.filter(|s| !s.is_empty());
-    }
-    {
-        let mut sc = state
-            .settings_conn
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *sc = Some(settings_conn);
-    }
+    // 6. Store key + conn in AppState (helpers zero any prior values).
+    access::replace_master_key(&state, Some(key))?;
+    access::replace_api_key(&state, api_key.filter(|s| !s.is_empty()))?;
+    access::replace_settings_conn(&state, Some(settings_conn))?;
 
     // 7. Zero the local stack copy — key is now exclusively in AppState.
     key.zeroize();
@@ -184,28 +167,10 @@ pub fn unlock_vault(
     // 5. Load auto-lock duration.
     let auto_lock_secs: u64 = get_app_setting(&settings_conn, AppSettingKey::AutoLockSecs)?;
 
-    // 6. Store in AppState.
-    {
-        let mut mk = state
-            .master_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *mk = Some(key);
-    }
-    {
-        let mut ak = state
-            .api_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *ak = if has_api_key { Some(api_key) } else { None };
-    }
-    {
-        let mut sc = state
-            .settings_conn
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *sc = Some(settings_conn);
-    }
+    // 6. Store in AppState (helpers zero any prior values).
+    access::replace_master_key(&state, Some(key))?;
+    access::replace_api_key(&state, if has_api_key { Some(api_key) } else { None })?;
+    access::replace_settings_conn(&state, Some(settings_conn))?;
 
     // 7. Zero local stack copy.
     key.zeroize();
@@ -224,47 +189,11 @@ pub fn unlock_vault(
 pub fn lock_vault(state: State<'_, AppState>) -> Result<(), LoomError> {
     info!("lock_vault: zeroing secrets");
 
-    {
-        let mut mk = state
-            .master_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        if let Some(ref mut key) = *mk {
-            key.zeroize();
-        }
-        *mk = None;
-    }
-    {
-        let mut ak = state
-            .api_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        if let Some(ref mut key) = *ak {
-            key.zeroize();
-        }
-        *ak = None;
-    }
-    {
-        let mut sc = state
-            .settings_conn
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *sc = None; // drops the connection, closes the file handle
-    }
-    {
-        let mut ac = state
-            .active_conn
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *ac = None;
-    }
-    {
-        let mut wi = state
-            .active_world_id
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *wi = None;
-    }
+    access::replace_master_key(&state, None)?;
+    access::replace_api_key(&state, None)?;
+    access::replace_settings_conn(&state, None)?;
+    access::replace_active_conn(&state, None)?;
+    access::replace_active_world_id(&state, None)?;
 
     info!("lock_vault: complete");
     Ok(())
@@ -302,53 +231,56 @@ pub fn change_password(
     // 3. Create new sentinel.
     let new_key_check = sentinel::create(&new_key)?;
 
-    // 4. Rekey app_settings.db with new key via the existing connection.
-    {
-        let guard = state
-            .settings_conn
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        let conn = guard
-            .as_ref()
-            .ok_or_else(|| LoomError::validation("vault is locked"))?;
-        let new_key_hex = hex::encode(new_key);
-        conn.execute_batch(&format!("PRAGMA rekey = \"x'{new_key_hex}'\";"))
-            .map_err(|e| LoomError::Database(format!("rekey failed: {e}")))?;
-    }
-
-    // 5. Rekey all world DBs.
+    // 4. Rekey all world DBs first, tracking successes for rollback.
+    //    Worlds are most likely to fail (file IO / corruption) so we do them
+    //    before touching app_settings.db. If any world fails, every preceding
+    //    success is rekeyed back to `old_key`.
+    let mut rekeyed_worlds: Vec<&str> = Vec::new();
     for world in &cfg.worlds {
         let db_path = std::path::Path::new(&world.db_path);
-        if db_path.exists() {
-            let conn = open_encrypted_db(db_path, &old_key)?;
-            let new_key_hex = hex::encode(new_key);
-            conn.execute_batch(&format!("PRAGMA rekey = \"x'{new_key_hex}'\";"))
-                .map_err(|e| {
-                    LoomError::Database(format!("world DB rekey failed for {}: {e}", world.id))
-                })?;
+        if !db_path.exists() {
+            continue;
         }
+        match rekey_db_file(db_path, &old_key, &new_key) {
+            Ok(()) => rekeyed_worlds.push(&world.id),
+            Err(e) => {
+                rollback_worlds(&cfg.worlds, &rekeyed_worlds, &new_key, &old_key);
+                old_key.zeroize();
+                new_key.zeroize();
+                return Err(LoomError::Database(format!(
+                    "world DB rekey failed for {}: {e}",
+                    world.id
+                )));
+            }
+        }
+    }
+
+    // 5. Rekey app_settings.db via the existing live connection.
+    if let Err(e) = rekey_settings_conn(&state, &new_key) {
+        rollback_worlds(&cfg.worlds, &rekeyed_worlds, &new_key, &old_key);
+        old_key.zeroize();
+        new_key.zeroize();
+        return Err(e);
     }
 
     // 6. Atomically rewrite app_config.json with new salt + sentinel.
     let new_cfg = AppConfig {
-        worlds: cfg.worlds,
-        active_world_id: cfg.active_world_id,
+        worlds: cfg.worlds.clone(),
+        active_world_id: cfg.active_world_id.clone(),
         salt_hex: hex::encode(new_salt),
         key_check: new_key_check,
     };
-    config::write(&app, &new_cfg)?;
-
-    // 7. Update AppState with new key.
-    {
-        let mut mk = state
-            .master_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        if let Some(ref mut old) = *mk {
-            old.zeroize();
-        }
-        *mk = Some(new_key);
+    if let Err(e) = config::write(&app, &new_cfg) {
+        // Best-effort rollback: settings + worlds back to old key.
+        let _ = rekey_settings_conn(&state, &old_key);
+        rollback_worlds(&cfg.worlds, &rekeyed_worlds, &new_key, &old_key);
+        old_key.zeroize();
+        new_key.zeroize();
+        return Err(e);
     }
+
+    // 7. Update AppState with new key (helper zeroes the prior value).
+    access::replace_master_key(&state, Some(new_key))?;
 
     // 8. Zero local copies.
     old_key.zeroize();
@@ -358,22 +290,55 @@ pub fn change_password(
     Ok(())
 }
 
+/// Open `path` with `from` as the SQLCipher key, then rekey to `to`.
+fn rekey_db_file(path: &std::path::Path, from: &[u8; 32], to: &[u8; 32]) -> Result<(), LoomError> {
+    let conn = open_encrypted_db(path, from)?;
+    let to_hex = hex::encode(to);
+    conn.execute_batch(&format!("PRAGMA rekey = \"x'{to_hex}'\";"))
+        .map_err(|e| LoomError::Database(format!("rekey failed: {e}")))?;
+    Ok(())
+}
+
+/// Rekey the live `app_settings.db` connection.
+fn rekey_settings_conn(state: &AppState, to: &[u8; 32]) -> Result<(), LoomError> {
+    access::with_settings_conn(state, |conn| {
+        let to_hex = hex::encode(to);
+        conn.execute_batch(&format!("PRAGMA rekey = \"x'{to_hex}'\";"))
+            .map_err(|e| LoomError::Database(format!("settings rekey failed: {e}")))?;
+        Ok(())
+    })
+}
+
+/// Best-effort: rekey `worlds_to_revert` (by id) from `current` back to `target`.
+/// If a revert itself fails we log loudly; the system is left inconsistent and
+/// the user must restore from backup. This is the irreducible cost of a
+/// multi-file rekey crashing mid-flight.
+fn rollback_worlds(
+    all_worlds: &[crate::services::config::WorldEntry],
+    worlds_to_revert: &[&str],
+    current: &[u8; 32],
+    target: &[u8; 32],
+) {
+    for id in worlds_to_revert {
+        if let Some(world) = all_worlds.iter().find(|w| w.id == *id) {
+            let path = std::path::Path::new(&world.db_path);
+            if let Err(e) = rekey_db_file(path, current, target) {
+                tracing::error!(world_id = %id, "rollback rekey failed: {e}");
+            }
+        }
+    }
+}
+
 /// Write a new API key to `app_settings.db` and update `AppState`.
 ///
 /// Requires unlocked vault. The key bytes never appear in return values or logs.
 #[tauri::command]
 pub fn set_api_key(state: State<'_, AppState>, key: String) -> Result<(), LoomError> {
-    crate::state::access::with_settings_conn(&state, |conn| {
+    access::with_settings_conn(&state, |conn| {
         set_app_setting(conn, AppSettingKey::ApiKey, &key)
     })?;
 
-    {
-        let mut ak = state
-            .api_key
-            .lock()
-            .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-        *ak = if key.is_empty() { None } else { Some(key) };
-    }
+    access::replace_api_key(&state, if key.is_empty() { None } else { Some(key) })?;
 
     debug!("set_api_key: saved");
     Ok(())
@@ -382,9 +347,9 @@ pub fn set_api_key(state: State<'_, AppState>, key: String) -> Result<(), LoomEr
 /// Returns `true` if a non-empty API key is configured. Does not return the key.
 #[tauri::command]
 pub fn has_api_key(state: State<'_, AppState>) -> Result<bool, LoomError> {
-    let guard = state
-        .api_key
-        .lock()
-        .map_err(|_| LoomError::Internal("mutex poisoned".into()))?;
-    Ok(guard.as_deref().is_some_and(|s| !s.is_empty()))
+    // `with_api_key` errors when no key is set; we want the boolean form.
+    access::with_api_key(&state, |k| Ok(!k.is_empty())).or_else(|e| match e {
+        LoomError::Validation { .. } => Ok(false),
+        other => Err(other),
+    })
 }

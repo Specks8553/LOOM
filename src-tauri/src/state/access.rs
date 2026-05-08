@@ -15,8 +15,10 @@
 
 use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 use crate::error::{LoomError, ValidationKind};
+use crate::AppPhase;
 
 use super::AppState;
 
@@ -103,6 +105,65 @@ pub fn with_two_conns<T>(
         .as_ref()
         .ok_or_else(|| missing("active_conn", "no world is open"))?;
     f(settings, active)
+}
+
+/// Replace the master key, zeroing the previous value if present.
+///
+/// Pass `None` to clear (e.g. on lock). Pass `Some(new)` to install a freshly
+/// derived key. Callers are responsible for zeroing their own stack copy of
+/// `new` after this returns.
+pub fn replace_master_key(state: &AppState, new: Option<[u8; 32]>) -> Result<(), LoomError> {
+    let mut guard = state.master_key.lock().map_err(poison)?;
+    if let Some(ref mut old) = *guard {
+        old.zeroize();
+    }
+    *guard = new;
+    Ok(())
+}
+
+/// Replace the API key, zeroing the previous value if present.
+pub fn replace_api_key(state: &AppState, new: Option<String>) -> Result<(), LoomError> {
+    let mut guard = state.api_key.lock().map_err(poison)?;
+    if let Some(ref mut old) = *guard {
+        old.zeroize();
+    }
+    *guard = new;
+    Ok(())
+}
+
+/// Replace the app-settings DB connection. Drops (and thereby closes) the prior
+/// connection if any.
+pub fn replace_settings_conn(state: &AppState, new: Option<Connection>) -> Result<(), LoomError> {
+    let mut guard = state.settings_conn.lock().map_err(poison)?;
+    *guard = new;
+    Ok(())
+}
+
+/// Replace the active world DB connection. Drops the prior connection if any.
+pub fn replace_active_conn(state: &AppState, new: Option<Connection>) -> Result<(), LoomError> {
+    let mut guard = state.active_conn.lock().map_err(poison)?;
+    *guard = new;
+    Ok(())
+}
+
+/// Replace the active world id.
+pub fn replace_active_world_id(state: &AppState, new: Option<String>) -> Result<(), LoomError> {
+    let mut guard = state.active_world_id.lock().map_err(poison)?;
+    *guard = new;
+    Ok(())
+}
+
+/// Read the current app phase.
+pub fn read_app_phase(state: &AppState) -> Result<AppPhase, LoomError> {
+    let guard = state.app_phase.lock().map_err(poison)?;
+    Ok(*guard)
+}
+
+/// Set the app phase.
+pub fn set_app_phase(state: &AppState, phase: AppPhase) -> Result<(), LoomError> {
+    let mut guard = state.app_phase.lock().map_err(poison)?;
+    *guard = phase;
+    Ok(())
 }
 
 /// Install a fresh cancellation token, returning a clone for the worker.

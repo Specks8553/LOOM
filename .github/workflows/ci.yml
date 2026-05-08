@@ -34,6 +34,20 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --all --check
 
+      - name: SB-5 grep gate (raw .lock() forbidden outside state/access.rs)
+        working-directory: src-tauri
+        run: |
+          # Doc 24 §AppState Access: `state\.\w+_(?:conn|key|tx)\.lock\(\)` — extended
+          # here to include `_id` and `app_phase` since helpers exist for those too.
+          if grep -rnE 'state\.(master_key|api_key|settings_conn|active_conn|active_world_id|cancel_tx|app_phase)\.lock\(\)' \
+              --include='*.rs' \
+              --exclude-dir=target \
+              src/ \
+              | grep -v '^src/state/access.rs:'; then
+            echo "::error::SB-5 violation: raw .lock() on AppState fields outside state/access.rs. Use the with_*/replace_* helpers."
+            exit 1
+          fi
+
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings

@@ -145,7 +145,7 @@
 2. AES-256-GCM sentinel encrypt/decrypt in `security/sentinel.rs`.
 3. Atomic `app_config.json` writes via `.tmp` + rename.
 4. `app_settings.db` (separate from any world DB) provisioned per D-03-A.
-5. Tauri commands: `setup_password`, `unlock_app`, `lock_app`, `change_password` per Doc 07 §auth.
+5. Tauri commands: `setup_vault`, `unlock_vault`, `lock_vault`, `change_password` per Doc 07 §auth.
 6. Frontend: onboarding flow (3-step wizard per Doc 13); lock screen; auto-lock timer wired against `app_settings`.
 7. Master-key zeroing (`zeroize`) on lock and process exit.
 
