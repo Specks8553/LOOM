@@ -170,6 +170,14 @@ pub fn unlock_vault(
 pub fn lock_vault(state: State<'_, AppState>) -> Result<(), LoomError> {
     info!("lock_vault: zeroing secrets");
 
+    // Signal any in-flight generation so its task observes cancellation
+    // before its DB writes start failing on a closed connection.
+    // The partial AI text written before the cancel arrives is preserved
+    // (Doc 15 §Cancellation Taxonomy: "Vault locked mid-stream → Both
+    // preserved (partial AI)"). Subsequent writes after the connection is
+    // dropped silently fail and are swallowed by the streaming task.
+    let _ = access::cancel_current(&state);
+
     access::replace_master_key(&state, None)?;
     access::replace_api_key(&state, None)?;
     access::replace_settings_conn(&state, None)?;

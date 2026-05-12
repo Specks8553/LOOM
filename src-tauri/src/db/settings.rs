@@ -71,6 +71,46 @@ pub fn set_app_setting(
     Ok(())
 }
 
+/// Read a world-level override from the world DB's `settings` table. Returns
+/// `None` when no override exists; the cascade resolver
+/// (`services/settings.rs::resolve`) then falls back to `app_settings`.
+pub fn get_world_setting(
+    conn: &Connection,
+    key: AppSettingKey,
+) -> Result<Option<String>, LoomError> {
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(raw)
+}
+
+/// Write a world-level override (UPSERT). Pass an empty string to leave the
+/// override in place but blank — to remove an override entirely use
+/// `clear_world_setting`.
+pub fn set_world_setting(
+    conn: &Connection,
+    key: AppSettingKey,
+    value: &str,
+) -> Result<(), LoomError> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key.as_str(), value],
+    )?;
+    Ok(())
+}
+
+/// Remove a world-level override so the cascade falls through to
+/// `app_settings`.
+pub fn clear_world_setting(conn: &Connection, key: AppSettingKey) -> Result<(), LoomError> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", params![key.as_str()])?;
+    Ok(())
+}
+
 /// Read a per-story state value, falling back to the key's `default_value()`.
 pub fn get_story_state<T: FromSettingValue>(
     conn: &Connection,

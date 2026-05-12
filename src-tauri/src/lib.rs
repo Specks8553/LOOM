@@ -29,6 +29,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_phase::get_app_phase,
@@ -45,6 +46,42 @@ pub fn run() {
             commands::vault::open_world,
             commands::vault::delete_world,
             commands::vault::update_world_meta,
+            commands::vault::list_items,
+            commands::vault::create_item,
+            commands::vault::rename_item,
+            commands::vault::move_item,
+            commands::vault::delete_item,
+            commands::vault::restore_item,
+            commands::vault::delete_item_permanent,
+            commands::vault::empty_trash,
+            commands::vault::export_world,
+            commands::vault::import_world,
+            commands::conversation::load_messages,
+            commands::conversation::load_story_messages,
+            commands::conversation::send_message,
+            commands::conversation::cancel_generation,
+            commands::conversation::edit_user_message,
+            commands::conversation::update_message_content,
+            commands::conversation::regenerate_last_response,
+            commands::conversation::delete_exchange,
+            commands::conversation::delete_from,
+            commands::conversation::update_feedback,
+            commands::conversation::get_token_count,
+            commands::conversation::get_draft,
+            commands::conversation::save_draft,
+            commands::conversation::clear_draft,
+            commands::modes::list_sessions,
+            commands::modes::start_handover_session,
+            commands::modes::start_consulting_session,
+            commands::modes::enter_session,
+            commands::modes::exit_session,
+            commands::modes::send_session_message,
+            commands::modes::cancel_session_generation,
+            commands::modes::rename_session,
+            commands::modes::delete_session,
+            commands::modes::set_session_collapsed,
+            commands::modes::get_story_active_mode,
+            commands::modes::set_story_active_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

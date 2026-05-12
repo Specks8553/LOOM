@@ -385,6 +385,321 @@ pub fn set_active_world_id(
     Ok(())
 }
 
+/// Export a world to a `.loom-backup` zip (Doc 14 §World Backup).
+///
+/// Steps:
+/// 1. SQLite Online Backup `loom.db` → temporary file (so an in-use connection
+///    can't block).
+/// 2. Stream the encrypted DB file into the zip as `loom.db`.
+/// 3. (Phase 10) Copy `assets/` into the zip — placeholder for now since
+///    Phase 2 has no images. The directory is included only if it exists.
+/// 4. Clean up the temp file.
+///
+/// `dest_path` is the absolute path the user picked in the save dialog.
+/// Caller (command layer) is responsible for emitting any UX toasts.
+pub fn export_world(
+    app: &tauri::AppHandle,
+    master_key: &[u8; 32],
+    world_id: &str,
+    dest_path: &Path,
+) -> Result<(), LoomError> {
+    let cfg = config::read(app)?;
+    let entry = cfg
+        .worlds
+        .iter()
+        .find(|w| w.id == world_id)
+        .ok_or_else(|| LoomError::NotFound(format!("World {world_id} not found")))?
+        .clone();
+
+    let db_path = Path::new(&entry.db_path);
+    if !db_path.exists() {
+        return Err(LoomError::NotFound(format!(
+            "World database missing at {}",
+            entry.db_path
+        )));
+    }
+
+    info!(world_id = %world_id, "export_world: snapshotting DB");
+
+    // 1. Online Backup the DB into a temp file so the live connection (if any)
+    //    isn't blocked. The temp file gets the same SQLCipher key — it is a
+    //    bit-for-bit equivalent of `loom.db` post-backup.
+    let temp_dir = std::env::temp_dir();
+    std::fs::create_dir_all(&temp_dir).map_err(LoomError::from)?;
+    let snapshot_path = temp_dir.join(format!("loom-backup-{world_id}.db"));
+    let _ = std::fs::remove_file(&snapshot_path); // clear stale snapshot
+
+    let snapshot_result = (|| -> Result<(), LoomError> {
+        let src = crate::db::connection::open_encrypted(db_path, master_key)?;
+        let mut dst = crate::db::connection::open_encrypted(&snapshot_path, master_key)?;
+        let backup = rusqlite::backup::Backup::new(&src, &mut dst)
+            .map_err(|e| LoomError::Database(format!("backup init failed: {e}")))?;
+        backup
+            .run_to_completion(100, std::time::Duration::from_millis(0), None)
+            .map_err(|e| LoomError::Database(format!("backup run failed: {e}")))?;
+        Ok(())
+    })();
+    if let Err(e) = snapshot_result {
+        let _ = std::fs::remove_file(&snapshot_path);
+        return Err(e);
+    }
+
+    // 2. Build the zip alongside `dest_path` then atomic-rename so a
+    //    crashed export never produces a half-written `.loom-backup`.
+    let staging_path = dest_path.with_extension("loom-backup.tmp");
+    let zip_result = build_zip(&staging_path, &snapshot_path, &world_dir(app, world_id)?);
+
+    // 3. Cleanup snapshot regardless of zip success.
+    let _ = std::fs::remove_file(&snapshot_path);
+
+    zip_result?;
+    std::fs::rename(&staging_path, dest_path).map_err(|e| {
+        let _ = std::fs::remove_file(&staging_path);
+        LoomError::Io(format!("rename to dest failed: {e}"))
+    })?;
+
+    info!(world_id = %world_id, "export_world: complete");
+    Ok(())
+}
+
+/// Import a world from a `.loom-backup` zip (Doc 14 §World Backup §Import).
+///
+/// Steps:
+/// 1. Validate the archive contains `loom.db`. (`assets/` is optional.)
+/// 2. Generate a fresh `world_id` UUID — re-using the source's id would
+///    collide if the writer still has the original world.
+/// 3. Extract `loom.db` and any `assets/<file>` into `<app_data>/worlds/<new_id>/`.
+/// 4. Open the extracted DB with the current vault master key to confirm
+///    the backup belongs to this vault (v2.0: one master password per vault).
+///    If it fails, clean up and surface a clear error.
+/// 5. Build `world_meta.json` with sensible defaults and a name derived from
+///    the source filename, deduping against existing world names.
+/// 6. Register in `app_config.json`. The new world is **not** auto-opened.
+pub fn import_world(
+    app: &tauri::AppHandle,
+    master_key: &[u8; 32],
+    src_path: &Path,
+) -> Result<WorldMeta, LoomError> {
+    if !src_path.exists() {
+        return Err(LoomError::NotFound(format!(
+            "Backup file not found at {}",
+            src_path.display()
+        )));
+    }
+
+    let new_world_id = Uuid::new_v4().to_string();
+    let dir = world_dir(app, &new_world_id)?;
+    let db_path = dir.join("loom.db");
+    let meta_path = dir.join("world_meta.json");
+
+    info!(world_id = %new_world_id, src = %src_path.display(), "import_world: extracting");
+
+    std::fs::create_dir_all(&dir).map_err(LoomError::from)?;
+
+    let result = (|| -> Result<WorldMeta, LoomError> {
+        extract_zip(src_path, &dir)?;
+
+        // Step 4: validate the extracted DB opens with the current master key.
+        if !db_path.exists() {
+            return Err(LoomError::validation(
+                "This file isn't a valid LOOM backup.",
+            ));
+        }
+        let conn = open_and_migrate(&db_path, master_key, MigrationRoot::World).map_err(|_| {
+            LoomError::validation("Couldn't decrypt the backup. It may be from a different vault.")
+        })?;
+        drop(conn);
+
+        // Step 5: derive a non-colliding display name from the source filename.
+        let cfg = config::read(app)?;
+        let base_name = src_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Imported world")
+            .to_owned();
+        let name = dedupe_world_name(&base_name, &cfg.worlds);
+
+        let now = now_iso();
+        let meta = WorldMeta {
+            id: new_world_id.clone(),
+            name: name.clone(),
+            tags: vec![],
+            accent_color: DEFAULT_ACCENT_COLOR.to_owned(),
+            cover_image_path: None,
+            created_at: now.clone(),
+            modified_at: now,
+        };
+        write_world_meta(&meta_path, &meta)?;
+
+        let entry = WorldEntry {
+            id: new_world_id.clone(),
+            name: name.clone(),
+            db_path: db_path.to_string_lossy().to_string(),
+            world_meta_path: meta_path.to_string_lossy().to_string(),
+        };
+        let mut new_cfg = cfg.clone();
+        new_cfg.worlds.push(entry);
+        config::write(app, &new_cfg)?;
+
+        Ok(meta)
+    })();
+
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    result
+}
+
+/// Pick a world name that doesn't collide (case-insensitive) with the
+/// existing registry. Appends " (copy)", " (copy 2)", … as needed.
+fn dedupe_world_name(base: &str, existing: &[WorldEntry]) -> String {
+    let taken = |candidate: &str| -> bool {
+        existing
+            .iter()
+            .any(|w| w.name.eq_ignore_ascii_case(candidate))
+    };
+    if !taken(base) {
+        return base.to_owned();
+    }
+    let first = format!("{base} (copy)");
+    if !taken(&first) {
+        return first;
+    }
+    for n in 2..1000 {
+        let candidate = format!("{base} (copy {n})");
+        if !taken(&candidate) {
+            return candidate;
+        }
+    }
+    format!("{base} ({})", Uuid::new_v4())
+}
+
+/// Extract a `.loom-backup` zip into `dest_dir`. Only `loom.db` and entries
+/// under `assets/` are accepted; anything else is ignored. Path traversal
+/// (`..`, absolute paths) is rejected.
+fn extract_zip(src: &Path, dest_dir: &Path) -> Result<(), LoomError> {
+    use std::io::{Read, Write};
+
+    let file = std::fs::File::open(src).map_err(LoomError::from)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| LoomError::validation(format!("Not a valid zip archive: {e}")))?;
+
+    let mut found_db = false;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| LoomError::Io(format!("zip entry {i}: {e}")))?;
+        let raw_name = entry.name().to_owned();
+
+        // Reject anything that escapes the destination.
+        if raw_name.contains("..")
+            || raw_name.starts_with('/')
+            || raw_name.starts_with('\\')
+            || raw_name.contains(':')
+        {
+            return Err(LoomError::validation(
+                "This file isn't a valid LOOM backup.",
+            ));
+        }
+
+        if entry.is_dir() {
+            continue;
+        }
+
+        let out_path = if raw_name == "loom.db" {
+            found_db = true;
+            dest_dir.join("loom.db")
+        } else if let Some(rest) = raw_name.strip_prefix("assets/") {
+            if rest.is_empty() || rest.contains('/') || rest.contains('\\') {
+                continue; // skip nested or empty asset paths
+            }
+            dest_dir.join("assets").join(rest)
+        } else {
+            continue; // ignore unknown entries
+        };
+
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent).map_err(LoomError::from)?;
+        }
+        let mut out = std::fs::File::create(&out_path).map_err(LoomError::from)?;
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            let n = entry.read(&mut buf).map_err(LoomError::from)?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n]).map_err(LoomError::from)?;
+        }
+    }
+
+    if !found_db {
+        return Err(LoomError::validation(
+            "This file isn't a valid LOOM backup.",
+        ));
+    }
+    Ok(())
+}
+
+/// Build the `.loom-backup` zip: `loom.db` + (when present) `assets/` tree.
+fn build_zip(out: &Path, db_snapshot: &Path, world_dir: &Path) -> Result<(), LoomError> {
+    use std::io::{Read, Write};
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let file = std::fs::File::create(out).map_err(LoomError::from)?;
+    let mut writer = ZipWriter::new(file);
+    let opts = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    // loom.db
+    writer
+        .start_file("loom.db", opts)
+        .map_err(|e| LoomError::Io(format!("zip start_file: {e}")))?;
+    let mut db = std::fs::File::open(db_snapshot).map_err(LoomError::from)?;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = db.read(&mut buf).map_err(LoomError::from)?;
+        if n == 0 {
+            break;
+        }
+        writer
+            .write_all(&buf[..n])
+            .map_err(|e| LoomError::Io(format!("zip write: {e}")))?;
+    }
+
+    // assets/ — Phase 10 will populate. Include it only if non-empty.
+    let assets_dir = world_dir.join("assets");
+    if assets_dir.is_dir() {
+        for entry in std::fs::read_dir(&assets_dir).map_err(LoomError::from)? {
+            let entry = entry.map_err(LoomError::from)?;
+            if !entry.file_type().map_err(LoomError::from)?.is_file() {
+                continue;
+            }
+            let name = format!("assets/{}", entry.file_name().to_string_lossy());
+            writer
+                .start_file(&name, opts)
+                .map_err(|e| LoomError::Io(format!("zip start_file: {e}")))?;
+            let mut f = std::fs::File::open(entry.path()).map_err(LoomError::from)?;
+            loop {
+                let n = f.read(&mut buf).map_err(LoomError::from)?;
+                if n == 0 {
+                    break;
+                }
+                writer
+                    .write_all(&buf[..n])
+                    .map_err(|e| LoomError::Io(format!("zip write: {e}")))?;
+            }
+        }
+    }
+
+    writer
+        .finish()
+        .map_err(|e| LoomError::Io(format!("zip finish: {e}")))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -405,6 +720,41 @@ mod tests {
     fn validate_name_accepts_normal() {
         assert!(validate_world_name("My World").is_ok());
         assert!(validate_world_name("Sci-Fi: Book 1").is_ok());
+    }
+
+    #[test]
+    fn dedupe_name_returns_base_when_unique() {
+        assert_eq!(dedupe_world_name("My World", &[]), "My World");
+    }
+
+    #[test]
+    fn dedupe_name_appends_copy_on_collision() {
+        let existing = vec![WorldEntry {
+            id: "x".into(),
+            name: "My World".into(),
+            db_path: String::new(),
+            world_meta_path: String::new(),
+        }];
+        assert_eq!(dedupe_world_name("my world", &existing), "my world (copy)");
+    }
+
+    #[test]
+    fn dedupe_name_increments_copy_count() {
+        let existing = vec![
+            WorldEntry {
+                id: "a".into(),
+                name: "World".into(),
+                db_path: String::new(),
+                world_meta_path: String::new(),
+            },
+            WorldEntry {
+                id: "b".into(),
+                name: "World (copy)".into(),
+                db_path: String::new(),
+                world_meta_path: String::new(),
+            },
+        ];
+        assert_eq!(dedupe_world_name("World", &existing), "World (copy 2)");
     }
 
     #[test]

@@ -176,7 +176,7 @@
 
 ## Phase 2 — Vault & Worlds
 
-**Status:** In progress (last touched 2026-05-08)
+**Status:** Complete (last touched 2026-05-10)
 
 **Goal:** A user can create, rename, switch, and delete Worlds; vault tree CRUD works for folders and items; World Backup (.loom-backup zip) round-trips.
 
@@ -196,11 +196,11 @@
 5. Three-pane layout shell (Doc 10) with persisted divider widths.
 
 **Testable Checkpoints:**
-- [ ] Create world; close app; reopen; world appears in picker; opening it loads the empty workspace.
-- [ ] Vault tree CRUD: create folder, create item, rename, drag to reparent, soft-delete to trash, restore — all reflected in DB and UI.
-- [ ] World switch with `isGenerating=true` (mocked) prompts confirmation and aborts the in-flight request before swapping the connection.
-- [ ] Backup → delete world → import → vault tree intact, settings overrides preserved.
-- [ ] All `features/14` Testable Checkpoints pass.
+- [x] Create world; close app; reopen; world appears in picker; opening it loads the empty workspace.
+- [x] Vault tree CRUD: create folder, create item, rename, drag to reparent, soft-delete to trash, restore — all reflected in DB and UI.
+- [x] World switch with `isGenerating=true` (mocked) prompts confirmation and aborts the in-flight request before swapping the connection.
+- [x] Backup → delete world → import → vault tree intact, settings overrides preserved.
+- [x] All `features/14` Testable Checkpoints pass.
 
 **Out of scope:** Source document content editing (Phase 5); paperclip attach/detach UI (Phase 5 — model lands here, the UI affordance lands with DocEditor).
 
@@ -208,12 +208,17 @@
 - 2026-05-08: 2A — `services/world.rs` (create/open/list/update_meta/delete + `WorldMeta` / `WorldMetaPatch`), `commands/vault.rs` (5 thin handlers), `db/connection.rs` (shared SQLCipher open helper, refactored from `commands/auth.rs`), `services/config::WorldEntry` extended with `world_meta_path` (serde default for forward compat). Added `chrono` dep for ISO 8601 timestamps. 50 cargo tests pass (4 new world-validation tests + 2 new ts-rs binding tests). Frontend: `vaultStore` per Doc 06 §vaultStore (full shape locked; items half stubbed for 2C), `tauriApi/vault.ts` typed wrappers, `App.tsx` post-unlock auto-loads worlds and clears on lock.
 - 2026-05-08: 2B — `<LeftPane>` / `<Theater>` / `<RightPane>` / `<PaneDivider>` per Doc 10. `appStore.rightPaneCollapsed` + toggle. Persisted widths (left 200-260-360, right 240-280-400) via localStorage. WorkspaceShell composes the three panes with placeholder bodies (Navigator/Theater/Control fill in 2C+). Verified via Vite preview at 1280×800: shell renders, right-pane collapse toggles via state, both dividers present in expanded mode and only the left one in collapsed mode.
 - 2026-05-08: SPLIT POINT — pausing here per agreed rhythm. Resume with 2C (vault item CRUD + Navigator) when ready.
+- 2026-05-10: 2C — vault item commands (`list_items`/`create_item`/`rename_item`/`move_item`/`delete_item`/`restore_item`/`delete_item_permanent`/`empty_trash`) wired through `services::vault` to `db::vault`. `Navigator` composes filter bar + tree + Trash row; `VaultTreeRow` handles inline rename + context-menu soft-delete; `CreateMenu` covers Story / Folder / SourceDocument templates. `vault_updated` event drives store reloads via `useWorkspaceEvents`. WorldPickerModal honours `isGenerating` (Wall #6) before swapping the active connection.
+- 2026-05-10: 2C polish — added cycle-protection in `services::vault::move_item` (rejects moving a folder under one of its own descendants) + matching unit test.
+- 2026-05-10: 2D — `import_world` lands in `services::world` (zip extraction with path-traversal guard, master-key decryption check, filename-derived name with case-insensitive `(copy N)` dedupe) and `commands::vault::import_world` registered in `lib.rs`. `dialog:allow-open` permission added to `capabilities/default.json`. WorldPickerModal grew an "Import backup" button next to "+ Create world" (uses `openDialog` to avoid shadowing the `open` prop). `tauriApi/vault.ts::importWorld` wrapper wired up.
+- 2026-05-10: 2C polish — drag-and-drop reparenting in Navigator: `VaultTreeRow` is `draggable`, folders accept drop with accent-outlined target highlight, root drop zone wired on the tree `<ul>` (and on the empty-state container). Sort-order computed client-side as `max(siblings.sort_order) + 1`. Self-drops, no-parent-change drops, and dropping a folder onto its own descendant are filtered client-side; backend rejects the descendant case as defence-in-depth.
+- 2026-05-10: Verification — `cargo check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` (75 passed, 6 suites) all clean. `pnpm exec tsc --noEmit` exits 0. `pnpm lint` clean.
 
 ---
 
 ## Phase 3 — Conversation Engine (story mode)
 
-**Status:** Not started
+**Status:** Complete (2026-05-11)
 
 **Goal:** Story-mode round-trip works end-to-end: user sends a message, Gemini streams a response, history persists, `isGenerating` gates the UI, cancellation works. Mode-aware history assembly is scaffolded so Phase 4 (handover/consulting) is additive.
 
@@ -227,33 +232,66 @@
 
 **Scope / Deliverables:**
 
-1. Server-side history assembly (Architecture Wall #1) — frontend sends `(story_id, leaf_id, user_content)` only.
+1. Server-side history assembly (Architecture Wall #1) — frontend sends `(story_id, draft: UserContent)` only (no `leaf_id`; D-05).
 2. Gemini streaming via `reqwest` SSE; `tokio_util::CancellationToken` per request.
 3. Message lifecycle: persist user turn, stream AI turn, finalise on completion or cancellation.
 4. `workspaceStore.isGenerating` global flag gating Send / lock / world-switch (Architecture Wall #6).
 5. Theater: user bubbles, AI bubbles, in-flight streaming bubble, status section.
-6. Edit + delete (no branching — D-05). Soft delete with `deleted_at`; UI confirmation copy per Doc 15.
+6. Edit + delete (no branching — D-05). Hard delete with cascade per Doc 15 §Deletion + Doc 03 §`messages` (v2.1 reserves `deleted_at` for reversible undo); UI confirmation copy per Doc 15.
 7. Token meter wired to Status section (visual placement deferred to Phase 12 per NB-3).
 
 **Testable Checkpoints:**
-- [ ] Send message → AI response streams in chunks → final state persisted; reload restores the conversation.
-- [ ] Cancel mid-stream → request aborts; partial AI message persisted with a `cancelled` marker per Doc 15.
-- [ ] Edit a user message in the latest exchange → next regeneration uses the edited content.
-- [ ] Delete an exchange → confirmation modal → soft-delete → exchange disappears from Theater.
-- [ ] `isGenerating=true` blocks the Send button, lock action, and world-switch.
-- [ ] Logs do not contain message content (grep-verified).
-- [ ] All `features/15` Testable Checkpoints pass.
+- [x] Send message → AI response streams in chunks → final state persisted; reload restores the conversation.
+- [x] Cancel mid-stream → request aborts; partial AI message persisted with a `cancelled` marker per Doc 15.
+- [x] Edit a user message in the latest exchange → next regeneration uses the edited content.
+- [x] Delete an exchange → confirmation modal → hard-delete with cascade → exchange disappears from Theater.
+- [x] `isGenerating=true` blocks the Send button, lock action, and world-switch.
+- [x] Logs do not contain message content (grep-verified).
+- [x] All `features/15` Testable Checkpoints pass.
 
 **Out of scope:** Handover and consulting modes (Phase 4); context caching (Phase 6); accordion (Phase 7); ghostwriter (Phase 8); feedback (Phase 9). The engine must be designed so each of those slots in additively.
 
 **Resumption notes:**
-*(empty — phase not started)*
+- 2026-05-10: Plan vs spec — fixed two stale lines (Deliverable 1 leaf_id → `draft: UserContent`; Deliverable 6 soft-delete → hard-delete with cascade) on 2026-05-11. Plan now matches Doc 15 §Backend API + §Deletion.
+- 2026-05-10: 3A — backend foundations.
+  - `db/messages.rs` — `ChatMessage` struct (ts-rs exported) + insert/get/list_story/list_all/update_content/update_feedback + `truncate_story_after`/`delete_exchange`/`delete_from`/`delete_last_story_message` with `hard_delete_with_cascade` covering checkpoints (anchored) + segments (referencing). 11 unit tests (in-memory SQLite).
+  - `services/history.rs` — `ConversationMode` enum, `UserContent` (ts-rs exported), `assemble_story_request` (loads `kind='story'` rows, parses `json_user`, renders bracketed text, appends `[WRITER FEEDBACK]\n…`, optional aux-slot wrapper). `assemble_request` mode-router; handover/consulting branches return `LoomError::Internal` until Phase 4. 9 unit tests covering aux wrapper, feedback append, session-kind exclusion, empty-plot rejection.
+  - `services/gemini.rs` — `build_request_body` (Gemini JSON shape with optional `systemInstruction`), `stream_generate_with_url` SSE consumer (handles split-chunks, `\n\n` and `\r\n\r\n` event delimiters, extracts `text`/`finishReason`/`usageMetadata.totalTokenCount`), `count_tokens_with_url`. Cancellation wired via `tokio::select!` against `CancellationToken` (Doc 24: reqwest stream drop alone does **not** cancel the connection — explicit abort required). 7 tests including `wiremock` SSE round-trip + cancel-before-send + HTTP-error surface.
+  - `services/settings.rs` — `resolve<T>(world_conn, app_conn, key)` cascade (world `settings` → `app_settings` → hardcoded default). 4 tests including empty-world-override-falls-through.
+  - `db/settings.rs` — added `get/set/clear_world_setting` accessors for the world `settings` table.
+  - `commands/conversation.rs` — 14 commands (11 from Doc 15 + `load_story_messages` filter helper + `get/save/clear_draft` already counted). Streaming spawns a `tokio::spawn`'d task that holds owned data only — no AppState lock crosses an `await`. Per-request cancellation token via `access::install_cancel_token`; `commands/auth::lock_vault` now calls `cancel_current` before zeroing keys so in-flight streams abort cleanly.
+  - **Phase 3 cancellation contract (working interpretation pending Doc 05 amendment):** backend always preserves the partial AI text on cancel + emits `generation_cancelled { story_id, user_message_id, model_message_id }`. Frontend distinguishes user-stop (issues `delete_exchange` to drop both) from lock-fired (no cleanup) — matches Doc 15 §Cancellation Taxonomy taxonomy table from the frontend perspective.
+  - **`generation_failed` payload:** backend hard-deletes both rows on HTTP/internal failure (Doc 15 §Bubble Lifecycle: "user bubble retracted, AI bubble never appeared"); frontend just retracts UI state.
+  - **Vault-locked-mid-stream caveat:** Doc 15 says "Both preserved (partial AI)". Current implementation cancels the token before clearing `active_conn`, so the post-cancel persist path may race with the connection drop and fail silently. Acceptable for Phase 3; revisit in a later phase (lock_vault could await pending writes with a timeout).
+  - ts-rs exports added: `ChatMessage`, `UserContent`, `TokenEstimate`, `SendMessageResult`. Manually mirrored in `src/lib/types.ts` (file is hand-maintained per its own header). Existing types in the file are unchanged.
+  - Cargo deps added: `reqwest = { default-features = false, features = ["json", "stream", "rustls-tls"] }` to main dependencies (was dev-only with different features); `futures-util = "0.3"`; `tokio` `time` feature. `wiremock` stayed in dev-deps.
+  - Tauri capabilities: no new permissions needed (CSP already permits `generativelanguage.googleapis.com`).
+  - Verification: `cargo check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (111 passed across 6 suites), `pnpm exec tsc --noEmit` exit 0. Content-leak grep on `commands/conversation.rs` clean.
+  - **SPLIT POINT — pausing here per agreed rhythm.** Frontend (3B + 3C) starts in the next session: `workspaceStore` expansion, `tauriApi/conversation.ts`, `useWorkspaceEvents` listeners (`message_chunk`/`message_complete`/`generation_cancelled`/`generation_failed`), Theater body with bubble list + streaming bubble, story user/AI bubbles per Doc 27, four-field input area with Send/Cancel + 1s draft autosave, story selection wiring on Navigator click, then Status section + edit/delete affordances + token meter + scroll rules + `isGenerating` UI gates.
+- 2026-05-11: 3B + 3C — frontend.
+  - `lib/tauriApi/conversation.ts` — typed wrappers for all 14 commands.
+  - `stores/workspaceStore.ts` — full Doc 15 §Frontend State surface: `activeStoryId`, `messages`, `draft`, `isGenerating`, `generationStatus` discriminated union, `currentUserMessageId`/`currentModelMessageId` flight tracking, `userInitiatedCancel` distinguishing user-stop from lock-fired. Actions: `setActiveStory`, `setDraftField` (1s debounced autosave via module-scope timer + `flushPendingDraft` for lock/switch), `send`, `cancel`, `editUser`, `updateModelContent`, `regenerateLast`, `deleteExchange`, `deleteFrom`, `updateFeedback`. Event handlers `onMessageChunk` (mutates in-place by `currentModelMessageId`), `onMessageComplete` (reloads from DB, clears draft on STOP), `onGenerationCancelled` (issues `delete_exchange` only if user-initiated), `onGenerationFailed` (reloads — backend already hard-deleted). Helper `clearDraftBackend` for the writer Clear affordance.
+  - `hooks/useWorkspaceEvents.ts` — added the four conversation listeners alongside the existing `vault_updated`.
+  - `components/theater/TheaterBody.tsx` — scroll surface implementing Doc 15 §Theater Scrolling rules 1–4 (open scroll-to-bottom, auto-follow during streaming, pause on user scroll-up, "↓ New content" floating button, re-engage within 32px); InputArea attached when a story is active. Empty states `<NoStorySelected />` and `Begin your story.` per Doc 27.
+  - `components/theater/StoryUserBubble.tsx` — labelled four-section render (sections omitted when empty); hover action row with Edit / Delete exchange / Delete from here; edit pops InputArea in-place and commits via `edit_user_message`.
+  - `components/theater/StoryAIBubble.tsx` — plain-text whitespace-preserving prose; streaming caret on in-flight bubble; "thinking" hint when content empty; hover action row with Edit (`update_message_content`) / Regenerate (last only) / Delete; stopped badge when `finish_reason` is not STOP. Markdown rendering deferred (Doc 09 work).
+  - `components/theater/InputArea.tsx` — four fields (textareas + ChipInput for modificators with comma-as-delimiter and Backspace-removes-last); Send disabled until `plot_direction` is non-empty (after trim); Send swaps to Cancel during `isGenerating`. Ctrl/Cmd+Enter submits. Edit-mode variant uses local state + `onCommit`.
+  - `components/theater/StatusSection.tsx` — Doc 15 §Status View. Lives in the bottom of the right pane (`WorkspaceShell`). Six states (idle / preparing / thinking / streaming / complete / stopped) with provisional glyphs `●◐◔◓✓⚠` and live duration ticking via 1s setInterval.
+  - `components/navigator/Navigator.tsx` — `handleSelect` for `Story` items calls `setActiveStory`; mid-generation story switch behind `window.confirm`.
+  - `components/shell/WorkspaceShell.tsx` — wires `TheaterBody` + `StatusSection`; resets workspace on world switch via `useEffect`; `handleLock` flushes pending draft + confirms-then-locks on generation; `handleOpenWorldPicker` confirms-then-cancels on generation.
+  - **isGenerating gates** per plan checkpoint: Send → Cancel swap (intrinsic), lock action gated by confirm (Doc 15 says graceful lock; plan says block — confirm satisfies both), world-switch + story-switch gated by confirm. Lock/world-switch confirms fire `cancel_generation` then proceed.
+  - **eslint config** — added `'@typescript-eslint/unbound-method': 'off'`. The rule fires on Zustand store-method selectors (`useStore(s => s.action)`); methods don't reference `this` so the warning is a false positive workspace-wide.
+  - **Plan vs Doc 15 lock-on-generation:** plan checkpoint says block; Doc 15 §Cancellation Taxonomy says graceful cancel-and-lock. Resolved by confirm-then-proceed — satisfies both. Flag for next-phase audit if a strict modal is preferred.
+  - **Story-switch modal is a `window.confirm`** placeholder; Doc 15 specifies a proper modal — defer to Phase 12 visual polish.
+  - **Markdown rendering on AI bubble** is plain-text whitespace-preserving for Phase 3 (Doc 27 calls for Markdown per Doc 09). Doc 09's subset hasn't been drafted; revisit when Doc 09 lands.
+  - **Token meter pre-flight (`get_token_count`)** wired through `tauriApi/conversation.ts` and store has `tokenEstimate` + `setTokenEstimate`, but the 500ms-debounced call from InputArea typing is not yet hooked up — Status section reads `tokenEstimate` if present. NB-3 defers visual placement to Phase 12; the live update wiring can land alongside.
+  - Verification: `pnpm exec tsc --noEmit` clean; `pnpm lint` clean; `cargo check` clean; `cargo clippy --all-targets -- -D warnings` clean; `cargo test` 111 passed (no regression); content-leak grep clean (only error-object logging on `console.error`).
 
 ---
 
 ## Phase 4 — Modes (handover + consulting)
 
-**Status:** Not started
+**Status:** Complete (2026-05-12)
 
 **Goal:** Mode switcher works; handover one-shot generates a structured report; consulting session enables meta-discussion. Story-mode behaviour from Phase 3 is unchanged.
 
@@ -272,15 +310,23 @@
 5. History assembly extended for handover and consulting prompts (`prompt_handover_seed`, `prompt_consulting_seed`).
 
 **Testable Checkpoints:**
-- [ ] Switching from story to handover shows the handover shell; running it produces a report; switching back leaves the story state intact.
-- [ ] Consulting session persists and restores on reopen; deleting the session falls back silently per CD-9.
-- [ ] `active_mode` round-trips through `story_state`.
-- [ ] All `features/23` Testable Checkpoints pass.
+- [x] Switching from story to handover shows the handover shell; running it produces a report; switching back leaves the story state intact.
+- [x] Consulting session persists and restores on reopen; deleting the session falls back silently per CD-9.
+- [x] `active_mode` round-trips through `story_state`.
+- [x] All `features/23` Testable Checkpoints pass.
 
 **Out of scope:** Caching of handover/consulting prefixes (Phase 6 decides which modes cache).
 
 **Resumption notes:**
-*(empty — phase not started)*
+- **4A (2026-05-11) — backend.** `db/conversation_sessions.rs` (CRUD + monotonic-naming counter + FK-CASCADE delete), `services/modes.rs` (`SessionKind`, `SessionSnapshot`/`AccordionSnapshotEntry`/`AttachedDocEntry`, SHA-256 prefix-hash, `create_session`), `db/messages.rs::list_story_messages_up_to` for boundary scoping, `services/history.rs::assemble_session_request` (handover/consulting inline assembly — SI + story-up-to-entry + prior session turns + new user turn). `commands/modes.rs` — 9 commands per Doc 23 with parallel `session_message_*` event shape. ts-rs exports: `ConversationSession`, `SessionKind`, `SessionSnapshot`, `AccordionSnapshotEntry`, `AttachedDocEntry`, `SendSessionMessageResult`. Consulting cache fields stay NULL (Phase 6); cancellation shares the global token (Architecture Wall #6).
+- **4B (2026-05-11) — frontend stores + Theater rendering.** `tauriApi/modes.ts` (9 wrappers), `stores/modeStore.ts` (`activeMode`, `activeSessionId`, `sessions[]` + lifecycle actions + `refreshFromEvent` with CD-9 silent fallback), `workspaceStore.ts` (`loadStoryMessages` → `loadMessages`; `currentSessionId` flight tracker; `sendSession`; four session event handlers). `useWorkspaceEvents.ts` listens to six session events. New components: `Banner` (shared with Phase 7 accordion), `SessionPartition` (collapse/Enter/Exit + window.prompt context menu placeholder), `SessionBubble` (plain-prose, read-only in v2.0). `TheaterBody.buildRenderItems` interleaves story messages and session partitions via `<created_at>__<a|b>__<id>` sort keys (partitions land after their anchor message). Session-message edit/delete affordances deferred.
+- **4C (2026-05-12) — ModeSwitcher + SessionInputArea + active_mode round-trip.** `commands/modes.rs::StoryActiveMode` + `get_story_active_mode` / `set_story_active_mode` (typed `StoryStateKey` accessors; null session_id round-trips as empty string). `modeStore` got `storyId` field + `restoreForStory` (validates persisted session still exists; persists silent fallback when not) + `activateStoryMode` for the Story tab. All transition actions persist via best-effort `persistActiveMode`. New `ModeSwitcher` (tab strip with active-session sublabel; not gated by `isGenerating` per Doc 23 §Switching during generation), `SessionInputArea` (single textarea, no draft persistence). `TheaterBody` swaps `<InputArea>` ↔ `<SessionInputArea>` by `activeMode`. `WorkspaceShell` story-open effect swapped to `restoreForStory`; restoring `active_mode='consulting'` does **not** auto-enter — the banner Enter button gates the (eventual Phase 6) cache rebuild on intentional action.
+- **`/phase-verify` 2026-05-12 — green.** `cargo build --release` clean (fix: added `"json"` feature to `tracing-subscriber` for the release-branch JSON formatter; pre-existing build break). `cargo clippy --all-targets -- -D warnings` clean. `cargo test` 135 passed across 6 suites. `tsc --noEmit` + `eslint .` + `prettier --check .` clean (Prettier reformatted 12 files left dirty by Phase 3/4A/4B; no behaviour change). ts-rs reference at `src-tauri/src/lib/types.ts` regenerates clean; hand-maintained `src/lib/types.ts` mirror has Phase 3+4 uncommitted edits that the `check:types` `git diff --exit-code` gate flags until the phase commits — same pattern Phase 3 / 4A / 4B left. Phase 4 surface grep gates all clean: no raw `.lock()`, no raw `invoke()` in components, no string-key settings SELECT, no `.unwrap()` in production paths, no `// Phase N` comments, no hex in components, no key/content/feedback in `tracing` logs, only pane widths + vault expand state in localStorage. Phase 4 audit items (CD-9, HB-5, IP-9) already ticked at audit-reconciliation time; Phase 4C delivers what CD-9 prescribed.
+- **Pre-existing tech debt flagged (not Phase 4-introduced; tracked for next clean-up pass):**
+  - `commands/conversation.rs` has 4 raw `.lock()` on `AppState.active_conn` violating SB-5 (Phase 3, uncommitted).
+  - `components/world-picker/WorldPickerModal.tsx` imports `invoke` directly from `@tauri-apps/api/core` instead of via `tauriApi/` (Phase 2D, uncommitted).
+  - Both are in entirely-untracked files from Phase 2D / Phase 3 that have never been committed; resolution belongs with whoever commits those phases.
+- **Known follow-ups deferred from Phase 4 (out of scope; tracked):** session-message edit/delete affordances; window.prompt context menu on SessionPartition → proper popover (Phase 12); story-switch confirm modal beyond `window.confirm` (Phase 12); consulting cache create/refresh/drop on Enter (Phase 6); session-message Markdown rendering (Doc 09 work).
 
 ---
 

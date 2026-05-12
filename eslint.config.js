@@ -60,6 +60,10 @@ export default tseslint.config(
       // Doc 24 §General — typescript discipline.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
+      // Zustand store-method selectors (`useStore(s => s.action)`) trip this
+      // rule, but the methods are pure functions that don't reference `this`
+      // — the warning is a false positive across the workspace.
+      '@typescript-eslint/unbound-method': 'off',
 
       // Imports.
       'import/order': [

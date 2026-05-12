@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { LeftPane } from '@/components/layout/LeftPane';
 import { PaneDivider } from '@/components/layout/PaneDivider';
 import { RightPane } from '@/components/layout/RightPane';
 import { Theater } from '@/components/layout/Theater';
+import { Navigator } from '@/components/navigator/Navigator';
+import { StatusSection } from '@/components/theater/StatusSection';
+import { TheaterBody } from '@/components/theater/TheaterBody';
+import { WorldPickerModal } from '@/components/world-picker/WorldPickerModal';
+import { useWorkspaceEvents } from '@/hooks/useWorkspaceEvents';
 import { lockVault } from '@/lib/tauriApi/auth';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useModeStore } from '@/stores/modeStore';
 import { useVaultStore } from '@/stores/vaultStore';
+import { flushPendingDraft, useWorkspaceStore } from '@/stores/workspaceStore';
 
 // Doc 10 §Pane Sizing Rules.
 const LEFT_DEFAULT = 260;
@@ -41,9 +48,8 @@ function writeWidth(key: string, width: number): void {
 }
 
 /**
- * Three-pane workspace shell (Doc 10). Phase 2B lands the layout primitives;
- * pane content (Navigator, Theater body, right-pane sections) is filled in
- * by 2C and downstream phases.
+ * Three-pane workspace shell (Doc 10). Layout primitives + Navigator host.
+ * Theater body and right-pane sections fill in from Phase 3 onwards.
  */
 export function WorkspaceShell() {
   const [leftWidth, setLeftWidth] = useState(() =>
@@ -52,25 +58,97 @@ export function WorkspaceShell() {
   const [rightWidth, setRightWidth] = useState(() =>
     readWidth(RIGHT_LS_KEY, RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX),
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
   const rightCollapsed = useAppStore((s) => s.rightPaneCollapsed);
 
   const setAppPhase = useAppStore((s) => s.setAppPhase);
   const onLock = useAuthStore((s) => s.onLock);
-  const worlds = useVaultStore((s) => s.worlds);
+  const activeWorldId = useVaultStore((s) => s.activeWorldId);
+  const isGenerating = useWorkspaceStore((s) => s.isGenerating);
+  const workspaceClear = useWorkspaceStore((s) => s.clear);
+  const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const modeClear = useModeStore((s) => s.clear);
+  const restoreForStory = useModeStore((s) => s.restoreForStory);
+
+  // Subscribe to backend events (vault_updated + conversation streaming +
+  // session lifecycle).
+  useWorkspaceEvents();
+
+  // Reset workspace state on world switch — story messages, drafts, and
+  // session lists all live inside the active world's DB and become invalid
+  // when it changes.
+  useEffect(() => {
+    workspaceClear();
+    modeClear();
+  }, [activeWorldId, workspaceClear, modeClear]);
+
+  // On story open: load this story's sessions and restore the persisted
+  // `active_mode` / `active_session_id` from `story_state` (Doc 23
+  // §Re-opening). Silent fallback to story mode happens inside
+  // `restoreForStory` when the persisted session no longer exists (CD-9).
+  // Note: per Doc 23, restoring `active_mode='consulting'` does NOT
+  // auto-re-enter the session — that requires explicit banner Enter so a
+  // consulting cache rebuild is gated on intentional user action.
+  useEffect(() => {
+    if (activeStoryId === null) {
+      modeClear();
+      return;
+    }
+    void restoreForStory(activeStoryId).catch((e) => console.error('restoreForStory failed', e));
+  }, [activeStoryId, modeClear, restoreForStory]);
+
+  // Auto-open the World Picker when no world is active.
+  if (!pickerOpen && activeWorldId === null) {
+    // Defer to a microtask to avoid setting state during render.
+    queueMicrotask(() => setPickerOpen(true));
+  }
 
   async function handleLock() {
+    // Doc 15 §Cancellation Taxonomy: locking mid-stream is gated by a
+    // confirmation prompt. On confirm, `lock_vault` cancels the in-flight
+    // generation before zeroing keys.
+    if (isGenerating && !window.confirm('Generation in progress. Cancel and lock?')) {
+      return;
+    }
+    // Doc 15 §Edge Cases: flush any pending debounced draft write before
+    // zeroing keys.
+    try {
+      await flushPendingDraft();
+    } catch {
+      // best-effort
+    }
     try {
       await lockVault();
     } finally {
+      workspaceClear();
+      modeClear();
       onLock();
       setAppPhase('locked');
     }
   }
 
+  function handleOpenWorldPicker() {
+    // Doc 15: blocking world-switch attempt mid-stream. Phase 3 uses a
+    // confirm prompt; visual-design phase will replace with a proper modal.
+    if (isGenerating) {
+      if (!window.confirm('Generation in progress. Cancel and switch worlds?')) return;
+      // Fire-and-forget cancel; the user can re-open the picker afterwards.
+      void useWorkspaceStore.getState().cancel();
+      return;
+    }
+    setPickerOpen(true);
+  }
+
   return (
     <main className="flex h-full w-full overflow-hidden bg-[--color-bg-base]">
       <LeftPane width={leftWidth}>
-        <NavigatorPlaceholder worldCount={worlds.length} onLock={() => void handleLock()} />
+        <Navigator
+          onLock={() => void handleLock()}
+          onOpenWorldPicker={handleOpenWorldPicker}
+          onOpenSettings={() => {
+            // TODO(Phase 11): open Settings modal
+          }}
+        />
       </LeftPane>
       <PaneDivider
         side="left"
@@ -81,7 +159,7 @@ export function WorkspaceShell() {
         onResizeEnd={(w) => writeWidth(LEFT_LS_KEY, w)}
       />
       <Theater>
-        <TheaterPlaceholder />
+        <TheaterBody />
       </Theater>
       {!rightCollapsed && (
         <PaneDivider
@@ -94,48 +172,13 @@ export function WorkspaceShell() {
         />
       )}
       <RightPane width={rightWidth}>
-        <RightPanePlaceholder />
+        <div className="flex h-full flex-col">
+          <div className="flex-1" />
+          <StatusSection />
+        </div>
       </RightPane>
+
+      <WorldPickerModal open={pickerOpen} onOpenChange={setPickerOpen} />
     </main>
-  );
-}
-
-// --- Placeholder pane bodies (filled in by Phase 2C / 3+) ---
-
-function NavigatorPlaceholder({ worldCount, onLock }: { worldCount: number; onLock: () => void }) {
-  return (
-    <div className="flex h-full flex-col">
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-[--color-border] px-3 text-[11px] uppercase tracking-wider text-[--color-text-muted]">
-        <span>Navigator</span>
-        <button
-          type="button"
-          onClick={onLock}
-          className="text-[--color-text-muted] hover:text-[--color-text-primary]"
-        >
-          Lock
-        </button>
-      </header>
-      <div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-[--color-text-muted]">
-        {worldCount === 0
-          ? 'No worlds yet.'
-          : `${worldCount} world${worldCount === 1 ? '' : 's'} loaded.`}
-      </div>
-    </div>
-  );
-}
-
-function TheaterPlaceholder() {
-  return (
-    <div className="grid h-full place-items-center text-center text-sm text-[--color-text-muted]">
-      <p>Select a story from the Navigator, or create one to begin.</p>
-    </div>
-  );
-}
-
-function RightPanePlaceholder() {
-  return (
-    <div className="px-3 pb-3 text-[11px] uppercase tracking-wider text-[--color-text-muted]">
-      Control
-    </div>
   );
 }

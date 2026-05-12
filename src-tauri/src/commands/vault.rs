@@ -13,13 +13,27 @@
 //! All commands run with the vault unlocked. The master key is read from
 //! `AppState` via `with_master_key`; it never crosses the IPC boundary.
 
-use tauri::State;
+use tauri::{Emitter, State};
 use tracing::info;
 
+use crate::db::vault::VaultItemMeta;
 use crate::error::LoomError;
+use crate::services::vault as vault_service;
 use crate::services::world::{self, WorldMeta, WorldMetaPatch};
 use crate::state::access;
 use crate::state::AppState;
+
+/// Emit `vault_updated { world_id }` for the currently-active world.
+/// No-op (Ok) when no world is active — most item commands will already
+/// have errored before reaching this path, but this is the defensive bound.
+fn emit_vault_updated(app: &tauri::AppHandle, state: &AppState) -> Result<(), LoomError> {
+    let id_opt = access::with_active_world_id(state, |id| Ok(id.to_owned())).ok();
+    if let Some(world_id) = id_opt {
+        app.emit("vault_updated", serde_json::json!({ "world_id": world_id }))
+            .map_err(|e| LoomError::Internal(format!("emit vault_updated failed: {e}")))?;
+    }
+    Ok(())
+}
 
 /// Return every world registered in `app_config.json` with its full meta.
 #[tauri::command]
@@ -97,4 +111,163 @@ pub fn update_world_meta(
     patch: WorldMetaPatch,
 ) -> Result<WorldMeta, LoomError> {
     world::update_world_meta(&app, &world_id, patch)
+}
+
+/// Import a world from a `.loom-backup` zip at `src_path` (Doc 14 §World
+/// Backup §Import). The new world gets a fresh `world_id` UUID, is registered
+/// in `app_config.json`, and is **not** auto-opened — the writer can review
+/// and open it from the World Picker.
+#[tauri::command]
+pub fn import_world(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    src_path: String,
+) -> Result<WorldMeta, LoomError> {
+    let path = std::path::PathBuf::from(&src_path);
+    let meta = access::with_master_key(&state, |key| world::import_world(&app, key, &path))?;
+    info!(world_id = %meta.id, "import_world: complete");
+    Ok(meta)
+}
+
+/// Export a world to a `.loom-backup` zip at `dest_path` (Doc 14 §World
+/// Backup). Frontend is responsible for picking `dest_path` via the native
+/// save dialog. The world stays open during export — the backup is a
+/// snapshot at the time of the call.
+#[tauri::command]
+pub fn export_world(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    world_id: String,
+    dest_path: String,
+) -> Result<(), LoomError> {
+    let path = std::path::PathBuf::from(&dest_path);
+    access::with_master_key(&state, |key| {
+        world::export_world(&app, key, &world_id, &path)
+    })?;
+    info!(world_id = %world_id, "export_world: complete");
+    Ok(())
+}
+
+// --- Item commands (Phase 2C) -------------------------------------------------
+
+/// List every item in the active world. With `include_deleted = true` the
+/// soft-deleted rows are also returned (used by the Trash view).
+#[tauri::command]
+pub fn list_items(
+    state: State<'_, AppState>,
+    include_deleted: bool,
+) -> Result<Vec<VaultItemMeta>, LoomError> {
+    access::with_active_conn(&state, |conn| {
+        crate::db::vault::list_items(conn, include_deleted)
+    })
+}
+
+/// Create a new vault item. `template_slug` is recorded in `item_subtype`
+/// for SourceDocuments (Phase 5 will use it to seed body text). Emits
+/// `vault_updated`.
+#[tauri::command]
+pub fn create_item(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    parent_id: Option<String>,
+    item_type: String,
+    name: String,
+    template_slug: Option<String>,
+) -> Result<VaultItemMeta, LoomError> {
+    let item = access::with_active_conn(&state, |conn| {
+        vault_service::create_item(
+            conn,
+            parent_id.as_deref(),
+            &item_type,
+            &name,
+            template_slug.as_deref(),
+        )
+    })?;
+    emit_vault_updated(&app, &state)?;
+    info!(item_id = %item.id, item_type = %item.item_type, "create_item");
+    Ok(item)
+}
+
+/// Rename a vault item.
+#[tauri::command]
+pub fn rename_item(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+    name: String,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::rename_item(conn, &item_id, &name)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Move an item to a new parent / sort_order. Pass `parent_id = None` to
+/// move to the vault root.
+#[tauri::command]
+pub fn move_item(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+    new_parent_id: Option<String>,
+    new_sort_order: i64,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::move_item(conn, &item_id, new_parent_id.as_deref(), new_sort_order)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Soft-delete an item (sets `deleted_at`). Folders must be empty.
+/// Idempotent — calling twice is not an error.
+#[tauri::command]
+pub fn delete_item(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::soft_delete_item(conn, &item_id)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Restore a soft-deleted item. If the parent folder is also trashed the
+/// item is reparented to the vault root (Doc 14 §Edge Cases).
+#[tauri::command]
+pub fn restore_item(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| vault_service::restore_item(conn, &item_id))?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Hard-delete an item. Cascades via FK constraints (`messages`,
+/// `accordion_segments`, `cache_state`, etc. all `ON DELETE CASCADE`).
+#[tauri::command]
+pub fn delete_item_permanent(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| {
+        crate::db::vault::delete_item_permanent(conn, &item_id)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Hard-delete every soft-deleted item. Returns the count removed.
+#[tauri::command]
+pub fn empty_trash(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<u32, LoomError> {
+    let count = access::with_active_conn(&state, crate::db::vault::empty_trash)?;
+    emit_vault_updated(&app, &state)?;
+    info!(count, "empty_trash");
+    Ok(count)
 }

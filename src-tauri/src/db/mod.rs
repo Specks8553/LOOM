@@ -2,5 +2,8 @@
 //! into `services/`, `commands/`, or `security/`.
 
 pub mod connection;
+pub mod conversation_sessions;
+pub mod messages;
 pub mod migrations;
 pub mod settings;
+pub mod vault;

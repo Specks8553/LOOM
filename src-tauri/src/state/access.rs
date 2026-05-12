@@ -47,6 +47,20 @@ pub fn with_active_conn<T>(
     f(conn)
 }
 
+/// Mutable-borrow variant for operations that need to start a transaction
+/// (`Connection::transaction` takes `&mut self`). Same lock-ordering and
+/// "no world open" semantics as `with_active_conn`.
+pub fn with_active_conn_mut<T>(
+    state: &AppState,
+    f: impl FnOnce(&mut Connection) -> Result<T, LoomError>,
+) -> Result<T, LoomError> {
+    let mut guard = state.active_conn.lock().map_err(poison)?;
+    let conn = guard
+        .as_mut()
+        .ok_or_else(|| missing("active_conn", "no world is open"))?;
+    f(conn)
+}
+
 pub fn with_settings_conn<T>(
     state: &AppState,
     f: impl FnOnce(&Connection) -> Result<T, LoomError>,

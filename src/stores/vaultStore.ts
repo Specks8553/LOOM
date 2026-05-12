@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { listWorlds } from '@/lib/tauriApi/vault';
+import { listItems, listWorlds } from '@/lib/tauriApi/vault';
 
 import type { VaultItemMeta, WorldMeta } from '@/lib/types';
 
@@ -38,12 +38,12 @@ interface VaultState {
   filterQuery: string;
   isTrashView: boolean;
 
-  // actions — worlds (Phase 2A)
+  // actions — worlds
   setWorlds: (worlds: WorldMeta[]) => void;
   refreshWorlds: () => Promise<void>;
   setActiveWorld: (worldId: string | null, dir?: string | null) => void;
 
-  // actions — items (Phase 2C; stubs land now to lock the store shape)
+  // actions — items
   loadVault: () => Promise<void>;
   loadTrash: () => Promise<void>;
   setItems: (items: VaultItemMeta[]) => void;
@@ -51,13 +51,14 @@ interface VaultState {
   toggleSelection: (id: string) => void;
   setFilter: (query: string) => void;
   toggleExpanded: (folderId: string) => void;
+  expandFolder: (folderId: string) => void;
   setTrashView: (val: boolean) => void;
 
   // Called on world switch and lock.
   clear: () => void;
 }
 
-/** Doc 06 §vaultStore. Shape locked there; this implementation extends it. */
+/** Doc 06 §vaultStore. Shape locked there. */
 export const useVaultStore = create<VaultState>((set, get) => ({
   worlds: [],
   activeWorldId: null,
@@ -82,28 +83,43 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ activeWorldId: worldId, activeWorldDir: dir });
   },
 
-  // --- items: stubs (real impls land in Phase 2C) ---
   async loadVault() {
-    // TODO(2C): invoke list_items, populate `items`
+    if (get().activeWorldId === null) {
+      set({ items: [] });
+      return;
+    }
+    const items = await listItems(false);
+    set({ items });
   },
+
   async loadTrash() {
-    // TODO(2C): invoke list_items({ include_deleted: true }), populate `trashItems`
+    if (get().activeWorldId === null) {
+      set({ trashItems: [] });
+      return;
+    }
+    const all = await listItems(true);
+    set({ trashItems: all.filter((i) => i.deleted_at !== null) });
   },
+
   setItems(items) {
     set({ items });
   },
+
   setSelected(ids) {
     set({ selectedIds: ids });
   },
+
   toggleSelection(id) {
     const next = new Set(get().selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     set({ selectedIds: next });
   },
+
   setFilter(query) {
     set({ filterQuery: query });
   },
+
   toggleExpanded(folderId) {
     const current = get().expandedFolderIds;
     const next = current.includes(folderId)
@@ -112,6 +128,15 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ expandedFolderIds: next });
     writeExpandedToStorage(next);
   },
+
+  expandFolder(folderId) {
+    const current = get().expandedFolderIds;
+    if (current.includes(folderId)) return;
+    const next = [...current, folderId];
+    set({ expandedFolderIds: next });
+    writeExpandedToStorage(next);
+  },
+
   setTrashView(val) {
     set({ isTrashView: val });
   },
