@@ -94,6 +94,12 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
   const visibleItems = filterItems(items, filterQuery);
   const tree = buildTree(visibleItems);
   const expandedSet = new Set(expandedFolderIds);
+  // Doc 18: paperclip state — `contextDocIds` is the source of truth, scoped
+  // to the active story. When `activeStoryId === null` the paperclip is hidden
+  // entirely (see `canAttach` in VaultTreeRow).
+  const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const contextDocIds = useWorkspaceStore((s) => s.contextDocIds);
+  const attachedIdSet = new Set(contextDocIds);
 
   function handleSelect(item: VaultItemMeta, e: React.MouseEvent) {
     if (e.ctrlKey || e.metaKey) {
@@ -131,6 +137,21 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
       });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not move to Trash');
+    }
+  }
+
+  function handleOpenDoc(item: VaultItemMeta) {
+    // Doc 18 §When the editor opens — double-click on SourceDocument / Image.
+    useWorkspaceStore.getState().openDoc(item.id);
+  }
+
+  async function handleAttachDoc(item: VaultItemMeta) {
+    // Doc 18 §Attach via paperclip. The store guards against no-active-story.
+    try {
+      await useWorkspaceStore.getState().attachDoc(item.id);
+      toast(`"${item.name}" attached to story`, { duration: 2000 });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not attach document');
     }
   }
 
@@ -266,8 +287,12 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
                 selectedIds={selectedIds}
                 draggingId={draggingId}
                 dropTargetId={dropTargetId}
+                attachedIdSet={attachedIdSet}
+                canAttach={activeStoryId !== null}
                 onToggle={toggleExpanded}
                 onSelect={handleSelect}
+                onOpenDoc={handleOpenDoc}
+                onAttachDoc={(item) => void handleAttachDoc(item)}
                 onContextDelete={(item) => void handleSoftDelete(item)}
                 onDragStartItem={(id) => setDraggingId(id)}
                 onDragEndItem={() => {
@@ -311,8 +336,12 @@ interface TreeBranchProps {
   selectedIds: Set<string>;
   draggingId: string | null;
   dropTargetId: string | null;
+  attachedIdSet: Set<string>;
+  canAttach: boolean;
   onToggle: (id: string) => void;
   onSelect: (item: VaultItemMeta, e: React.MouseEvent) => void;
+  onOpenDoc: (item: VaultItemMeta) => void;
+  onAttachDoc: (item: VaultItemMeta) => void;
   onContextDelete: (item: VaultItemMeta) => void;
   onDragStartItem: (id: string) => void;
   onDragEndItem: () => void;
@@ -327,8 +356,12 @@ function TreeBranch({
   selectedIds,
   draggingId,
   dropTargetId,
+  attachedIdSet,
+  canAttach,
   onToggle,
   onSelect,
+  onOpenDoc,
+  onAttachDoc,
   onContextDelete,
   onDragStartItem,
   onDragEndItem,
@@ -351,10 +384,17 @@ function TreeBranch({
         dropTarget={dropTargetId === item.id}
         onToggleExpanded={() => onToggle(item.id)}
         onSelect={(e) => onSelect(item, e)}
+        onOpenDoc={() => onOpenDoc(item)}
+        attached={attachedIdSet.has(item.id)}
+        canAttach={canAttach}
+        onAttachToggle={() => onAttachDoc(item)}
         onContextMenu={(e) => {
           e.preventDefault();
           // Phase 2C: keep the context menu lean — single Delete action.
-          // Phase 12 will replace this with a proper popover (rename, move, etc.).
+          // Phase 12 will replace this with a proper popover (rename, move,
+          // "Attach to story" per Doc 18, etc.). For Phase 5 the paperclip
+          // affordance carries the attach interaction; right-click stays
+          // delete-only here to avoid chained confirm prompts.
           if (window.confirm(`Move "${item.name}" to Trash?`)) {
             onContextDelete(item);
           }
@@ -395,8 +435,12 @@ function TreeBranch({
               selectedIds={selectedIds}
               draggingId={draggingId}
               dropTargetId={dropTargetId}
+              attachedIdSet={attachedIdSet}
+              canAttach={canAttach}
               onToggle={onToggle}
               onSelect={onSelect}
+              onOpenDoc={onOpenDoc}
+              onAttachDoc={onAttachDoc}
               onContextDelete={onContextDelete}
               onDragStartItem={onDragStartItem}
               onDragEndItem={onDragEndItem}

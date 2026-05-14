@@ -1,4 +1,12 @@
-import { BookOpen, ChevronRight, FileText, Folder, FolderOpen, MoreVertical } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronRight,
+  FileText,
+  Folder,
+  FolderOpen,
+  MoreVertical,
+  Paperclip,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { renameItem } from '@/lib/tauriApi/vault';
@@ -15,6 +23,18 @@ interface VaultTreeRowProps {
   onToggleExpanded: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  /** Called on double-click for SourceDocument / Image rows (Doc 18 §When
+   *  the editor opens). Folder / Story rows fall back to inline rename. */
+  onOpenDoc?: () => void;
+  /** True iff this row's item is currently attached to the active story
+   *  (Doc 18 §Attach via paperclip). Drives the filled-vs-outline paperclip. */
+  attached?: boolean;
+  /** True iff a story is currently active. When false, the paperclip is
+   *  hidden because there's no target to attach to. */
+  canAttach?: boolean;
+  /** Click handler for the paperclip. No-op when the row is already
+   *  attached (the icon is purely indicator in that state). */
+  onAttachToggle?: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -47,6 +67,10 @@ export function VaultTreeRow({
   onToggleExpanded,
   onSelect,
   onContextMenu,
+  onOpenDoc,
+  attached = false,
+  canAttach = false,
+  onAttachToggle,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -90,6 +114,16 @@ export function VaultTreeRow({
       onClick={onSelect}
       onDoubleClick={(e) => {
         e.stopPropagation();
+        // Doc 18: double-click on SourceDocument / Image opens the editor.
+        // Folder / Story rows still get inline rename — rename for docs is
+        // reached via the context menu (Phase 12 polish).
+        if (
+          onOpenDoc !== undefined &&
+          (item.item_type === 'SourceDocument' || item.item_type === 'Image')
+        ) {
+          onOpenDoc();
+          return;
+        }
         startRename();
       }}
       onContextMenu={onContextMenu}
@@ -142,6 +176,24 @@ export function VaultTreeRow({
         />
       ) : (
         <span className="flex-1 truncate">{item.name}</span>
+      )}
+      {canAttach && (item.item_type === 'SourceDocument' || item.item_type === 'Image') && (
+        <button
+          type="button"
+          aria-label={attached ? `${item.name} attached to story` : `Attach ${item.name} to story`}
+          title={attached ? 'Attached to story' : 'Attach to story'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!attached) onAttachToggle?.();
+          }}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+            attached
+              ? 'text-[--color-accent]'
+              : 'invisible text-[--color-text-muted] hover:text-[--color-text-primary] group-hover:visible'
+          }`}
+        >
+          <Paperclip size={12} aria-hidden />
+        </button>
       )}
       <button
         type="button"

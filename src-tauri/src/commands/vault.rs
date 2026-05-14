@@ -271,3 +271,75 @@ pub fn empty_trash(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<
     info!(count, "empty_trash");
     Ok(count)
 }
+
+// --- Source documents + attachments (Phase 5) -------------------------------
+
+/// Read a Source Document or Image's `content`. Empty string is valid.
+#[tauri::command]
+pub fn get_item_content(state: State<'_, AppState>, item_id: String) -> Result<String, LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::get_item_content(conn, &item_id)
+    })
+}
+
+/// Save a Source Document or Image's `content`. Marks every attached story's
+/// cache stale (Phase 6 fills the body). Emits `vault_updated`.
+#[tauri::command]
+pub fn update_item_content(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    item_id: String,
+    content: String,
+) -> Result<(), LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::update_item_content(conn, &item_id, &content)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    Ok(())
+}
+
+/// Attach a Source Document / Image to a Story. Returns the new ordered
+/// `context_doc_ids`. Emits `vault_updated`.
+#[tauri::command]
+pub fn attach_context_doc(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    story_id: String,
+    doc_id: String,
+) -> Result<Vec<String>, LoomError> {
+    let ids = access::with_active_conn(&state, |conn| {
+        vault_service::attach_context_doc(conn, &story_id, &doc_id)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    info!(story_id = %story_id, doc_id = %doc_id, "attach_context_doc");
+    Ok(ids)
+}
+
+/// Detach a doc from a Story (user-initiated; `reason` is NULL in the audit
+/// trail). Returns the new ordered `context_doc_ids`. Emits `vault_updated`.
+#[tauri::command]
+pub fn detach_context_doc(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    story_id: String,
+    doc_id: String,
+) -> Result<Vec<String>, LoomError> {
+    let ids = access::with_active_conn(&state, |conn| {
+        vault_service::detach_context_doc(conn, &story_id, &doc_id, None)
+    })?;
+    emit_vault_updated(&app, &state)?;
+    info!(story_id = %story_id, doc_id = %doc_id, "detach_context_doc");
+    Ok(ids)
+}
+
+/// List the live `VaultItemMeta` rows for every doc attached to `story_id`,
+/// in insertion order.
+#[tauri::command]
+pub fn list_attached_docs(
+    state: State<'_, AppState>,
+    story_id: String,
+) -> Result<Vec<VaultItemMeta>, LoomError> {
+    access::with_active_conn(&state, |conn| {
+        vault_service::list_attached_docs(conn, &story_id)
+    })
+}

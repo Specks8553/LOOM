@@ -109,3 +109,33 @@ export async function exportWorld(worldId: string, destPath: string): Promise<vo
 export async function importWorld(srcPath: string): Promise<WorldMeta> {
   return invoke<WorldMeta>('import_world', { srcPath });
 }
+
+// --- Source documents + attachments (Phase 5) ---
+
+/** Read a Source Document or Image's `content`. Empty string is valid. */
+export async function getItemContent(itemId: string): Promise<string> {
+  return invoke<string>('get_item_content', { itemId });
+}
+
+/**
+ * Save a Source Document or Image's `content`. Marks attached stories' caches
+ * stale (Phase 6 fills the body). Emits `vault_updated`.
+ */
+export async function updateItemContent(itemId: string, content: string): Promise<void> {
+  return invoke('update_item_content', { itemId, content });
+}
+
+/** Attach a Source Document / Image to a Story. Returns the new ordered context_doc_ids. */
+export async function attachContextDoc(storyId: string, docId: string): Promise<string[]> {
+  return invoke<string[]>('attach_context_doc', { storyId, docId });
+}
+
+/** Detach a doc from a Story (user-initiated). Returns the new ordered context_doc_ids. */
+export async function detachContextDoc(storyId: string, docId: string): Promise<string[]> {
+  return invoke<string[]>('detach_context_doc', { storyId, docId });
+}
+
+/** List `VaultItemMeta` rows for every doc attached to `storyId`, in insertion order. */
+export async function listAttachedDocs(storyId: string): Promise<VaultItemMeta[]> {
+  return invoke<VaultItemMeta[]>('list_attached_docs', { storyId });
+}

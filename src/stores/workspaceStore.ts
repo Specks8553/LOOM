@@ -18,8 +18,20 @@ import {
   cancelSessionGeneration as ipcCancelSessionGeneration,
   sendSessionMessage as ipcSendSessionMessage,
 } from '@/lib/tauriApi/modes';
+import {
+  attachContextDoc as ipcAttachContextDoc,
+  detachContextDoc as ipcDetachContextDoc,
+  listAttachedDocs as ipcListAttachedDocs,
+  updateItemContent as ipcUpdateItemContent,
+} from '@/lib/tauriApi/vault';
 
-import type { ChatMessage, InputDraft, TokenEstimate, UserContent } from '@/lib/types';
+import type {
+  ChatMessage,
+  InputDraft,
+  TokenEstimate,
+  UserContent,
+  VaultItemMeta,
+} from '@/lib/types';
 
 /** Doc 15 §Status View. The Theater Status section maps these to glyph + copy. */
 export type GenerationStatus =
@@ -70,6 +82,14 @@ interface WorkspaceState {
 
   tokenEstimate: TokenEstimate | null;
 
+  // --- Phase 5: Source Documents ---
+  /** When set, DocEditor takes the workspace surface (Doc 10 Theater priority). */
+  activeDocId: string | null;
+  /** Per-story attachment list (mirrors story_state.context_doc_ids). */
+  contextDocIds: string[];
+  /** Resolved attached doc metadata for the active story (insertion order). */
+  attachedDocs: VaultItemMeta[];
+
   // --- Actions ---
   setIsGenerating(val: boolean): void; // legacy seam — Phase 3 keeps it for any non-IPC callers
   setActiveStory(storyId: string | null): Promise<void>;
@@ -87,6 +107,19 @@ interface WorkspaceState {
   deleteFrom(messageId: string): Promise<void>;
   updateFeedback(messageId: string, feedback: string): Promise<void>;
   setTokenEstimate(est: TokenEstimate | null): void;
+
+  // --- Phase 5: Source Documents (5B/5C wire UI into these) ---
+  openDoc(id: string): void;
+  closeDoc(): Promise<void>;
+  /** Edit a doc's content; schedules a 1 s debounced save. 5B fills the body. */
+  updateDocContent(id: string, content: string): void;
+  /** Force any pending debounced save to complete now. Called on lock /
+   *  close / world-switch (Doc 18 §Edit a doc). */
+  flushDocSave(): Promise<void>;
+  attachDoc(docId: string): Promise<void>;
+  detachDoc(docId: string): Promise<void>;
+  /** Reload `contextDocIds` + `attachedDocs` from the backend for the active story. */
+  loadAttachedDocs(): Promise<void>;
 
   // --- Event handlers (called by useWorkspaceEvents) ---
   onMessageChunk(storyId: string, chunk: string): void;
@@ -142,6 +175,42 @@ function scheduleDraftSave(storyId: string, draft: InputDraft): void {
   }, DRAFT_DEBOUNCE_MS);
 }
 
+// --- DocEditor autosave debounce (module-scope, Phase 5) ---
+const DOC_SAVE_DEBOUNCE_MS = 1000;
+let docTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingDocId: string | null = null;
+let pendingDocContent: string = '';
+
+function scheduleDocSave(docId: string, content: string): void {
+  if (docTimer !== null) clearTimeout(docTimer);
+  pendingDocId = docId;
+  pendingDocContent = content;
+  docTimer = setTimeout(() => {
+    const id = pendingDocId;
+    const text = pendingDocContent;
+    docTimer = null;
+    pendingDocId = null;
+    pendingDocContent = '';
+    if (id === null) return;
+    void ipcUpdateItemContent(id, text).catch((e) => {
+      console.error('update_item_content failed', e);
+    });
+  }, DOC_SAVE_DEBOUNCE_MS);
+}
+
+/** Force any pending debounced doc save to complete now. Used by lock /
+ *  closeDoc / world-switch. */
+export async function flushPendingDocSave(): Promise<void> {
+  if (docTimer === null || pendingDocId === null) return;
+  clearTimeout(docTimer);
+  const id = pendingDocId;
+  const content = pendingDocContent;
+  docTimer = null;
+  pendingDocId = null;
+  pendingDocContent = '';
+  await ipcUpdateItemContent(id, content);
+}
+
 /** Flush any pending debounced draft write synchronously (in the next tick).
  *  Used by `lockVault` and story switching — Doc 15 §Edge Cases. */
 export async function flushPendingDraft(): Promise<void> {
@@ -168,6 +237,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   tokenEstimate: null,
 
+  activeDocId: null,
+  contextDocIds: [],
+  attachedDocs: [],
+
   setIsGenerating(val) {
     set({ isGenerating: val });
   },
@@ -189,6 +262,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         draft: EMPTY_DRAFT,
         generationStatus: { kind: 'idle' },
         tokenEstimate: null,
+        contextDocIds: [],
+        attachedDocs: [],
       });
       return;
     }
@@ -199,13 +274,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       draft: EMPTY_DRAFT,
       generationStatus: { kind: 'idle' },
       tokenEstimate: null,
+      contextDocIds: [],
+      attachedDocs: [],
     });
 
-    const [messages, draft] = await Promise.all([ipcLoadMessages(storyId), ipcGetDraft(storyId)]);
+    const [messages, draft, attached] = await Promise.all([
+      ipcLoadMessages(storyId),
+      ipcGetDraft(storyId),
+      ipcListAttachedDocs(storyId),
+    ]);
 
     // Only commit if this is still the active story (guard against rapid switches).
     if (get().activeStoryId === storyId) {
-      set({ messages, draft });
+      set({
+        messages,
+        draft,
+        attachedDocs: attached,
+        contextDocIds: attached.map((d) => d.id),
+      });
     }
   },
 
@@ -459,6 +545,72 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ tokenEstimate: est });
   },
 
+  // --- Phase 5: Source Documents ---
+
+  openDoc(id) {
+    set({ activeDocId: id });
+  },
+
+  async closeDoc() {
+    try {
+      await flushPendingDocSave();
+    } catch (e) {
+      console.error('flushPendingDocSave failed on closeDoc', e);
+    }
+    set({ activeDocId: null });
+  },
+
+  updateDocContent(id, content) {
+    scheduleDocSave(id, content);
+  },
+
+  async flushDocSave() {
+    await flushPendingDocSave();
+  },
+
+  async attachDoc(docId) {
+    const storyId = get().activeStoryId;
+    if (storyId === null) return;
+    const ids = await ipcAttachContextDoc(storyId, docId);
+    // Refresh resolved metadata so UI gets the names.
+    let attached: VaultItemMeta[] = [];
+    try {
+      attached = await ipcListAttachedDocs(storyId);
+    } catch (e) {
+      console.error('list_attached_docs after attach failed', e);
+    }
+    if (get().activeStoryId === storyId) {
+      set({ contextDocIds: ids, attachedDocs: attached });
+    }
+  },
+
+  async detachDoc(docId) {
+    const storyId = get().activeStoryId;
+    if (storyId === null) return;
+    const ids = await ipcDetachContextDoc(storyId, docId);
+    let attached: VaultItemMeta[] = [];
+    try {
+      attached = await ipcListAttachedDocs(storyId);
+    } catch (e) {
+      console.error('list_attached_docs after detach failed', e);
+    }
+    if (get().activeStoryId === storyId) {
+      set({ contextDocIds: ids, attachedDocs: attached });
+    }
+  },
+
+  async loadAttachedDocs() {
+    const storyId = get().activeStoryId;
+    if (storyId === null) {
+      set({ contextDocIds: [], attachedDocs: [] });
+      return;
+    }
+    const attached = await ipcListAttachedDocs(storyId);
+    if (get().activeStoryId === storyId) {
+      set({ contextDocIds: attached.map((d) => d.id), attachedDocs: attached });
+    }
+  },
+
   onMessageChunk(storyId, chunk) {
     if (get().activeStoryId !== storyId) return;
     const modelId = get().currentModelMessageId;
@@ -605,6 +757,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       draftTimer = null;
       pendingDraftStoryId = null;
     }
+    if (docTimer !== null) {
+      clearTimeout(docTimer);
+      docTimer = null;
+      pendingDocId = null;
+      pendingDocContent = '';
+    }
     set({
       activeStoryId: null,
       messages: [],
@@ -616,6 +774,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       currentSessionId: null,
       userInitiatedCancel: false,
       tokenEstimate: null,
+      activeDocId: null,
+      contextDocIds: [],
+      attachedDocs: [],
     });
   },
 

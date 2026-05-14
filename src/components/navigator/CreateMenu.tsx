@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { createItem } from '@/lib/tauriApi/vault';
 import { useVaultStore } from '@/stores/vaultStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 import type { VaultItemType } from '@/lib/types';
 
@@ -50,11 +51,16 @@ export function CreateMenu({ open, onOpenChange, parentId, trigger }: CreateMenu
     setBusy(true);
     onOpenChange(false);
     try {
-      await createItem(parentId, itemType, defaultName);
+      const created = await createItem(parentId, itemType, defaultName);
       // If we created inside a folder, ensure it's expanded so the new row
       // is visible after the vault reloads.
       if (parentId !== null) {
         expandFolder(parentId);
+      }
+      // Doc 18 §When the editor opens — auto-open DocEditor on new
+      // SourceDocument creation.
+      if (created.item_type === 'SourceDocument') {
+        useWorkspaceStore.getState().openDoc(created.id);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create item');

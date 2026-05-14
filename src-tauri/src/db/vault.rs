@@ -5,7 +5,7 @@
 //! cascade) lives in `services/vault.rs` and `commands/vault.rs`; this
 //! module owns the SQL.
 
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -153,6 +153,42 @@ pub fn list_items(
         items.push(r.map_err(|e| LoomError::Database(e.to_string()))?);
     }
     Ok(items)
+}
+
+/// Read an item's `content` column. Returns `None` if the item does not
+/// exist. Empty string for items without source-doc content (the schema
+/// default).
+pub fn get_item_content(conn: &Connection, id: &str) -> Result<Option<String>, LoomError> {
+    let content: Option<String> = conn
+        .query_row(
+            "SELECT content FROM items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| LoomError::Database(e.to_string()))?;
+    Ok(content)
+}
+
+/// Update `content` and `modified_at` on a single item. The service layer
+/// validates that the item is a SourceDocument or Image; this function
+/// trusts its inputs.
+pub fn update_item_content(
+    conn: &Connection,
+    id: &str,
+    content: &str,
+    modified_at: &str,
+) -> Result<(), LoomError> {
+    let n = conn
+        .execute(
+            "UPDATE items SET content = ?1, modified_at = ?2 WHERE id = ?3",
+            params![content, modified_at, id],
+        )
+        .map_err(|e| LoomError::Database(e.to_string()))?;
+    if n == 0 {
+        return Err(LoomError::NotFound(format!("item {id} not found")));
+    }
+    Ok(())
 }
 
 /// Update `name` and `modified_at` on a single item. Empty `name` is

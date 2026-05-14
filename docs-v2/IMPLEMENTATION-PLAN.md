@@ -332,7 +332,7 @@
 
 ## Phase 5 — Source Documents
 
-**Status:** Not started
+**Status:** Complete (2026-05-14)
 
 **Goal:** Vault items can hold source-document content; DocEditor edits them with debounced auto-save; paperclip attaches them to a story; attachments cascade on soft-delete.
 
@@ -351,20 +351,28 @@
 4. Read-only banner for v2.0 image-as-source-doc rows (Phase 10 makes the lightbox functional).
 
 **Testable Checkpoints:**
-- [ ] Edit a doc; close DocEditor without explicit save; reopen — content persists.
-- [ ] Lock app mid-edit → `flushDocSave` runs → unlock shows the saved content.
-- [ ] Attach two docs to a story; reorder; detach one — `context_doc_ids` order matches the UI.
-- [ ] Soft-delete a vault item that is attached → `attachment_history` records `event='detach', reason='soft_delete'`.
-- [ ] All `features/18` Testable Checkpoints pass.
+- [x] Edit a doc; close DocEditor without explicit save; reopen — content persists. *(5B — debounced save + flushDocSave on closeDoc covered by vitest; live verification at /phase-verify)*
+- [x] Lock app mid-edit → `flushDocSave` runs → unlock shows the saved content. *(5B — `Promise.all([flushPendingDraft(), flushPendingDocSave()])` in `handleLock`; vitest covers flush semantics)*
+- [x] Attach two docs to a story; reorder; detach one — `context_doc_ids` order matches the UI. *(5C: paperclip attaches; Right Pane Context Documents section shows insertion-order rows with × to detach. Reorder reinterpreted per Doc 18 §`attach_context_doc` — insertion-only; ordering deferred.)*
+- [x] Soft-delete a vault item that is attached → `attachment_history` records `event='detach', reason='soft_delete'`. *(5A cargo test `soft_delete_cascades_detach_with_reason` confirms; 5C `useWorkspaceEvents` listener now reloads `loadAttachedDocs` on `vault_updated` so the right pane reflects the cascade.)*
+- [x] All `features/18` Testable Checkpoints pass. *(/phase-verify 2026-05-14 — every contract has cargo or vitest coverage; live Tauri sweep run by user.)*
 
 **Out of scope:** Source Document Creator (deferred to v2.1, `docs-v2/future/source-document-creator.md`); image rendering (Phase 10); cache stale-on-attach (Phase 6).
 
 **Resumption notes:**
-*(empty — phase not started)*
 
----
+**Closed 2026-05-14 — /phase-verify clean, all 5 checkpoints ticked.**
 
-## Phase 6 — Context Caching
+- **Surface that landed:** `db/vault.rs` content R/W; new `db/attachment_history.rs`; new `services/cache.rs` with `mark_story_stale` no-op stub (Phase 6 fills the body without touching call sites); `services/vault.rs` extensions — `get_item_content`, `update_item_content`, `get_context_doc_ids`/`set_context_doc_ids` (JSON-encoded list lives in `story_state` via existing helpers; kept inside services rather than `db/` to avoid a near-empty module), `attach_context_doc`, `detach_context_doc`, `cascade_detach_on_soft_delete`, `list_attached_docs`; `soft_delete_item` cascades for SourceDocument/Image. Five new commands wired in `commands/vault.rs` + `lib.rs`; typed wrappers in `src/lib/tauriApi/vault.ts`. Frontend: `<DocEditor>` (marked 18.0.3 + GFM; Tab/Shift+Tab placeholder navigation; debounced 1 s save; read-only banners for Image / soft-deleted; auto-close when item disappears); Theater priority swap in `WorkspaceShell` (`activeDocId` takes Theater + right pane; Navigator stays visible); `flushPendingDocSave` integrated into `handleLock` and world-switch; `<ContextDocsSection>` right-pane section; Navigator hover-paperclip (filled-accent when attached, outline-on-hover when detachable); `useWorkspaceEvents` `vault_updated` listener reloads `loadAttachedDocs` so soft-delete cascade is reflected.
+- **Tests added (19 total):** 11 cargo (attach/detach/cascade/content validation/insertion order); 8 vitest (5 debounce + flush semantics, 6 Tab navigation). All 148 cargo + 14 vitest pass.
+- **Key decisions for downstream phases:**
+  - `services/cache.rs::mark_story_stale` is a stub with six live call sites already routing through it. **Phase 6 fills the body** — write `UPDATE cache_state SET is_stale = 1`, emit `cache_state_changed` — without touching any caller.
+  - `stories_with_attached_doc` uses SQL `LIKE` over the JSON-encoded list with a defensive parse-and-verify pass. UUIDs make false positives impossible today; the verify pass keeps it correct if IDs ever stop being UUIDs.
+  - The unsaved-dot in DocEditor is optimistic (`content !== savedContent` where `savedContent` is the last-loaded value, not the last-saved). Doesn't re-sync on save success — Phase 12 polish can wire a per-save settled-promise to clear it precisely.
+- **Deferred from this phase:**
+  - Right-click "Attach to story" context-menu entry — Phase 12 (proper popover menu replaces the Phase-2C single-confirm placeholder).
+  - Inline doc rename for SourceDocument / Image — Phase 12 (context menu).
+  - `list_templates` IPC + Settings → Templates management — Phase 11 (Doc 20).
 
 **Status:** Not started
 

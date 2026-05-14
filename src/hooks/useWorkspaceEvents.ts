@@ -34,13 +34,20 @@ export function useWorkspaceEvents(): void {
       });
     };
 
-    // --- Vault (Phase 2C) ---
+    // --- Vault (Phase 2C; Phase 5 adds attached-docs reload) ---
     track<{ world_id: string }>('vault_updated', () => {
       const store = useVaultStore.getState();
       if (store.isTrashView) {
         void store.loadTrash().catch(console.error);
       } else {
         void store.loadVault().catch(console.error);
+      }
+      // Doc 18 §Cascade Rules: a vault mutation may have detached attached
+      // docs (soft-delete cascade) — refresh the workspace's attached-doc
+      // list so the right pane and Navigator paperclip state stay in sync.
+      const ws = useWorkspaceStore.getState();
+      if (ws.activeStoryId !== null) {
+        void ws.loadAttachedDocs().catch(console.error);
       }
     });
 

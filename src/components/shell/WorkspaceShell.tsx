@@ -5,6 +5,8 @@ import { PaneDivider } from '@/components/layout/PaneDivider';
 import { RightPane } from '@/components/layout/RightPane';
 import { Theater } from '@/components/layout/Theater';
 import { Navigator } from '@/components/navigator/Navigator';
+import { ContextDocsSection } from '@/components/theater/ContextDocsSection';
+import { DocEditor } from '@/components/theater/DocEditor';
 import { StatusSection } from '@/components/theater/StatusSection';
 import { TheaterBody } from '@/components/theater/TheaterBody';
 import { WorldPickerModal } from '@/components/world-picker/WorldPickerModal';
@@ -14,7 +16,7 @@ import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useModeStore } from '@/stores/modeStore';
 import { useVaultStore } from '@/stores/vaultStore';
-import { flushPendingDraft, useWorkspaceStore } from '@/stores/workspaceStore';
+import { flushPendingDocSave, flushPendingDraft, useWorkspaceStore } from '@/stores/workspaceStore';
 
 // Doc 10 §Pane Sizing Rules.
 const LEFT_DEFAULT = 260;
@@ -67,6 +69,7 @@ export function WorkspaceShell() {
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
   const workspaceClear = useWorkspaceStore((s) => s.clear);
   const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const activeDocId = useWorkspaceStore((s) => s.activeDocId);
   const modeClear = useModeStore((s) => s.clear);
   const restoreForStory = useModeStore((s) => s.restoreForStory);
 
@@ -76,10 +79,17 @@ export function WorkspaceShell() {
 
   // Reset workspace state on world switch — story messages, drafts, and
   // session lists all live inside the active world's DB and become invalid
-  // when it changes.
+  // when it changes. Flush any pending doc save first so the prior world's
+  // edits aren't lost (Doc 18 §Save behaviour — world switch).
   useEffect(() => {
-    workspaceClear();
-    modeClear();
+    void flushPendingDocSave()
+      .catch(() => {
+        // best-effort — switch should not be blocked by a save
+      })
+      .finally(() => {
+        workspaceClear();
+        modeClear();
+      });
   }, [activeWorldId, workspaceClear, modeClear]);
 
   // On story open: load this story's sessions and restore the persisted
@@ -110,10 +120,10 @@ export function WorkspaceShell() {
     if (isGenerating && !window.confirm('Generation in progress. Cancel and lock?')) {
       return;
     }
-    // Doc 15 §Edge Cases: flush any pending debounced draft write before
-    // zeroing keys.
+    // Doc 15 §Edge Cases + Doc 18 §Save behaviour: flush any pending
+    // debounced draft + doc-save before zeroing keys.
     try {
-      await flushPendingDraft();
+      await Promise.all([flushPendingDraft(), flushPendingDocSave()]);
     } catch {
       // best-effort
     }
@@ -158,25 +168,38 @@ export function WorkspaceShell() {
         onResize={setLeftWidth}
         onResizeEnd={(w) => writeWidth(LEFT_LS_KEY, w)}
       />
-      <Theater>
-        <TheaterBody />
-      </Theater>
-      {!rightCollapsed && (
-        <PaneDivider
-          side="right"
-          width={rightWidth}
-          min={RIGHT_MIN}
-          max={RIGHT_MAX}
-          onResize={setRightWidth}
-          onResizeEnd={(w) => writeWidth(RIGHT_LS_KEY, w)}
-        />
+      {activeDocId !== null ? (
+        // Doc 18 §Mode-Switcher Interplay: DocEditor takes the main + right
+        // region. ModeSwitcher and right pane are hidden; Navigator stays
+        // visible. Doc 10 §Theater Content Switching priority:
+        // Settings (Phase 11) > activeDocId > activeStoryId.
+        <Theater>
+          <DocEditor docId={activeDocId} />
+        </Theater>
+      ) : (
+        <>
+          <Theater>
+            <TheaterBody />
+          </Theater>
+          {!rightCollapsed && (
+            <PaneDivider
+              side="right"
+              width={rightWidth}
+              min={RIGHT_MIN}
+              max={RIGHT_MAX}
+              onResize={setRightWidth}
+              onResizeEnd={(w) => writeWidth(RIGHT_LS_KEY, w)}
+            />
+          )}
+          <RightPane width={rightWidth}>
+            <div className="flex h-full flex-col">
+              <div className="flex-1" />
+              <ContextDocsSection />
+              <StatusSection />
+            </div>
+          </RightPane>
+        </>
       )}
-      <RightPane width={rightWidth}>
-        <div className="flex h-full flex-col">
-          <div className="flex-1" />
-          <StatusSection />
-        </div>
-      </RightPane>
 
       <WorldPickerModal open={pickerOpen} onOpenChange={setPickerOpen} />
     </main>
