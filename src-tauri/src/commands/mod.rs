@@ -4,6 +4,7 @@
 //! One file per backend domain. Phase 0 ships only `app_phase` (the shell driver);
 //! feature domains land in their respective phases.
 
+pub mod accordion;
 pub mod app_phase;
 pub mod auth;
 pub mod cache;

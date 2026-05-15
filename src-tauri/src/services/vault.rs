@@ -23,6 +23,7 @@ use crate::db::{
     vault::{self, VaultItemMeta},
 };
 use crate::error::LoomError;
+use crate::services::accordion;
 use crate::services::cache;
 use crate::services::settings_keys::StoryStateKey;
 
@@ -112,6 +113,14 @@ pub fn create_item(
         file_api_uri: None,
     };
     vault::insert_item(conn, &item)?;
+
+    // Doc 16 §Story creation: every new Story gets a start-sentinel checkpoint
+    // so the accordion algorithm always finds a "previous checkpoint" when the
+    // user inserts the first chapter.
+    if item.item_type == "Story" {
+        accordion::create_start_sentinel(conn, &item.id)?;
+    }
+
     Ok(item)
 }
 

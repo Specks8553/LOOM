@@ -299,3 +299,47 @@ export type SessionCacheDivergedPayload = {
   session_id: string;
   divergences: SessionDivergence[];
 };
+
+// --- Phase 7 — Accordion (Doc 16) ---
+
+/** Doc 03 §`checkpoints`. The start sentinel has `after_message_id = null`
+ *  and `is_start = true`; user checkpoints anchor to an AI bubble id. */
+export type Checkpoint = {
+  id: string;
+  story_id: string;
+  after_message_id: string | null;
+  name: string;
+  is_start: boolean;
+  created_at: string;
+  modified_at: string;
+};
+
+/** Doc 03 §`accordion_segments`. A closed segment between two checkpoints.
+ *  Open segments (after the most-recent checkpoint) have no row. */
+export type AccordionSegment = {
+  id: string;
+  story_id: string;
+  start_cp_id: string;
+  end_cp_id: string;
+  summary: string | null;
+  is_collapsed: boolean;
+  use_summary: boolean;
+  is_stale: boolean;
+  summarised_at: string | null;
+  created_at: string;
+  modified_at: string;
+};
+
+/** Aggregate returned by `get_accordion_state`. */
+export type AccordionState = {
+  checkpoints: Checkpoint[];
+  segments: AccordionSegment[];
+};
+
+/** Payload of `accordion_state_changed` event. Optional ids let the frontend
+ *  re-fetch surgically; full re-fetch is also acceptable. */
+export type AccordionStateChangedPayload = {
+  story_id: string;
+  segment_id: string | null;
+  checkpoint_id: string | null;
+};

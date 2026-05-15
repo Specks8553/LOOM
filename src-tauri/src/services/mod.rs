@@ -1,6 +1,7 @@
 //! Business logic that is not trivial CRUD (Doc 05 §services).
 //! `services/` may import `db/`, `security/`, and `state/` (read-only) — never `commands/`.
 
+pub mod accordion;
 pub mod cache;
 pub mod config;
 pub mod file_api;

@@ -554,7 +554,7 @@
 
 ## Phase 7 — Accordion (context compression)
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-15)
 
 **Goal:** Story segments can be collapsed and summarised; fake-pairs replace collapsed exchanges in history; banner reflects token impact; segment edits mark cache stale.
 
@@ -581,7 +581,75 @@
 **Out of scope:** Summary placement visuals beyond the banner shell (Phase 12).
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-15: Pre-session prep (handover for the agent driving Phase 7).**
+
+  **Audit gate — clean.** HB-4, IP-1, IP-7 all ticked. NB-2 (accordion banner copy) is non-blocker deferred to Phase 12 visual pass.
+
+  **State of the world before 7A.**
+  - Schema: `checkpoints` and `accordion_segments` tables already exist (Phase 0 migration `world/001_initial.sql:83+`). No migration work needed.
+  - Cascade-from-message-delete is already implemented at `db/messages.rs:427+` (drops checkpoints anchored to deleted messages + segments referencing them or containing them). The forbidden `// Phase X` comment in that file describes Phase 7 as the consumer — leave it for now; the comment is preexisting tech debt out of Phase 7 scope.
+  - `services/modes.rs::AccordionState` carries an empty `accordion_state` field on consulting snapshots; Phase 7 populates it.
+  - Doc 05's module map does NOT list `services/accordion.rs` or `commands/accordion.rs`. The phase Inputs cite §`services/accordion.rs` which is implicit (the file doesn't exist in the tree yet). Treating this as documentation lag, not a blocker — same precedent as Phase 6 where `services/cache.rs` + `services/file_api.rs` were absent from the tree but added during implementation (and then captured in the audit's HB-7 resolution). Worth flagging post-7A so Doc 05 can be amended.
+
+  **Proposed split — four sub-phases mirroring Phase 6's rhythm.**
+
+  - **7A — Backend core (~30% of phase).** `db/accordion.rs` (typed CRUD); story-creation start-sentinel hook in `services/vault.rs::create_item`; `services/accordion.rs` lifecycle (create_checkpoint with split, delete_checkpoint with merge, update/clear summary, set_collapsed, set_use_summary, mark_stale); `commands/accordion.rs` (8 commands); `accordion_state_changed { story_id, segment_id?, checkpoint_id? }` emitted from command layer only (Doc 05 §Dependency Rules).
+  - **7B — History substitution (~20%).** `services/history.rs::build_history_with_accordion` per Doc 16 §Algorithm. Wire into `services/cache.rs::build_story_prefix` (cache prefix must carry fake-pairs for substituted segments). Wire into the inline send path. Token estimate uses post-substitution body. Handover uses substitution too per Doc 16 §Accordion + Modes; consulting uses captured snapshot accordion state (already plumbed in Phase 6C).
+  - **7C — Summarisation + stale (~25%).** `services/accordion.rs::summarise_segment` non-streaming Gemini call using `gen_summarise_*` cascade + `prompt_accordion_summarise` SI. isGenerating gate (Doc 15), rate-limit check (text provider), cancel via global token. Stale-marking: extend `conversation.rs::{update_message_content, edit_user_message, regenerate_last_response, delete_exchange, delete_from, update_feedback}` to also mark the containing segment stale. Ghostwriter accept (Phase 8) will add its own call. Cache stale triggers per Doc 22 §Accordion: summarise / edit_summary / clear_summary / toggle_use_summary / split / merge → `mark_story_stale` when overlap with cached prefix.
+  - **7D — Frontend (~25%).** workspaceStore: `checkpoints[]`, `segments[]`, 8 actions, `accordion_state_changed` listener. `AccordionBanner` component (extends partition banner from Phase 4). Theater renders banners at their checkpoint positions between messages; bubbles hidden inside collapsed segments. Right-click "Insert checkpoint here" on AI bubbles. Right-click menu on banner (overlay pattern, since Doc 09 menu primitive is Phase 11). Cached-message guard wraps ops that would invalidate cache. vitest for store + history-substitution wiring.
+
+  **Cross-phase contracts (don't violate):**
+  - Service layer never emits events; command layer always emits after the service call returns (Doc 05).
+  - Service `mark_story_stale` signature stays `(&Connection, &str) -> Result<(), LoomError>`. Accordion ops feed it the same way conversation/vault ops do.
+  - Consulting cache uses captured snapshot accordion state, not current (Doc 22 §Re-entry algorithm). Phase 6C left `accordion_state` empty in snapshots; Phase 7 populates it via `services/modes.rs::snapshot_for_session` — when 7A lands, update the snapshot writer to include current segments + checkpoints.
+  - Story cache invalidation: cache is per-story, stale on every accordion op that touches a segment overlapping the cached prefix. Use `db/cache_state::get(story_id).last_cached_message_id` to compute overlap.
+  - Fake-pair user prompt comes from `app_settings.prompt_accordion_fake_user` via the resolved-settings cascade. Don't hardcode.
+  - Inverted naming: a checkpoint names the chapter that *begins* at this position. Start sentinel = `"Chapter 1"` by default, `is_start = 1`, `after_message_id = NULL`, never deletable.
+
+  **Decisions/deferrals to log at phase start:**
+  1. Banner visuals: tokens-only (no hex); use existing partition banner from Phase 4 as the base; defer per-kind background tinting to Phase 12 (NB-1, NB-2).
+  2. Inline summary editor: use a small textarea overlay; reuses CacheContentsModal-style overlay pattern (Doc 09 Dialog primitive deferred to Phase 11).
+  3. Right-click context menu: overlay pattern with absolute positioning (same as Phase 6D rationale).
+  4. `gen_summarise_*` defaults already in `app_settings` from Phase 0; settings cascade from Phase 4 handles resolution.
+  5. Handover accordion substitution: included per Doc 16 §Modes — handover sees substituted history. The existing Phase 4 handover send path will pick this up when history.rs gains the new function.
+
+- **2026-05-15: 7A-DB landed (typed CRUD).** Uncommitted on `main`.
+  - `db/accordion.rs` (new) — `Checkpoint`, `AccordionSegment`, `AccordionState` (ts-rs-exported); reads (`get_checkpoint`, `list_checkpoints` with start-sentinel-first ordering, `get_start_sentinel`, `get_segment`, `list_segments` ordered by start-checkpoint position, `segments_touching_checkpoint`, `find_segment_for_message` via `messages.created_at` range test); writes (`insert_checkpoint`, `rename_checkpoint`, `delete_checkpoint`, `insert_segment`, `delete_segment`, `update_summary`, `clear_summary`, `set_collapsed`, `set_use_summary`, `mark_segment_stale`). 5 unit tests cover round-trip, start-sentinel-first ordering, segment-for-message location, neighbour lookup on checkpoint, summary update side-effects. Registered in `db/mod.rs`.
+  - **`messages` table schema reminder** (caught during test seed): no `sequence_num` or `modified_at` columns; the canonical insert uses `(id, story_id, session_id, kind, role, content, created_at)`. The test helper in `db/accordion.rs::tests::seed_message` reflects this.
+  - **Decisions logged at 7A-DB:**
+    - `find_segment_for_message` treats the start sentinel's anchor as the empty string (sorts before every ISO-8601 timestamp). Open-segment messages (after the most-recent checkpoint) return `None`. The range test is `start_anchor < msg_created_at <= end_anchor` — half-open at the start so that the message anchoring `cp_end` itself belongs to the segment, matching Doc 16 §Inserting a checkpoint.
+    - `list_segments` orders by start-checkpoint anchor `created_at`. The start sentinel's segment (anchor NULL) falls back to the sentinel's own `created_at` — sorts before all real anchors because sentinels are inserted at story-create time.
+  - `cargo build`, `cargo test --lib db::accordion` (8 passed) clean.
+
+- **2026-05-15: 7A-DB next steps (handover for next session).**
+  - **Story-creation start-sentinel hook:** in `services/vault.rs::create_item`, when `item_type == "Story"`, after `vault::insert_item(conn, &item)?` insert a start-sentinel checkpoint: `Checkpoint { id: Uuid::new_v4(), story_id: item.id.clone(), after_message_id: None, name: "Chapter 1".into(), is_start: true, created_at: now.clone(), modified_at: now.clone() }`. Call `db::accordion::insert_checkpoint`. Per Doc 16 §Story creation, the start sentinel's segment is open and has no `accordion_segments` row.
+  - **`services/accordion.rs`** (new) — lifecycle service. Recommended structure:
+    - `create_checkpoint(conn, story_id, after_message_id, name) -> Result<Checkpoint, LoomError>` — inserts the checkpoint; if a checkpoint exists before this point in the story, creates a new closed segment from `(prev_cp, new_cp)`; if the new checkpoint lands inside an existing closed segment, splits the segment (delete old row, insert two new rows with `summary = NULL`, `is_collapsed = 0`, `use_summary = 1`). The old segment's summary is lost (Doc 16 §Inserting a checkpoint inside an existing closed segment).
+    - `rename_checkpoint(conn, id, name)` — thin wrapper around `db::accordion::rename_checkpoint`; not a stale trigger.
+    - `delete_checkpoint(conn, id)` — forbid `is_start = 1` (return `LoomError::ProtectedSentinel`). Find the two neighbouring segments via `segments_touching_checkpoint`. Create a merged segment (`start = ending.start_cp_id`, `end = starting.end_cp_id`, `summary = NULL`, `is_collapsed = 0`, `use_summary = 1`). Delete the two old rows + the checkpoint row in one transaction.
+    - `update_segment_summary(conn, id, summary, now)` — sets `summary`, `summarised_at = now`, clears `is_stale`. Wraps `db::accordion::update_summary`.
+    - `set_segment_collapsed(conn, id, collapsed)` — UI-only state; does NOT mark cache stale.
+    - `set_segment_use_summary(conn, id, use_summary)` — API state; cache-stale logic owned by the command layer.
+    - `clear_segment_summary(conn, id)` — wraps `db::accordion::clear_summary`.
+    - `mark_segment_stale_for_message(conn, story_id, message_id)` — looks up containing segment via `find_segment_for_message`; if found, marks stale. Returns `Result<Option<String>, LoomError>` (the segment_id if marked, for the caller's emit payload). This is the helper Phase 7C will call from conversation.rs's edit/regenerate/feedback paths.
+    - Reuse the `now_iso()` / `Uuid::new_v4()` patterns from `services/vault.rs`.
+  - **`commands/accordion.rs`** (new) — 8 Tauri commands per Doc 16 §Backend API. All emit `accordion_state_changed { story_id, segment_id?, checkpoint_id? }` after the service call. Mirror `commands/cache.rs` pattern: thin wrappers that take `tauri::State<AppState>` and `AppHandle`, call the service under `with_active_conn`, emit the event, return the payload. `summarise_segment` is deferred to 7C — leave it as a `todo!()` stub or omit until 7C lands.
+  - **Register commands in `lib.rs`** under the same `tauri::Builder::default().invoke_handler(...)` block as the cache commands.
+  - **Re-run ts-rs export** via `cargo test --lib` to regenerate `src/lib/types.ts` with the new `Checkpoint`, `AccordionSegment`, `AccordionState` types.
+  - **Cross-phase contract reminder:** services NEVER emit; commands always emit after the service returns success. The event payload's optional `segment_id?` / `checkpoint_id?` lets the frontend re-fetch surgically (an optimisation — full re-fetch is also acceptable for 7D and can be optimised later).
+  - **Don't forget:** `services/modes.rs::snapshot_for_session` currently leaves `accordion_state` empty; when 7A lands the service, update the snapshot writer to capture the current `(checkpoints, segments)` so Phase 6C's consulting-cache snapshot reconstruction sees real data. This was deferred at 6C close.
+
+- **2026-05-15: 7A-services + 7A-commands landed.** Uncommitted on `main`.
+  - `services/accordion.rs` (new) — full lifecycle: `create_start_sentinel`, `get_accordion_state`, `create_checkpoint` (close-open-segment OR split-closed-segment with summary loss per Doc 16), `rename_checkpoint`, `delete_checkpoint` (`ProtectedSentinel` on `is_start`; merges neighbour segments when both exist, drops the closed neighbour when deleting the tail checkpoint), `update_segment_summary` (clears `is_stale`, stamps `summarised_at`), `set_segment_collapsed`, `set_segment_use_summary`, `clear_segment_summary`, `mark_segment_stale_for_message` (Phase 7C will call this from conversation.rs's edit/regenerate/feedback paths). 8 unit tests cover start sentinel, open-segment close, closed-segment split (with summary loss), interior delete merge, tail delete re-opens, sentinel protection, duplicate-anchor rejection, stale-for-message + open-segment no-op, clear-summary reset.
+  - `services/vault.rs::create_item` — inserts the start sentinel when `item_type == "Story"` via `accordion::create_start_sentinel`. Sentinel uses canonical `"Chapter 1"` name, `is_start = 1`, `after_message_id = NULL`, no segment row.
+  - `services/modes.rs::build_snapshot` — Phase 6C's `accordion_state` placeholder is now populated from `db::accordion::list_segments`, with `summary_hash` computed as SHA-256(summary) for re-entry divergence detection. Re-entry rebuild path was already plumbed in 6C; this just feeds it real data.
+  - `commands/accordion.rs` (new) — 7 thin handlers, each emits `accordion_state_changed { story_id, segment_id?, checkpoint_id? }` after the service returns: `get_accordion_state`, `create_checkpoint`, `rename_checkpoint`, `delete_checkpoint`, `update_segment_summary`, `set_segment_collapsed`, `set_segment_use_summary`, `clear_segment_summary`. `summarise_segment` deferred to 7C per phase plan. Registered in `lib.rs::invoke_handler`.
+  - `src/lib/types.ts` — manually mirrored the auto-generated reference: added `Checkpoint`, `AccordionSegment`, `AccordionState`, `AccordionStateChangedPayload` under a Phase 7 block.
+  - **Cache-stale wiring intentionally deferred to 7C** per the original phase split. The 7A commands do not yet call `cache::mark_story_stale` on summary edits / `use_summary` toggles / checkpoint splits & merges. Comment in `commands/accordion.rs` flags the deferral. Stale-for-message wiring from conversation.rs (edit/regenerate/feedback) is also 7C.
+  - **Doc 05 amendment still owed.** Audit notes flagged that `services/accordion.rs` + `commands/accordion.rs` aren't in Doc 05's module map (same situation as 6's `services/cache.rs` + `services/file_api.rs`). Should be amended post-7A.
+  - `cargo build`, `cargo test --lib` (186 passed, +8 new), `cargo clippy --lib --all-targets -- -D warnings` (clean), `tsc --noEmit` (clean).
+  - **Next session (7B — history substitution):** implement `services/history.rs::build_history_with_accordion` per Doc 16 §Algorithm, wire into `services/cache.rs::build_story_prefix` and the inline send path; handover also uses substitution; consulting uses the snapshot's accordion state (now populated). Token-count helper picks up post-substitution body automatically.
 
 ---
 

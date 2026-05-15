@@ -1,6 +1,7 @@
 //! Typed DB access (Doc 05 §db). `db/` may import `rusqlite` only — no calls
 //! into `services/`, `commands/`, or `security/`.
 
+pub mod accordion;
 pub mod attachment_history;
 pub mod cache_state;
 pub mod connection;

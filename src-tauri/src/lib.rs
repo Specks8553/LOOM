@@ -92,6 +92,14 @@ pub fn run() {
             commands::cache::delete_story_cache,
             commands::cache::list_alive_caches,
             commands::cache::get_session_cache_state,
+            commands::accordion::get_accordion_state,
+            commands::accordion::create_checkpoint,
+            commands::accordion::rename_checkpoint,
+            commands::accordion::delete_checkpoint,
+            commands::accordion::update_segment_summary,
+            commands::accordion::set_segment_collapsed,
+            commands::accordion::set_segment_use_summary,
+            commands::accordion::clear_segment_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

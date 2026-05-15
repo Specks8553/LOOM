@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::db::accordion as db_accordion;
 use crate::db::conversation_sessions::{
     count_sessions_by_kind, insert_session, ConversationSession,
 };
@@ -124,7 +125,25 @@ pub fn build_snapshot(
 ) -> Result<SessionSnapshot, LoomError> {
     let messages = list_story_messages(conn, story_id)?;
     let story_message_ids: Vec<String> = messages.iter().map(|m| m.id.clone()).collect();
-    let accordion_state: Vec<AccordionSnapshotEntry> = Vec::new();
+    // Phase 7: capture current accordion state at session-creation time so
+    // consulting re-entry rebuilds the prefix against the snapshot — not the
+    // current state — per Doc 22 §Session Snapshot + Doc 16 §Modes.
+    let accordion_state: Vec<AccordionSnapshotEntry> = db_accordion::list_segments(conn, story_id)?
+        .into_iter()
+        .map(|seg| {
+            let summary_hash = seg.summary.as_deref().map(|s| {
+                let mut hasher = Sha256::new();
+                hasher.update(s.as_bytes());
+                format!("{:x}", hasher.finalize())
+            });
+            AccordionSnapshotEntry {
+                segment_id: seg.id,
+                is_collapsed: seg.is_collapsed,
+                summary: seg.summary,
+                summary_hash,
+            }
+        })
+        .collect();
     let attached_docs: Vec<AttachedDocEntry> = Vec::new();
     let prefix_hash = canonicalise_and_hash(
         system_instruction,
