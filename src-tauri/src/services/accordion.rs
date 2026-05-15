@@ -13,8 +13,9 @@ use rusqlite::Connection;
 use uuid::Uuid;
 
 use crate::db::accordion::{self as db_accordion, AccordionSegment, AccordionState, Checkpoint};
-use crate::db::messages;
+use crate::db::messages::{self, ChatMessage};
 use crate::error::{LoomError, ValidationKind};
+use crate::services::history::{render_message_into, AssembledRequest, GeminiContent};
 
 /// Single source of truth for ISO 8601 timestamps in this module.
 pub fn now_iso() -> String {
@@ -331,6 +332,118 @@ pub fn mark_segment_stale_for_message(
     Ok(Some(seg.id))
 }
 
+/// Assemble the Gemini request for `summarise_segment`. Pure DB → request
+/// builder; the HTTP call + persistence happens in `commands/accordion.rs`.
+///
+/// Per Doc 16 §Request: the body's `contents` is the segment's story-kind
+/// messages rendered the same way as story history assembly (user turns
+/// bracketed via `UserContent`, model turns with feedback appended).
+/// `system_instruction` is the caller-resolved `prompt_accordion_summarise`.
+/// No `cachedContent` — summarise calls never hit cache.
+pub fn build_summarise_request(
+    conn: &Connection,
+    segment_id: &str,
+    system_instruction: &str,
+) -> Result<AssembledRequest, LoomError> {
+    let seg = require_segment(conn, segment_id)?;
+    let messages = load_segment_messages(conn, &seg)?;
+    if messages.is_empty() {
+        return Err(LoomError::validation("Cannot summarise an empty segment."));
+    }
+    let mut contents: Vec<GeminiContent> = Vec::with_capacity(messages.len());
+    for msg in &messages {
+        render_message_into(msg, &mut contents)?;
+    }
+    Ok(AssembledRequest {
+        system_instruction: system_instruction.to_owned(),
+        contents,
+        cached_content_name: None,
+    })
+}
+
+/// Persist a freshly-generated summary. Wraps `update_segment_summary` so
+/// callers don't import two helpers for the same write.
+pub fn store_summarise_result(
+    conn: &Connection,
+    segment_id: &str,
+    summary: &str,
+) -> Result<(), LoomError> {
+    update_segment_summary(conn, segment_id, summary)
+}
+
+/// Load all `kind='story'` messages whose `created_at` falls in the segment's
+/// half-open range `(start_anchor, end_anchor]`. The start sentinel's anchor
+/// is treated as `""` (sorts before every ISO-8601 timestamp). The end
+/// checkpoint must have an anchor message — closed segments always do.
+fn load_segment_messages(
+    conn: &Connection,
+    seg: &AccordionSegment,
+) -> Result<Vec<ChatMessage>, LoomError> {
+    let start_at = checkpoint_anchor_created_at(conn, &seg.start_cp_id)?;
+    let end_cp = db_accordion::get_checkpoint(conn, &seg.end_cp_id)?.ok_or_else(|| {
+        LoomError::Internal(format!(
+            "segment {} references missing end checkpoint {}",
+            seg.id, seg.end_cp_id
+        ))
+    })?;
+    let end_msg_id = end_cp.after_message_id.ok_or_else(|| {
+        LoomError::Internal(format!(
+            "segment {}'s end checkpoint {} has no anchor (start sentinel cannot be an end)",
+            seg.id, end_cp.id
+        ))
+    })?;
+    let end_at = messages::get_message(conn, &end_msg_id)?
+        .ok_or_else(|| {
+            LoomError::Internal(format!(
+                "segment {}'s end anchor message {end_msg_id} not found",
+                seg.id
+            ))
+        })?
+        .created_at;
+    let mut stmt = conn.prepare(
+        "SELECT id, story_id, session_id, role, content_type, content, token_count, \
+                model_name, finish_reason, created_at, deleted_at, user_feedback, \
+                ghostwriter_history, kind \
+         FROM messages \
+         WHERE story_id = ?1 AND kind = 'story' AND deleted_at IS NULL \
+               AND created_at > ?2 AND created_at <= ?3 \
+         ORDER BY created_at ASC",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![&seg.story_id, &start_at, &end_at], |r| {
+            Ok(ChatMessage {
+                id: r.get("id")?,
+                story_id: r.get("story_id")?,
+                session_id: r.get("session_id")?,
+                role: r.get("role")?,
+                content_type: r.get("content_type")?,
+                content: r.get("content")?,
+                token_count: r.get("token_count")?,
+                model_name: r.get("model_name")?,
+                finish_reason: r.get("finish_reason")?,
+                created_at: r.get("created_at")?,
+                deleted_at: r.get("deleted_at")?,
+                user_feedback: r.get("user_feedback")?,
+                ghostwriter_history: r.get("ghostwriter_history")?,
+                kind: r.get("kind")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// `created_at` for a checkpoint's anchor message. Start sentinel returns `""`.
+fn checkpoint_anchor_created_at(conn: &Connection, cp_id: &str) -> Result<String, LoomError> {
+    let cp = db_accordion::get_checkpoint(conn, cp_id)?
+        .ok_or_else(|| LoomError::Internal(format!("checkpoint {cp_id} not found")))?;
+    match cp.after_message_id {
+        None => Ok(String::new()),
+        Some(mid) => Ok(messages::get_message(conn, &mid)?
+            .map(|m| m.created_at)
+            .unwrap_or_default()),
+    }
+}
+
 fn require_segment(conn: &Connection, id: &str) -> Result<AccordionSegment, LoomError> {
     db_accordion::get_segment(conn, id)?
         .ok_or_else(|| LoomError::NotFound(format!("segment {id} not found")))
@@ -518,6 +631,77 @@ mod tests {
         assert!(mark_segment_stale_for_message(&c, "story1", "m3")
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn build_summarise_request_renders_segment_messages() {
+        let c = fresh_conn();
+        create_start_sentinel(&c, "story1").unwrap();
+        // Seed two model + one user message inside what will become the segment.
+        let user_json = serde_json::json!({
+            "plot_direction": "rain begins",
+            "background_information": "",
+            "modificators": [],
+            "constraints": ""
+        })
+        .to_string();
+        let m_u = ChatMessage {
+            id: "m_user".into(),
+            story_id: "story1".into(),
+            session_id: None,
+            role: "user".into(),
+            content_type: "json_user".into(),
+            content: user_json,
+            token_count: None,
+            model_name: None,
+            finish_reason: None,
+            created_at: "2026-01-02T00:00:00Z".into(),
+            deleted_at: None,
+            user_feedback: None,
+            ghostwriter_history: "[]".into(),
+            kind: "story".into(),
+        };
+        insert_message(&c, &m_u).unwrap();
+        seed_msg(&c, "m_model", "model", "2026-01-02T00:00:01Z");
+        // Close the segment.
+        let cp = create_checkpoint(&c, "story1", "m_model", "Chapter 2").unwrap();
+        let seg = db_accordion::list_segments(&c, "story1")
+            .unwrap()
+            .into_iter()
+            .find(|s| s.end_cp_id == cp.id)
+            .unwrap();
+
+        let req = build_summarise_request(&c, &seg.id, "summarise this").unwrap();
+        assert_eq!(req.system_instruction, "summarise this");
+        assert!(req.cached_content_name.is_none());
+        assert_eq!(req.contents.len(), 2, "user + model");
+        assert_eq!(req.contents[0].role, "user");
+        assert_eq!(req.contents[1].role, "model");
+    }
+
+    #[test]
+    fn build_summarise_request_errors_on_empty_segment() {
+        let c = fresh_conn();
+        create_start_sentinel(&c, "story1").unwrap();
+        seed_msg(&c, "m1", "model", "2026-01-02T00:00:00Z");
+        seed_msg(&c, "m2", "model", "2026-01-02T00:00:01Z");
+        let cp1 = create_checkpoint(&c, "story1", "m1", "A").unwrap();
+        let _cp2 = create_checkpoint(&c, "story1", "m2", "B").unwrap();
+        // The segment whose start is cp1 contains only m2 — drop m2 (mark
+        // deleted) to make the segment effectively empty for the
+        // story-kind-and-not-deleted filter.
+        c.execute(
+            "UPDATE messages SET deleted_at = '2026-01-03T00:00:00Z' WHERE id = ?1",
+            rusqlite::params!["m2"],
+        )
+        .unwrap();
+        let seg = db_accordion::list_segments(&c, "story1")
+            .unwrap()
+            .into_iter()
+            .find(|s| s.start_cp_id == cp1.id)
+            .unwrap();
+        let err = build_summarise_request(&c, &seg.id, "si").unwrap_err();
+        assert!(matches!(err, LoomError::Validation { .. }));
     }
 
     #[test]

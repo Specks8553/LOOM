@@ -262,7 +262,14 @@ fn render_history_literal(
 
 /// Append a single message in its canonical Gemini shape. User turns parse
 /// `json_user` and re-render bracketed text; model turns append feedback.
-fn render_message_into(msg: &ChatMessage, out: &mut Vec<GeminiContent>) -> Result<(), LoomError> {
+///
+/// `pub(crate)` so `services/accordion.rs::build_summarise_request` can render
+/// the messages inside a segment without duplicating the user-content parser
+/// and feedback-append logic.
+pub(crate) fn render_message_into(
+    msg: &ChatMessage,
+    out: &mut Vec<GeminiContent>,
+) -> Result<(), LoomError> {
     match msg.role.as_str() {
         "user" => {
             let parsed = parse_user_content(msg)?;

@@ -163,6 +163,106 @@ pub async fn count_tokens_with_url(
     })
 }
 
+/// Outcome of a non-streaming `generateContent` call. Mirrors `StreamOutcome`
+/// minus the chunking. `cancelled = true` when the caller's `CancellationToken`
+/// fired before the response body was returned — the call resolved without an
+/// HTTP error but the result is empty.
+#[derive(Debug, Clone, Default)]
+pub struct GenerateOutcome {
+    pub full_text: String,
+    pub finish_reason: Option<String>,
+    pub token_count: Option<i64>,
+    pub cancelled: bool,
+}
+
+/// Issue a non-streaming `generateContent` against Gemini. Used by Accordion
+/// summarisation (Doc 16 §Request — "Streaming is not used"). Returns the
+/// full text + usage metadata in one shot.
+///
+/// Cooperates with `cancel_token`: the in-flight HTTP request is dropped when
+/// the token fires; the function returns `cancelled = true` and no error.
+pub async fn generate_content(
+    api_key: &str,
+    model: &str,
+    req: &AssembledRequest,
+    params: &GenerationParams,
+    cancel_token: CancellationToken,
+) -> Result<GenerateOutcome, LoomError> {
+    generate_content_with_url(GEMINI_BASE_URL, api_key, model, req, params, cancel_token).await
+}
+
+pub async fn generate_content_with_url(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    req: &AssembledRequest,
+    params: &GenerationParams,
+    cancel_token: CancellationToken,
+) -> Result<GenerateOutcome, LoomError> {
+    let url = format!("{base_url}/models/{model}:generateContent?key={api_key}");
+    let body = build_request_body(req, params);
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| LoomError::ApiError(format!("client build: {e}")))?;
+
+    debug!(model = %model, "generate_content: posting");
+
+    let send_fut = client.post(&url).json(&body).send();
+    let resp = tokio::select! {
+        biased;
+        _ = cancel_token.cancelled() => {
+            return Ok(GenerateOutcome { cancelled: true, ..Default::default() });
+        }
+        r = send_fut => r.map_err(|e| LoomError::ApiError(format!("generateContent send: {e}")))?,
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(LoomError::ApiError(format!(
+            "generateContent HTTP {status}: {text}"
+        )));
+    }
+
+    let body_fut = resp.json::<Value>();
+    let value: Value = tokio::select! {
+        biased;
+        _ = cancel_token.cancelled() => {
+            return Ok(GenerateOutcome { cancelled: true, ..Default::default() });
+        }
+        r = body_fut => r.map_err(|e| LoomError::ApiError(format!("generateContent parse: {e}")))?,
+    };
+
+    let mut outcome = GenerateOutcome::default();
+    if let Some(candidates) = value.get("candidates").and_then(Value::as_array) {
+        if let Some(cand) = candidates.first() {
+            if let Some(parts) = cand
+                .get("content")
+                .and_then(|c| c.get("parts"))
+                .and_then(Value::as_array)
+            {
+                for part in parts {
+                    if let Some(text) = part.get("text").and_then(Value::as_str) {
+                        outcome.full_text.push_str(text);
+                    }
+                }
+            }
+            if let Some(reason) = cand.get("finishReason").and_then(Value::as_str) {
+                outcome.finish_reason = Some(reason.to_owned());
+            }
+        }
+    }
+    if let Some(total) = value
+        .get("usageMetadata")
+        .and_then(|m| m.get("totalTokenCount"))
+        .and_then(Value::as_i64)
+    {
+        outcome.token_count = Some(total);
+    }
+    Ok(outcome)
+}
+
 /// Hook that receives each text chunk as it arrives. Returns `Err` to abort
 /// the stream early (treated as a cancellation by the caller).
 pub trait ChunkSink: Send {
@@ -499,6 +599,62 @@ mod tests {
             &sample_request(),
             &sample_params(),
             &mut sink,
+            token,
+        )
+        .await
+        .unwrap();
+        assert!(outcome.cancelled);
+        assert_eq!(outcome.full_text, "");
+    }
+
+    #[tokio::test]
+    async fn generate_content_returns_concatenated_text_and_metadata() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/models/gemini-2.5-flash:generateContent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "candidates": [{
+                    "content": { "parts": [
+                        { "text": "Once " },
+                        { "text": "upon a time." }
+                    ] },
+                    "finishReason": "STOP"
+                }],
+                "usageMetadata": { "totalTokenCount": 11 }
+            })))
+            .mount(&server)
+            .await;
+        let outcome = generate_content_with_url(
+            &server.uri(),
+            "test-key",
+            "gemini-2.5-flash",
+            &sample_request(),
+            &sample_params(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(outcome.full_text, "Once upon a time.");
+        assert_eq!(outcome.finish_reason.as_deref(), Some("STOP"));
+        assert_eq!(outcome.token_count, Some(11));
+        assert!(!outcome.cancelled);
+    }
+
+    #[tokio::test]
+    async fn generate_content_returns_cancelled_when_token_already_fired() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .mount(&server)
+            .await;
+        let token = CancellationToken::new();
+        token.cancel();
+        let outcome = generate_content_with_url(
+            &server.uri(),
+            "test-key",
+            "gemini-2.5-flash",
+            &sample_request(),
+            &sample_params(),
             token,
         )
         .await

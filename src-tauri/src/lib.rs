@@ -100,6 +100,7 @@ pub fn run() {
             commands::accordion::set_segment_collapsed,
             commands::accordion::set_segment_use_summary,
             commands::accordion::clear_segment_summary,
+            commands::accordion::summarise_segment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

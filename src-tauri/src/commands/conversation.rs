@@ -80,6 +80,46 @@ fn mark_story_cache_stale_for_message(
     Ok(())
 }
 
+/// Doc 16 §Edit/regenerate/feedback wiring. When a message is edited /
+/// regenerated / deleted / re-feedbacked, the segment that *contains* that
+/// message is marked stale (so the banner shows the ⚠ badge). Messages in
+/// the open segment yield no-op. Emits `accordion_state_changed` when a
+/// segment was actually marked.
+fn mark_segment_stale_for_message(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    message_id: &str,
+) -> Result<(), LoomError> {
+    let result = access::with_active_conn(state, |conn| {
+        let Some(msg) = get_message(conn, message_id)? else {
+            return Ok(None);
+        };
+        if msg.kind != "story" {
+            return Ok(None);
+        }
+        let Some(seg_id) = crate::services::accordion::mark_segment_stale_for_message(
+            conn,
+            &msg.story_id,
+            message_id,
+        )?
+        else {
+            return Ok(None);
+        };
+        Ok(Some((msg.story_id, seg_id)))
+    })?;
+    if let Some((story_id, segment_id)) = result {
+        let _ = app.emit(
+            "accordion_state_changed",
+            serde_json::json!({
+                "story_id": story_id,
+                "segment_id": segment_id,
+                "checkpoint_id": Option::<String>::None,
+            }),
+        );
+    }
+    Ok(())
+}
+
 fn resolve_params(
     world: &rusqlite::Connection,
     app_db: &rusqlite::Connection,
@@ -812,6 +852,7 @@ pub async fn edit_user_message(
 
     // Stale-mark before truncate (truncate may delete the pivot itself).
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    mark_segment_stale_for_message(&app, &state, &message_id)?;
 
     // Truncate (separate call because it needs `&mut Connection` for the
     // transaction). Then rewrite the user content.
@@ -940,6 +981,7 @@ pub fn update_message_content(
         db_update_message_content(conn, &message_id, &new_text, None, None, None)
     })?;
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    mark_segment_stale_for_message(&app, &state, &message_id)?;
     Ok(())
 }
 
@@ -959,6 +1001,7 @@ pub async fn regenerate_last_response(
     })?;
     if let Some(id) = last_msg_id {
         mark_story_cache_stale_for_message(&app, &state, &id)?;
+        mark_segment_stale_for_message(&app, &state, &id)?;
     }
     let last_user_content = access::with_active_conn_mut(&state, |conn| {
         let last = list_story_messages(conn, &story_id_for_closure)?;
@@ -995,6 +1038,7 @@ pub fn delete_exchange(
     // Stale-mark BEFORE delete — otherwise the message is gone and we can't
     // resolve its story_id. Idempotent if no cache exists.
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    mark_segment_stale_for_message(&app, &state, &message_id)?;
     access::with_active_conn_mut(&state, |conn| {
         db_delete_exchange(conn, &message_id)?;
         Ok(())
@@ -1008,6 +1052,7 @@ pub fn delete_from(
     message_id: String,
 ) -> Result<(), LoomError> {
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    mark_segment_stale_for_message(&app, &state, &message_id)?;
     access::with_active_conn_mut(&state, |conn| {
         db_delete_from(conn, &message_id)?;
         Ok(())
@@ -1025,6 +1070,7 @@ pub fn update_feedback(
         db_update_user_feedback(conn, &message_id, &feedback)
     })?;
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    mark_segment_stale_for_message(&app, &state, &message_id)?;
     Ok(())
 }
 

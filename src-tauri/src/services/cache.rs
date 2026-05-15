@@ -151,6 +151,51 @@ pub fn is_cached_story_message(
     }
 }
 
+/// True iff the segment's range overlaps the story's currently-cached prefix
+/// (Doc 16 §Accordion + Cache Interaction). A segment overlaps when its
+/// start anchor's `created_at` is strictly before the cache high-water
+/// message's `created_at` — i.e. at least one byte of the segment's content
+/// is part of what the cache covers. Returns false when no active cache
+/// exists or the segment / its start anchor has been deleted.
+pub fn segment_overlaps_cached_prefix(
+    conn: &Connection,
+    story_id: &str,
+    segment_id: &str,
+) -> Result<bool, LoomError> {
+    let status = db_cache::get(conn, story_id)?;
+    if !status.is_active() {
+        return Ok(false);
+    }
+    let Some(high_water_id) = status.last_cached_message_id else {
+        return Ok(false);
+    };
+    let Some(high_water_msg) = crate::db::messages::get_message(conn, &high_water_id)? else {
+        return Ok(false);
+    };
+    let Some(seg) = db_accordion::get_segment(conn, segment_id)? else {
+        return Ok(false);
+    };
+    let start_at = segment_start_anchor_created_at(conn, &seg.start_cp_id)?;
+    Ok(start_at.as_str() < high_water_msg.created_at.as_str())
+}
+
+/// Anchor `created_at` for a checkpoint by id. Start sentinel returns `""`
+/// (sorts before every real ISO-8601 timestamp).
+fn segment_start_anchor_created_at(
+    conn: &Connection,
+    start_cp_id: &str,
+) -> Result<String, LoomError> {
+    let Some(cp) = db_accordion::get_checkpoint(conn, start_cp_id)? else {
+        return Ok(String::new());
+    };
+    match cp.after_message_id {
+        None => Ok(String::new()),
+        Some(mid) => Ok(crate::db::messages::get_message(conn, &mid)?
+            .map(|m| m.created_at)
+            .unwrap_or_default()),
+    }
+}
+
 // --- Prefix assembly ---------------------------------------------------------
 
 /// SHA-256 hex of a UTF-8 string.
