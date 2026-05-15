@@ -155,6 +155,16 @@ export function useWorkspaceEvents(): void {
       },
     );
 
+    // --- Accordion (Phase 7) ---
+    track<{ story_id: string; segment_id: string | null; checkpoint_id: string | null }>(
+      'accordion_state_changed',
+      (p) => {
+        const ws = useWorkspaceStore.getState();
+        if (ws.activeStoryId !== p.story_id) return;
+        void ws.loadAccordionState().catch(console.error);
+      },
+    );
+
     track<{ story_id: string; reason: string }>('cache_unavailable', (p) => {
       // Imported lazily to avoid a top-level cycle through the toast lib.
       void import('sonner').then(({ toast }) => {

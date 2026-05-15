@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 
 import {
+  clearSegmentSummary as ipcClearSegmentSummary,
+  createCheckpoint as ipcCreateCheckpoint,
+  deleteCheckpoint as ipcDeleteCheckpoint,
+  getAccordionState as ipcGetAccordionState,
+  renameCheckpoint as ipcRenameCheckpoint,
+  setSegmentCollapsed as ipcSetSegmentCollapsed,
+  setSegmentUseSummary as ipcSetSegmentUseSummary,
+  summariseSegment as ipcSummariseSegment,
+  updateSegmentSummary as ipcUpdateSegmentSummary,
+} from '@/lib/tauriApi/accordion';
+import {
   cancelGeneration as ipcCancelGeneration,
   clearDraft as ipcClearDraft,
   deleteExchange as ipcDeleteExchange,
@@ -26,7 +37,9 @@ import {
 } from '@/lib/tauriApi/vault';
 
 import type {
+  AccordionSegment,
   ChatMessage,
+  Checkpoint,
   InputDraft,
   TokenEstimate,
   UserContent,
@@ -90,6 +103,16 @@ interface WorkspaceState {
   /** Resolved attached doc metadata for the active story (insertion order). */
   attachedDocs: VaultItemMeta[];
 
+  // --- Phase 7: Accordion (Doc 16) ---
+  /** Every checkpoint for the active story (start sentinel first). */
+  checkpoints: Checkpoint[];
+  /** Every closed segment for the active story, ordered by start anchor. */
+  segments: AccordionSegment[];
+  /** Set of segment ids the user is summarising right now. Multiple is
+   *  prevented by the global isGenerating flag, but the set lets the banner
+   *  show a per-segment spinner. */
+  summarisingSegmentIds: Set<string>;
+
   // --- Actions ---
   setIsGenerating(val: boolean): void; // legacy seam — Phase 3 keeps it for any non-IPC callers
   setActiveStory(storyId: string | null): Promise<void>;
@@ -120,6 +143,23 @@ interface WorkspaceState {
   detachDoc(docId: string): Promise<void>;
   /** Reload `contextDocIds` + `attachedDocs` from the backend for the active story. */
   loadAttachedDocs(): Promise<void>;
+
+  // --- Phase 7: Accordion (Doc 16) ---
+  /** Re-fetch checkpoints + segments for the active story. Called on story
+   *  activation and from the `accordion_state_changed` listener. */
+  loadAccordionState(): Promise<void>;
+  createCheckpoint(afterMessageId: string, name: string): Promise<void>;
+  renameCheckpoint(checkpointId: string, name: string): Promise<void>;
+  deleteCheckpoint(checkpointId: string): Promise<void>;
+  updateSegmentSummary(segmentId: string, summary: string): Promise<void>;
+  setSegmentCollapsed(segmentId: string, collapsed: boolean): Promise<void>;
+  setSegmentUseSummary(segmentId: string, useSummary: boolean): Promise<void>;
+  clearSegmentSummary(segmentId: string): Promise<void>;
+  /** Triggers a non-streaming Gemini summarisation. Sets the segment id in
+   *  `summarisingSegmentIds`; the global `isGenerating` flag is NOT raised by
+   *  the frontend (the backend gates this via the cancellation token install).
+   *  Resolves to the new summary, or `null` on cancellation. */
+  summariseSegment(segmentId: string): Promise<string | null>;
 
   // --- Event handlers (called by useWorkspaceEvents) ---
   onMessageChunk(storyId: string, chunk: string): void;
@@ -241,6 +281,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   contextDocIds: [],
   attachedDocs: [],
 
+  checkpoints: [],
+  segments: [],
+  summarisingSegmentIds: new Set<string>(),
+
   setIsGenerating(val) {
     set({ isGenerating: val });
   },
@@ -264,6 +308,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         tokenEstimate: null,
         contextDocIds: [],
         attachedDocs: [],
+        checkpoints: [],
+        segments: [],
+        summarisingSegmentIds: new Set<string>(),
       });
       return;
     }
@@ -276,12 +323,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       tokenEstimate: null,
       contextDocIds: [],
       attachedDocs: [],
+      checkpoints: [],
+      segments: [],
+      summarisingSegmentIds: new Set<string>(),
     });
 
-    const [messages, draft, attached] = await Promise.all([
+    const [messages, draft, attached, accordion] = await Promise.all([
       ipcLoadMessages(storyId),
       ipcGetDraft(storyId),
       ipcListAttachedDocs(storyId),
+      ipcGetAccordionState(storyId),
     ]);
 
     // Only commit if this is still the active story (guard against rapid switches).
@@ -291,6 +342,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         draft,
         attachedDocs: attached,
         contextDocIds: attached.map((d) => d.id),
+        checkpoints: accordion.checkpoints,
+        segments: accordion.segments,
       });
     }
   },
@@ -611,6 +664,76 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
+  // --- Phase 7: Accordion ---
+
+  async loadAccordionState() {
+    const storyId = get().activeStoryId;
+    if (storyId === null) {
+      set({ checkpoints: [], segments: [] });
+      return;
+    }
+    const accordion = await ipcGetAccordionState(storyId);
+    if (get().activeStoryId === storyId) {
+      set({ checkpoints: accordion.checkpoints, segments: accordion.segments });
+    }
+  },
+
+  async createCheckpoint(afterMessageId, name) {
+    const storyId = get().activeStoryId;
+    if (storyId === null) return;
+    await ipcCreateCheckpoint(storyId, afterMessageId, name);
+    // Listener will refetch, but call directly so the UI updates without
+    // round-tripping the event.
+    await get().loadAccordionState();
+  },
+
+  async renameCheckpoint(checkpointId, name) {
+    await ipcRenameCheckpoint(checkpointId, name);
+    await get().loadAccordionState();
+  },
+
+  async deleteCheckpoint(checkpointId) {
+    await ipcDeleteCheckpoint(checkpointId);
+    await get().loadAccordionState();
+  },
+
+  async updateSegmentSummary(segmentId, summary) {
+    await ipcUpdateSegmentSummary(segmentId, summary);
+    await get().loadAccordionState();
+  },
+
+  async setSegmentCollapsed(segmentId, collapsed) {
+    await ipcSetSegmentCollapsed(segmentId, collapsed);
+    await get().loadAccordionState();
+  },
+
+  async setSegmentUseSummary(segmentId, useSummary) {
+    await ipcSetSegmentUseSummary(segmentId, useSummary);
+    await get().loadAccordionState();
+  },
+
+  async clearSegmentSummary(segmentId) {
+    await ipcClearSegmentSummary(segmentId);
+    await get().loadAccordionState();
+  },
+
+  async summariseSegment(segmentId) {
+    // The backend gates concurrent generations via its cancellation token;
+    // the per-segment spinner is purely visual.
+    const nextSet = new Set(get().summarisingSegmentIds);
+    nextSet.add(segmentId);
+    set({ summarisingSegmentIds: nextSet });
+    try {
+      const result = await ipcSummariseSegment(segmentId);
+      await get().loadAccordionState();
+      return result;
+    } finally {
+      const after = new Set(get().summarisingSegmentIds);
+      after.delete(segmentId);
+      set({ summarisingSegmentIds: after });
+    }
+  },
+
   onMessageChunk(storyId, chunk) {
     if (get().activeStoryId !== storyId) return;
     const modelId = get().currentModelMessageId;
@@ -777,6 +900,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       activeDocId: null,
       contextDocIds: [],
       attachedDocs: [],
+      checkpoints: [],
+      segments: [],
+      summarisingSegmentIds: new Set<string>(),
     });
   },
 

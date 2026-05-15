@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -28,6 +28,42 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   const updateModelContent = useWorkspaceStore((s) => s.updateModelContent);
   const regenerateLast = useWorkspaceStore((s) => s.regenerateLast);
   const deleteExchange = useWorkspaceStore((s) => s.deleteExchange);
+  const createCheckpoint = useWorkspaceStore((s) => s.createCheckpoint);
+  const checkpoints = useWorkspaceStore((s) => s.checkpoints);
+
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (menuPos === null) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuPos(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuPos(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuPos]);
+
+  async function handleInsertCheckpoint() {
+    setMenuPos(null);
+    // Suggest "Chapter N" where N = (existing non-start checkpoints) + 2.
+    const userCpCount = checkpoints.filter((c) => !c.is_start).length;
+    const suggestion = `Chapter ${userCpCount + 2}`;
+    const name = window.prompt('New chapter name:', suggestion);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return;
+    try {
+      await createCheckpoint(message.id, trimmed);
+    } catch (e) {
+      console.error('createCheckpoint failed', e);
+    }
+  }
 
   async function handleEditSubmit() {
     setEditing(false);
@@ -51,8 +87,17 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
     message.finish_reason !== 'STOP' &&
     message.finish_reason !== '';
 
+  function handleContextMenu(e: React.MouseEvent) {
+    if (streaming || editing) return;
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY });
+  }
+
   return (
-    <div className="group relative mx-auto w-full max-w-[80%] py-2">
+    <div
+      className="group relative mx-auto w-full max-w-[80%] py-2"
+      onContextMenu={handleContextMenu}
+    >
       <div className="rounded-md border border-[--color-border] bg-[--color-bg] p-3 text-[15px] leading-relaxed text-[--color-text-primary]">
         {editing ? (
           <div className="flex flex-col gap-2">
@@ -99,6 +144,24 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </div>
         )}
       </div>
+      {menuPos !== null && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
+          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => void handleInsertCheckpoint()}
+            disabled={isGenerating}
+            className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-soft] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Insert checkpoint here
+          </button>
+        </div>
+      )}
       {!editing && !streaming && (
         <div className="pointer-events-none absolute -top-1 right-0 flex gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
           <ActionButton

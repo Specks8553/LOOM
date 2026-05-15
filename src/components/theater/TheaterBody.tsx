@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
+import { AccordionBanner } from '@/components/theater/AccordionBanner';
 import { InputArea } from '@/components/theater/InputArea';
 import { ModeSwitcher } from '@/components/theater/ModeSwitcher';
 import { SessionInputArea } from '@/components/theater/SessionInputArea';
@@ -9,7 +10,7 @@ import { StoryUserBubble } from '@/components/theater/StoryUserBubble';
 import { useModeStore } from '@/stores/modeStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-import type { ChatMessage, ConversationSession } from '@/lib/types';
+import type { AccordionSegment, ChatMessage, Checkpoint, ConversationSession } from '@/lib/types';
 
 const NEAR_BOTTOM_PX = 32;
 
@@ -32,6 +33,8 @@ export function TheaterBody() {
   const messages = useWorkspaceStore((s) => s.messages);
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
   const currentModelMessageId = useWorkspaceStore((s) => s.currentModelMessageId);
+  const checkpoints = useWorkspaceStore((s) => s.checkpoints);
+  const segments = useWorkspaceStore((s) => s.segments);
   const sessions = useModeStore((s) => s.sessions);
   const activeMode = useModeStore((s) => s.activeMode);
   const activeSessionId = useModeStore((s) => s.activeSessionId);
@@ -39,7 +42,10 @@ export function TheaterBody() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoFollow, setAutoFollow] = useState(true);
 
-  const renderItems = useMemo(() => buildRenderItems(messages, sessions), [messages, sessions]);
+  const renderItems = useMemo(
+    () => buildRenderItems(messages, sessions, checkpoints, segments),
+    [messages, sessions, checkpoints, segments],
+  );
 
   // Rule 1: scroll-to-bottom on story open.
   useLayoutEffect(() => {
@@ -112,9 +118,21 @@ export function TheaterBody() {
                   </li>
                 );
               }
+              if (item.kind === 'session') {
+                return (
+                  <li key={`session-${item.session.id}`}>
+                    <SessionPartition session={item.session} messages={item.messages} />
+                  </li>
+                );
+              }
               return (
-                <li key={`session-${item.session.id}`}>
-                  <SessionPartition session={item.session} messages={item.messages} />
+                <li key={`cp-${item.checkpoint.id}`}>
+                  <AccordionBanner
+                    checkpoint={item.checkpoint}
+                    segment={item.segment}
+                    previousSegment={item.previousSegment}
+                    segmentMessageCount={item.segmentMessageCount}
+                  />
                 </li>
               );
             })}
@@ -156,6 +174,14 @@ type RenderItem =
       session: ConversationSession;
       messages: ChatMessage[];
       sortKey: string;
+    }
+  | {
+      kind: 'accordion';
+      checkpoint: Checkpoint;
+      segment: AccordionSegment | null;
+      previousSegment: AccordionSegment | null;
+      segmentMessageCount: number;
+      sortKey: string;
     };
 
 /**
@@ -170,15 +196,102 @@ type RenderItem =
  * Sort key is a concatenation of `created_at` and a sub-position so a
  * session anchored at message X always appears *after* message X.
  */
-function buildRenderItems(messages: ChatMessage[], sessions: ConversationSession[]): RenderItem[] {
+function buildRenderItems(
+  messages: ChatMessage[],
+  sessions: ConversationSession[],
+  checkpoints: Checkpoint[],
+  segments: AccordionSegment[],
+): RenderItem[] {
   const storyMsgs = messages.filter((m) => m.kind === 'story');
-  const items: RenderItem[] = storyMsgs.map((m) => ({
+  const messageById = new Map<string, ChatMessage>();
+  for (const m of messages) messageById.set(m.id, m);
+
+  // Anchor `created_at` for each checkpoint (start sentinel → "" so it sorts
+  // before every real timestamp).
+  const checkpointAnchorAt = new Map<string, string>();
+  for (const cp of checkpoints) {
+    if (cp.after_message_id === null) {
+      checkpointAnchorAt.set(cp.id, '');
+    } else {
+      const anchor = messageById.get(cp.after_message_id);
+      checkpointAnchorAt.set(cp.id, anchor !== undefined ? anchor.created_at : '');
+    }
+  }
+
+  // For each closed segment compute (startAt, endAt] range and count.
+  type SegRange = { seg: AccordionSegment; startAt: string; endAt: string };
+  const segRanges: SegRange[] = [];
+  for (const seg of segments) {
+    const startAt = checkpointAnchorAt.get(seg.start_cp_id);
+    const endAt = checkpointAnchorAt.get(seg.end_cp_id);
+    if (startAt === undefined || endAt === undefined) continue;
+    segRanges.push({ seg, startAt, endAt });
+  }
+
+  function containingSegment(msgCreatedAt: string): AccordionSegment | null {
+    for (const r of segRanges) {
+      if (r.startAt < msgCreatedAt && msgCreatedAt <= r.endAt) return r.seg;
+    }
+    return null;
+  }
+
+  // Drop messages whose containing closed segment is collapsed. Banner
+  // replaces them with the summary card (Doc 16 §Banner state matrix row 1).
+  const visibleStoryMsgs = storyMsgs.filter((m) => {
+    const seg = containingSegment(m.created_at);
+    return !(seg !== null && seg.is_collapsed);
+  });
+
+  const segmentMessageCounts = new Map<string, number>();
+  for (const r of segRanges) {
+    let n = 0;
+    for (const m of storyMsgs) {
+      if (r.startAt < m.created_at && m.created_at <= r.endAt) n += 1;
+    }
+    segmentMessageCounts.set(r.seg.id, n);
+  }
+
+  const items: RenderItem[] = visibleStoryMsgs.map((m) => ({
     kind: 'story',
     message: m,
     // Story messages sort at the "a" sub-position so partitions anchored at
     // the same message land below.
     sortKey: `${m.created_at}__a__${m.id}`,
   }));
+
+  // Accordion banners — one per checkpoint. The start sentinel anchors at
+  // "" (sorts to the top). User checkpoints anchor at their after-message
+  // `created_at`, with a "c" sub-position so they fall below the anchor
+  // message AND any session anchored at the same message.
+  const segmentByStartCp = new Map<string, AccordionSegment>();
+  const segmentByEndCp = new Map<string, AccordionSegment>();
+  for (const seg of segments) {
+    segmentByStartCp.set(seg.start_cp_id, seg);
+    segmentByEndCp.set(seg.end_cp_id, seg);
+  }
+  for (const cp of checkpoints) {
+    const anchorAt = checkpointAnchorAt.get(cp.id) ?? '';
+    const segment = segmentByStartCp.get(cp.id) ?? null;
+    const previousSegment = segmentByEndCp.get(cp.id) ?? null;
+    let count = 0;
+    if (segment !== null) {
+      count = segmentMessageCounts.get(segment.id) ?? 0;
+    } else {
+      // Open segment — count messages strictly after this checkpoint.
+      for (const m of storyMsgs) {
+        if (anchorAt < m.created_at) count += 1;
+      }
+    }
+    items.push({
+      kind: 'accordion',
+      checkpoint: cp,
+      segment,
+      previousSegment,
+      segmentMessageCount: count,
+      // Start sentinel sorts to the top via "" anchor.
+      sortKey: cp.is_start ? '__a__sentinel' : `${anchorAt}__c__${cp.id}`,
+    });
+  }
 
   // Bucket session messages by session_id.
   const sessionMsgsBySession = new Map<string, ChatMessage[]>();
@@ -188,9 +301,6 @@ function buildRenderItems(messages: ChatMessage[], sessions: ConversationSession
     bucket.push(m);
     sessionMsgsBySession.set(m.session_id, bucket);
   }
-
-  const messageById = new Map<string, ChatMessage>();
-  for (const m of messages) messageById.set(m.id, m);
 
   for (const session of sessions) {
     const anchorMsg =
