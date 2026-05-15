@@ -1,6 +1,6 @@
-// Phase 7D — Accordion store actions (Doc 16 §Backend API).
-// Mocks the Tauri IPC layer so the store's create/rename/delete/summarise
-// actions can be exercised without a backend.
+// Accordion store actions (Doc 16 §Backend API). Mocks the Tauri IPC layer
+// so the store's create/rename/delete/summarise actions can be exercised
+// without a backend.
 
 import * as tauriCore from '@tauri-apps/api/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
