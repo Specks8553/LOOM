@@ -426,6 +426,8 @@ pub async fn send_message(
         let model_name: String = resolve(world_db, app_db, AppSettingKey::TextModelName)?;
         let system_instruction: String = resolve(world_db, app_db, AppSettingKey::StorySi)?;
         let aux_text = resolve_aux_text(world_db, app_db, &story_id_for_closure)?;
+        let fake_user_prompt: String =
+            resolve(world_db, app_db, AppSettingKey::PromptAccordionFakeUser)?;
         let params = resolve_params(world_db, app_db)?;
         let inline_request = history::assemble_request(
             world_db,
@@ -435,6 +437,7 @@ pub async fn send_message(
                 draft: &draft_for_closure,
                 system_instruction: &system_instruction,
                 aux_text: &aux_text,
+                fake_user_prompt: &fake_user_prompt,
             },
         )?;
 
@@ -848,6 +851,8 @@ async fn re_send_after_edit(
         let model_name: String = resolve(world_db, app_db, AppSettingKey::TextModelName)?;
         let system_instruction: String = resolve(world_db, app_db, AppSettingKey::StorySi)?;
         let aux_text = resolve_aux_text(world_db, app_db, &story_id_for_closure)?;
+        let fake_user_prompt: String =
+            resolve(world_db, app_db, AppSettingKey::PromptAccordionFakeUser)?;
         let params = resolve_params(world_db, app_db)?;
         let request = history::assemble_request(
             world_db,
@@ -857,6 +862,7 @@ async fn re_send_after_edit(
                 draft: &user_content_for_closure,
                 system_instruction: &system_instruction,
                 aux_text: &aux_text,
+                fake_user_prompt: &fake_user_prompt,
             },
         )?;
         let model_msg = ChatMessage {
@@ -1035,6 +1041,8 @@ pub async fn get_token_count(
         let model: String = resolve(world_db, app_db, AppSettingKey::TextModelName)?;
         let system_instruction: String = resolve(world_db, app_db, AppSettingKey::StorySi)?;
         let aux_text = resolve_aux_text(world_db, app_db, &story_id)?;
+        let fake_user_prompt: String =
+            resolve(world_db, app_db, AppSettingKey::PromptAccordionFakeUser)?;
         let request = history::assemble_request(
             world_db,
             ConversationMode::Story,
@@ -1043,6 +1051,7 @@ pub async fn get_token_count(
                 draft: &draft,
                 system_instruction: &system_instruction,
                 aux_text: &aux_text,
+                fake_user_prompt: &fake_user_prompt,
             },
         )?;
         Ok((model, request))

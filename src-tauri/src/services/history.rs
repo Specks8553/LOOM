@@ -13,6 +13,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::db::accordion::{self as db_accordion, AccordionSegment, Checkpoint};
 use crate::db::conversation_sessions::get_session;
 use crate::db::messages::{
     get_message, list_session_messages, list_story_messages, list_story_messages_up_to, ChatMessage,
@@ -163,6 +164,150 @@ fn apply_aux(rendered_user_turn: &str, aux: &str) -> String {
     format!("[AUX — ALWAYS APPLY]\n{aux_trimmed}\n\n[USER]\n{rendered_user_turn}")
 }
 
+/// Anchor `created_at` for a checkpoint. The start sentinel has no anchor
+/// message; treat its anchor as `""` so it sorts before every real ISO-8601
+/// timestamp (matching `db::accordion::find_segment_for_message`).
+fn checkpoint_anchor_at<'a>(cp: &'a Checkpoint, messages: &'a [ChatMessage]) -> &'a str {
+    match cp.after_message_id.as_deref() {
+        None => "",
+        Some(mid) => messages
+            .iter()
+            .find(|m| m.id == mid)
+            .map(|m| m.created_at.as_str())
+            .unwrap_or(""),
+    }
+}
+
+/// Substitute closed-segment summaries into a chronological message slice
+/// per Doc 16 §History Assembly. For each message whose containing segment
+/// has a summary and is either `is_collapsed` or `use_summary`, a single
+/// fake-pair (`fake_user_prompt` → `summary`) replaces the entire run of
+/// underlying exchanges; the underlying messages are dropped from the output.
+/// Messages in the open segment, or in closed segments with no summary,
+/// pass through unchanged.
+///
+/// Pre-computes each segment's `(start_anchor, end_anchor]` window by
+/// matching `Checkpoint.after_message_id` against the given `messages` slice.
+/// Anchors that aren't present (e.g. session-scoped slices that don't include
+/// every story message) fall back to `""`, which makes those segments
+/// effectively unbounded on that side — substitution still applies whenever
+/// the message's `created_at` falls inside the resolved range.
+pub fn build_history_with_accordion(
+    branch_messages: &[ChatMessage],
+    segments: &[AccordionSegment],
+    checkpoints: &[Checkpoint],
+    fake_user_prompt: &str,
+) -> Result<Vec<GeminiContent>, LoomError> {
+    if segments.is_empty() {
+        // Fast path — nothing to substitute.
+        return render_history_literal(branch_messages);
+    }
+
+    // (start_at, end_at, segment) tuples for active substitutions only.
+    let mut active: Vec<(String, String, &AccordionSegment)> = Vec::with_capacity(segments.len());
+    for seg in segments {
+        let active_seg = seg.summary.is_some() && (seg.is_collapsed || seg.use_summary);
+        if !active_seg {
+            continue;
+        }
+        let start_cp = checkpoints.iter().find(|c| c.id == seg.start_cp_id);
+        let end_cp = checkpoints.iter().find(|c| c.id == seg.end_cp_id);
+        let (Some(start_cp), Some(end_cp)) = (start_cp, end_cp) else {
+            // Defensive: checkpoint missing — treat as inactive.
+            continue;
+        };
+        let start_at = checkpoint_anchor_at(start_cp, branch_messages).to_owned();
+        let end_at = checkpoint_anchor_at(end_cp, branch_messages).to_owned();
+        active.push((start_at, end_at, seg));
+    }
+
+    let mut out: Vec<GeminiContent> = Vec::with_capacity(branch_messages.len());
+    let mut injected: std::collections::HashSet<&str> =
+        std::collections::HashSet::with_capacity(active.len());
+
+    for msg in branch_messages {
+        // Locate the active segment whose range contains this message.
+        let containing = active.iter().find(|(start, end, _)| {
+            start.as_str() < msg.created_at.as_str() && msg.created_at.as_str() <= end.as_str()
+        });
+
+        if let Some((_, _, seg)) = containing {
+            if injected.insert(seg.id.as_str()) {
+                out.push(GeminiContent::user(fake_user_prompt.to_owned()));
+                out.push(GeminiContent::model(
+                    seg.summary.clone().unwrap_or_default(),
+                ));
+            }
+            // Underlying message is covered by the fake-pair — skip.
+            continue;
+        }
+
+        render_message_into(msg, &mut out)?;
+    }
+
+    Ok(out)
+}
+
+/// Render a chronological slice with no substitution — the fast path used
+/// when a story has no closed segments.
+fn render_history_literal(
+    branch_messages: &[ChatMessage],
+) -> Result<Vec<GeminiContent>, LoomError> {
+    let mut out = Vec::with_capacity(branch_messages.len());
+    for msg in branch_messages {
+        render_message_into(msg, &mut out)?;
+    }
+    Ok(out)
+}
+
+/// Append a single message in its canonical Gemini shape. User turns parse
+/// `json_user` and re-render bracketed text; model turns append feedback.
+fn render_message_into(msg: &ChatMessage, out: &mut Vec<GeminiContent>) -> Result<(), LoomError> {
+    match msg.role.as_str() {
+        "user" => {
+            let parsed = parse_user_content(msg)?;
+            let rendered = render_user_content(&parsed);
+            if !rendered.is_empty() {
+                out.push(GeminiContent::user(rendered));
+            }
+        }
+        "model" => {
+            let with_feedback = append_feedback(&msg.content, msg.user_feedback.as_deref());
+            out.push(GeminiContent::model(with_feedback));
+        }
+        other => {
+            return Err(LoomError::Internal(format!(
+                "unexpected message role '{other}' on message {}",
+                msg.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Render a session-history slice (handover / consulting). Plain text on
+/// both sides; model turns append feedback. Mirrors the inline-loop in
+/// `assemble_session_request`.
+fn render_session_message_into(
+    msg: &ChatMessage,
+    out: &mut Vec<GeminiContent>,
+) -> Result<(), LoomError> {
+    match msg.role.as_str() {
+        "user" => out.push(GeminiContent::user(msg.content.clone())),
+        "model" => out.push(GeminiContent::model(append_feedback(
+            &msg.content,
+            msg.user_feedback.as_deref(),
+        ))),
+        other => {
+            return Err(LoomError::Internal(format!(
+                "unexpected session message role '{other}' on {}",
+                msg.id
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Output of `assemble_request` — what `services/gemini.rs::stream_generate`
 /// needs to issue the call.
 ///
@@ -186,6 +331,10 @@ pub struct AssembleInputs<'a> {
     pub system_instruction: &'a str,
     /// Optional aux-slot text. Empty string means no aux injection.
     pub aux_text: &'a str,
+    /// Resolved `prompt_accordion_fake_user` (Doc 16 §Fake-pair). The user
+    /// half of every substituted segment is this text. Empty string is
+    /// allowed for the no-segments fast path.
+    pub fake_user_prompt: &'a str,
 }
 
 /// Build the Gemini request payload for a story-mode send.
@@ -201,29 +350,10 @@ pub fn assemble_story_request(
     inputs: AssembleInputs<'_>,
 ) -> Result<AssembledRequest, LoomError> {
     let history = list_story_messages(conn, inputs.story_id)?;
-    let mut contents: Vec<GeminiContent> = Vec::with_capacity(history.len() + 1);
-
-    for msg in &history {
-        match msg.role.as_str() {
-            "user" => {
-                let parsed = parse_user_content(msg)?;
-                let rendered = render_user_content(&parsed);
-                if !rendered.is_empty() {
-                    contents.push(GeminiContent::user(rendered));
-                }
-            }
-            "model" => {
-                let with_feedback = append_feedback(&msg.content, msg.user_feedback.as_deref());
-                contents.push(GeminiContent::model(with_feedback));
-            }
-            other => {
-                return Err(LoomError::Internal(format!(
-                    "unexpected message role '{other}' on message {}",
-                    msg.id
-                )));
-            }
-        }
-    }
+    let segments = db_accordion::list_segments(conn, inputs.story_id)?;
+    let checkpoints = db_accordion::list_checkpoints(conn, inputs.story_id)?;
+    let mut contents =
+        build_history_with_accordion(&history, &segments, &checkpoints, inputs.fake_user_prompt)?;
 
     let current_turn = render_user_content(inputs.draft);
     if current_turn.trim().is_empty() {
@@ -279,6 +409,10 @@ pub struct SessionAssembleInputs<'a> {
     pub session_id: &'a str,
     pub user_text: &'a str,
     pub system_instruction: &'a str,
+    /// Resolved `prompt_accordion_fake_user`. Substitution applies to the
+    /// story-up-to-entry slice (Doc 16 §Accordion + Modes — handover and
+    /// inline consulting both use the substituted path).
+    pub fake_user_prompt: &'a str,
 }
 
 /// Build a Gemini request for a handover / consulting turn.
@@ -318,47 +452,21 @@ pub fn assemble_session_request(
         None
     };
 
-    let mut contents: Vec<GeminiContent> = Vec::new();
     let story_history = list_story_messages_up_to(conn, &session.story_id, boundary.as_deref())?;
-    for msg in &story_history {
-        match msg.role.as_str() {
-            "user" => {
-                let parsed = parse_user_content(msg)?;
-                let rendered = render_user_content(&parsed);
-                if !rendered.is_empty() {
-                    contents.push(GeminiContent::user(rendered));
-                }
-            }
-            "model" => {
-                let with_feedback = append_feedback(&msg.content, msg.user_feedback.as_deref());
-                contents.push(GeminiContent::model(with_feedback));
-            }
-            other => {
-                return Err(LoomError::Internal(format!(
-                    "unexpected message role '{other}' on message {}",
-                    msg.id
-                )));
-            }
-        }
-    }
+    let segments = db_accordion::list_segments(conn, &session.story_id)?;
+    let checkpoints = db_accordion::list_checkpoints(conn, &session.story_id)?;
+    let mut contents = build_history_with_accordion(
+        &story_history,
+        &segments,
+        &checkpoints,
+        inputs.fake_user_prompt,
+    )?;
 
     // Session prior turns. Plain text — both handover and consulting use a
     // single free-text field, persisted as `content_type = 'text'`.
     let session_history = list_session_messages(conn, inputs.session_id)?;
     for msg in &session_history {
-        match msg.role.as_str() {
-            "user" => contents.push(GeminiContent::user(msg.content.clone())),
-            "model" => contents.push(GeminiContent::model(append_feedback(
-                &msg.content,
-                msg.user_feedback.as_deref(),
-            ))),
-            other => {
-                return Err(LoomError::Internal(format!(
-                    "unexpected session message role '{other}' on {}",
-                    msg.id
-                )));
-            }
-        }
+        render_session_message_into(msg, &mut contents)?;
     }
 
     contents.push(GeminiContent::user(user_text.to_owned()));
@@ -509,6 +617,7 @@ mod tests {
                 draft: &draft,
                 system_instruction: "be helpful",
                 aux_text: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap();
@@ -535,6 +644,7 @@ mod tests {
                 draft: &draft,
                 system_instruction: "",
                 aux_text: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap_err();
@@ -558,6 +668,7 @@ mod tests {
                 draft: &draft,
                 system_instruction: "",
                 aux_text: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap_err();
@@ -612,6 +723,7 @@ mod tests {
                 session_id: "s1",
                 user_text: "   ",
                 system_instruction: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap_err();
@@ -628,6 +740,7 @@ mod tests {
                 session_id: "s1",
                 user_text: "Summarise the story so far.",
                 system_instruction: "be an analyst",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap();
@@ -666,6 +779,7 @@ mod tests {
                 session_id: "s1",
                 user_text: "Where are we headed?",
                 system_instruction: "consult-si",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap();
@@ -715,6 +829,7 @@ mod tests {
                 session_id: "s1",
                 user_text: "follow up",
                 system_instruction: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap();
@@ -733,6 +848,7 @@ mod tests {
                 session_id: "nope",
                 user_text: "x",
                 system_instruction: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap_err();
@@ -775,6 +891,7 @@ mod tests {
                 draft: &draft,
                 system_instruction: "",
                 aux_text: "",
+                fake_user_prompt: "FAKE_USER",
             },
         )
         .unwrap();
@@ -784,5 +901,259 @@ mod tests {
             .contents
             .iter()
             .any(|c| c.parts[0].text.contains("session text")));
+    }
+
+    // --- Phase 7B: Accordion substitution ----------------------------------
+
+    fn segment(
+        id: &str,
+        start_cp_id: &str,
+        end_cp_id: &str,
+        summary: Option<&str>,
+        is_collapsed: bool,
+        use_summary: bool,
+    ) -> AccordionSegment {
+        AccordionSegment {
+            id: id.into(),
+            story_id: "story1".into(),
+            start_cp_id: start_cp_id.into(),
+            end_cp_id: end_cp_id.into(),
+            summary: summary.map(str::to_owned),
+            is_collapsed,
+            use_summary,
+            is_stale: false,
+            summarised_at: None,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            modified_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    fn cp(id: &str, after_message_id: Option<&str>, is_start: bool) -> Checkpoint {
+        Checkpoint {
+            id: id.into(),
+            story_id: "story1".into(),
+            after_message_id: after_message_id.map(str::to_owned),
+            name: "C".into(),
+            is_start,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            modified_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn build_history_no_segments_passes_through_literal() {
+        let u1_c = UserContent {
+            plot_direction: "p1".into(),
+            ..Default::default()
+        };
+        let messages = vec![
+            user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
+            model_row("m1", "2026-01-01T00:00:02Z", "reply", None),
+        ];
+        let out = build_history_with_accordion(&messages, &[], &[], "FAKE").unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].role, "user");
+        assert!(out[0].parts[0].text.contains("p1"));
+        assert_eq!(out[1].parts[0].text, "reply");
+    }
+
+    #[test]
+    fn build_history_substitutes_collapsed_segment_once() {
+        let u1_c = UserContent {
+            plot_direction: "p1".into(),
+            ..Default::default()
+        };
+        let u2_c = UserContent {
+            plot_direction: "p2".into(),
+            ..Default::default()
+        };
+        // Story has two exchanges (u1/m1 and u2/m2). A closed segment from
+        // start-sentinel to cpEnd (anchored at m2) covers all of it and is
+        // collapsed with a summary — the whole run becomes a fake-pair.
+        let messages = vec![
+            user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
+            model_row("m1", "2026-01-01T00:00:02Z", "r1", None),
+            user_row("u2", "2026-01-01T00:00:03Z", &u2_c),
+            model_row("m2", "2026-01-01T00:00:04Z", "r2", None),
+        ];
+        let cps = vec![cp("cpStart", None, true), cp("cpEnd", Some("m2"), false)];
+        let segs = vec![segment(
+            "seg1",
+            "cpStart",
+            "cpEnd",
+            Some("CHAPTER ONE SUMMARY"),
+            true,
+            true,
+        )];
+        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        assert_eq!(out.len(), 2, "one fake-pair replaces the whole chapter");
+        assert_eq!(out[0].role, "user");
+        assert_eq!(out[0].parts[0].text, "FAKE");
+        assert_eq!(out[1].role, "model");
+        assert_eq!(out[1].parts[0].text, "CHAPTER ONE SUMMARY");
+    }
+
+    #[test]
+    fn build_history_passes_through_segment_without_summary() {
+        let u1_c = UserContent {
+            plot_direction: "p1".into(),
+            ..Default::default()
+        };
+        let messages = vec![
+            user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
+            model_row("m1", "2026-01-01T00:00:02Z", "r1", None),
+        ];
+        let cps = vec![cp("cpStart", None, true), cp("cpEnd", Some("m1"), false)];
+        // Segment exists but has no summary — must not substitute.
+        let segs = vec![segment("seg1", "cpStart", "cpEnd", None, true, true)];
+        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        assert_eq!(out.len(), 2);
+        assert!(out[0].parts[0].text.contains("p1"));
+        assert_eq!(out[1].parts[0].text, "r1");
+    }
+
+    #[test]
+    fn build_history_skips_segment_when_neither_collapsed_nor_use_summary() {
+        let u1_c = UserContent {
+            plot_direction: "p1".into(),
+            ..Default::default()
+        };
+        let messages = vec![
+            user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
+            model_row("m1", "2026-01-01T00:00:02Z", "r1", None),
+        ];
+        let cps = vec![cp("cpStart", None, true), cp("cpEnd", Some("m1"), false)];
+        // Has summary but `is_collapsed = false` AND `use_summary = false` —
+        // the writer is reading the chapter raw and asked us not to inject.
+        let segs = vec![segment(
+            "seg1",
+            "cpStart",
+            "cpEnd",
+            Some("ignored"),
+            false,
+            false,
+        )];
+        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        assert_eq!(out.len(), 2);
+        assert!(out[0].parts[0].text.contains("p1"));
+    }
+
+    #[test]
+    fn assemble_story_request_substitutes_using_db_segments() {
+        use crate::db::accordion as db_accordion;
+        let c = fresh_conn();
+        let u1_c = UserContent {
+            plot_direction: "early".into(),
+            ..Default::default()
+        };
+        insert_message(&c, &user_row("u1", "2026-01-01T00:00:01Z", &u1_c)).unwrap();
+        insert_message(
+            &c,
+            &model_row("m1", "2026-01-01T00:00:02Z", "early-reply", None),
+        )
+        .unwrap();
+
+        // Seed start sentinel + tail checkpoint anchored at m1, plus a
+        // collapsed segment with summary. assemble_story_request should
+        // substitute the whole historic chapter and append only the current
+        // turn after the fake-pair.
+        db_accordion::insert_checkpoint(
+            &c,
+            &Checkpoint {
+                id: "cpStart".into(),
+                story_id: "story1".into(),
+                after_message_id: None,
+                name: "Chapter 1".into(),
+                is_start: true,
+                created_at: "2026-01-01T00:00:00Z".into(),
+                modified_at: "2026-01-01T00:00:00Z".into(),
+            },
+        )
+        .unwrap();
+        db_accordion::insert_checkpoint(
+            &c,
+            &Checkpoint {
+                id: "cpEnd".into(),
+                story_id: "story1".into(),
+                after_message_id: Some("m1".into()),
+                name: "Chapter 2".into(),
+                is_start: false,
+                created_at: "2026-01-01T00:00:02Z".into(),
+                modified_at: "2026-01-01T00:00:02Z".into(),
+            },
+        )
+        .unwrap();
+        db_accordion::insert_segment(
+            &c,
+            &AccordionSegment {
+                id: "seg1".into(),
+                story_id: "story1".into(),
+                start_cp_id: "cpStart".into(),
+                end_cp_id: "cpEnd".into(),
+                summary: Some("SUM".into()),
+                is_collapsed: true,
+                use_summary: true,
+                is_stale: false,
+                summarised_at: None,
+                created_at: "2026-01-01T00:00:02Z".into(),
+                modified_at: "2026-01-01T00:00:02Z".into(),
+            },
+        )
+        .unwrap();
+
+        let draft = UserContent {
+            plot_direction: "next".into(),
+            ..Default::default()
+        };
+        let req = assemble_story_request(
+            &c,
+            AssembleInputs {
+                story_id: "story1",
+                draft: &draft,
+                system_instruction: "",
+                aux_text: "",
+                fake_user_prompt: "PLEASE CONTINUE",
+            },
+        )
+        .unwrap();
+        // fake-pair (2) + current user turn = 3
+        assert_eq!(req.contents.len(), 3);
+        assert_eq!(req.contents[0].parts[0].text, "PLEASE CONTINUE");
+        assert_eq!(req.contents[1].parts[0].text, "SUM");
+        assert!(req.contents[2].parts[0].text.contains("next"));
+    }
+
+    #[test]
+    fn build_history_passes_open_segment_messages_through() {
+        let u1_c = UserContent {
+            plot_direction: "p1".into(),
+            ..Default::default()
+        };
+        let u2_c = UserContent {
+            plot_direction: "p2".into(),
+            ..Default::default()
+        };
+        // u1/m1 covered by collapsed seg; u2/m2 in the open segment.
+        let messages = vec![
+            user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
+            model_row("m1", "2026-01-01T00:00:02Z", "r1", None),
+            user_row("u2", "2026-01-01T00:00:03Z", &u2_c),
+            model_row("m2", "2026-01-01T00:00:04Z", "r2", None),
+        ];
+        let cps = vec![cp("cpStart", None, true), cp("cpMid", Some("m1"), false)];
+        let segs = vec![segment(
+            "seg1",
+            "cpStart",
+            "cpMid",
+            Some("SEG SUMMARY"),
+            true,
+            true,
+        )];
+        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        // fake-pair (2) + u2 + m2 = 4
+        assert_eq!(out.len(), 4);
+        assert_eq!(out[1].parts[0].text, "SEG SUMMARY");
+        assert!(out[2].parts[0].text.contains("p2"));
+        assert_eq!(out[3].parts[0].text, "r2");
     }
 }

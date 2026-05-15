@@ -438,6 +438,8 @@ pub async fn send_session_message(
 
             let model_name: String = resolve(world_db, app_db, AppSettingKey::TextModelName)?;
             let si: String = resolve(world_db, app_db, mode_si_key(kind))?;
+            let fake_user_prompt: String =
+                resolve(world_db, app_db, AppSettingKey::PromptAccordionFakeUser)?;
             let params = resolve_params(world_db, app_db)?;
             let request = history::assemble_session_request(
                 world_db,
@@ -445,6 +447,7 @@ pub async fn send_session_message(
                     session_id: &session_id_for_closure,
                     user_text: &text_for_closure,
                     system_instruction: &si,
+                    fake_user_prompt: &fake_user_prompt,
                 },
             )?;
 

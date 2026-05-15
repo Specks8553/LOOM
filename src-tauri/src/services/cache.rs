@@ -22,11 +22,14 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
+use crate::db::accordion::{self as db_accordion, AccordionSegment, Checkpoint};
 use crate::db::cache_state as db_cache;
 use crate::db::messages::{list_story_messages, ChatMessage};
 use crate::db::vault::VaultItemMeta;
 use crate::error::LoomError;
-use crate::services::history::{append_feedback, render_user_content, GeminiContent, UserContent};
+use crate::services::history::{
+    append_feedback, build_history_with_accordion, render_user_content, GeminiContent, UserContent,
+};
 use crate::services::settings::resolve;
 use crate::services::settings_keys::AppSettingKey;
 use crate::services::vault::list_attached_docs;
@@ -191,6 +194,14 @@ pub struct StoryPrefixInputs<'a> {
     pub system_instruction: &'a str,
     pub attached_docs: &'a [AttachedDocBody<'a>],
     pub history: &'a [ChatMessage],
+    /// Closed segments for this story. Substitution applies to runs of
+    /// messages whose containing segment has a summary and is collapsed or
+    /// has `use_summary = 1` (Doc 16 §History Assembly).
+    pub segments: &'a [AccordionSegment],
+    pub checkpoints: &'a [Checkpoint],
+    /// Resolved `prompt_accordion_fake_user`. Empty string is acceptable
+    /// when no segments will substitute.
+    pub fake_user_prompt: &'a str,
 }
 
 /// Assemble the prefix `Vec<GeminiContent>` for a story-mode cache. Order
@@ -239,41 +250,18 @@ pub fn build_story_prefix(inputs: StoryPrefixInputs<'_>) -> Result<CachePrefix, 
         });
     }
 
-    // 2. Story history.
-    let mut last_id: Option<String> = None;
-    for msg in inputs.history {
-        match msg.role.as_str() {
-            "user" => {
-                if msg.content_type != "json_user" {
-                    return Err(LoomError::Internal(format!(
-                        "story-cache user message {} has content_type '{}'",
-                        msg.id, msg.content_type
-                    )));
-                }
-                let parsed: UserContent = serde_json::from_str(&msg.content)?;
-                let rendered = render_user_content(&parsed);
-                if !rendered.is_empty() {
-                    contents.push(GeminiContent {
-                        role: "user".into(),
-                        parts: vec![crate::services::history::GeminiPart::text(rendered)],
-                    });
-                }
-            }
-            "model" => {
-                let with_feedback = append_feedback(&msg.content, msg.user_feedback.as_deref());
-                contents.push(GeminiContent {
-                    role: "model".into(),
-                    parts: vec![crate::services::history::GeminiPart::text(with_feedback)],
-                });
-            }
-            other => {
-                return Err(LoomError::Internal(format!(
-                    "unexpected message role '{other}' in story cache prefix",
-                )));
-            }
-        }
-        last_id = Some(msg.id.clone());
-    }
+    // 2. Story history — with Accordion fake-pair substitution (Doc 16
+    //    §History Assembly). The high-water id is still the chronologically
+    //    last underlying message, not the fake-pair, so cached-prefix
+    //    overlap checks line up with what's actually persisted.
+    let history_contents = build_history_with_accordion(
+        inputs.history,
+        inputs.segments,
+        inputs.checkpoints,
+        inputs.fake_user_prompt,
+    )?;
+    contents.extend(history_contents);
+    let last_id = inputs.history.last().map(|m| m.id.clone());
 
     // Rolling hash over (system_instruction || every part text in order).
     // Order-stable because BTreeMap keys are sorted; canonical for snapshot
@@ -366,11 +354,18 @@ pub fn build_cache_prefix(
                     )?
                 }
             };
+            let segments = db_accordion::list_segments(world, &story_id)?;
+            let checkpoints = db_accordion::list_checkpoints(world, &story_id)?;
+            let fake_user_prompt: String =
+                resolve(world, app_db, AppSettingKey::PromptAccordionFakeUser)?;
             build_story_prefix(StoryPrefixInputs {
                 story_id: &story_id,
                 system_instruction: &system_instruction,
                 attached_docs: &docs,
                 history: &history,
+                segments: &segments,
+                checkpoints: &checkpoints,
+                fake_user_prompt: &fake_user_prompt,
             })
         }
         CacheScope::Session(session_id) => {
@@ -912,6 +907,9 @@ mod tests {
             system_instruction: "SI here.",
             attached_docs: &docs,
             history: &history,
+            segments: &[],
+            checkpoints: &[],
+            fake_user_prompt: "",
         })
         .unwrap();
 
