@@ -16,8 +16,10 @@
 use tauri::{Emitter, State};
 use tracing::info;
 
+use crate::db::cache_state as db_cache;
 use crate::db::vault::VaultItemMeta;
 use crate::error::LoomError;
+use crate::services::cache as cache_service;
 use crate::services::vault as vault_service;
 use crate::services::world::{self, WorldMeta, WorldMetaPatch};
 use crate::state::access;
@@ -188,7 +190,10 @@ pub fn create_item(
     Ok(item)
 }
 
-/// Rename a vault item.
+/// Rename a vault item. Per Doc 22 §Stale Triggers, when the item is a
+/// SourceDocument or Image, every story that has it attached must have its
+/// cache marked stale (the doc name is part of the cached `=== SOURCE
+/// DOCUMENT: ... — <name> ===` header).
 #[tauri::command]
 pub fn rename_item(
     app: tauri::AppHandle,
@@ -196,10 +201,29 @@ pub fn rename_item(
     item_id: String,
     name: String,
 ) -> Result<(), LoomError> {
-    access::with_active_conn(&state, |conn| {
-        vault_service::rename_item(conn, &item_id, &name)
+    let stale_story_ids = access::with_active_conn(&state, |conn| {
+        vault_service::rename_item(conn, &item_id, &name)?;
+        let item = crate::db::vault::get_item(conn, &item_id)?;
+        let mut stale = Vec::new();
+        if let Some(it) = item {
+            if matches!(it.item_type.as_str(), "SourceDocument" | "Image") {
+                for sid in vault_service::stories_with_attached_doc_pub(conn, &item_id)? {
+                    cache_service::mark_story_stale(conn, &sid)?;
+                    stale.push(sid);
+                }
+            }
+        }
+        Ok(stale)
     })?;
     emit_vault_updated(&app, &state)?;
+    for sid in &stale_story_ids {
+        let status =
+            access::with_active_conn(&state, |conn| db_cache::get(conn, sid)).unwrap_or_default();
+        let _ = app.emit(
+            "cache_state_changed",
+            serde_json::json!({ "story_id": sid, "status": status }),
+        );
+    }
     Ok(())
 }
 

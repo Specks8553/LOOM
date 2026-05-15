@@ -179,6 +179,44 @@ pub fn update_session_cache(
     Ok(())
 }
 
+/// Row used by `list_alive_caches` for the right-pane Cache section
+/// (consulting half). Joined to `items.name` for the story label.
+#[derive(Debug, Clone)]
+pub struct AliveSessionRow {
+    pub story_id: String,
+    pub story_name: String,
+    pub session_id: String,
+    pub session_name: String,
+    pub expiry_at: String,
+    pub is_stale: bool,
+}
+
+/// Every consulting session with `cache_name IS NOT NULL`.
+pub fn list_alive_session_rows(conn: &Connection) -> Result<Vec<AliveSessionRow>, LoomError> {
+    let mut stmt = conn.prepare(
+        "SELECT cs.story_id, i.name, cs.id, cs.name, cs.cache_expiry_at, cs.cache_is_stale
+         FROM conversation_sessions cs
+         JOIN items i ON i.id = cs.story_id
+         WHERE cs.kind = 'consulting' AND cs.cache_name IS NOT NULL
+         ORDER BY cs.cache_expiry_at",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(AliveSessionRow {
+            story_id: r.get(0)?,
+            story_name: r.get(1)?,
+            session_id: r.get(2)?,
+            session_name: r.get(3)?,
+            expiry_at: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            is_stale: r.get::<_, i64>(5)? != 0,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// Hard-delete a session row. The `messages` FK has `ON DELETE CASCADE`, so
 /// every message in the session is dropped in the same transaction.
 pub fn delete_session(conn: &Connection, id: &str) -> Result<(), LoomError> {

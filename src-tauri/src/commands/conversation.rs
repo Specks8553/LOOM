@@ -22,6 +22,8 @@ use tracing::{debug, info, warn};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::db::cache_state as db_cache;
+use crate::db::cache_state::CacheStatus;
 use crate::db::messages::{
     self as db_messages, delete_exchange as db_delete_exchange, delete_from as db_delete_from,
     delete_last_story_message, get_message, insert_message, list_all_messages, list_story_messages,
@@ -30,6 +32,7 @@ use crate::db::messages::{
 };
 use crate::db::settings::{get_story_state, set_story_state};
 use crate::error::LoomError;
+use crate::services::cache as cache_service;
 use crate::services::gemini::{
     self, ChunkSink, GenerationParams, StreamOutcome, TokenEstimate, GEMINI_BASE_URL,
 };
@@ -43,6 +46,38 @@ use crate::state::AppState;
 
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+/// Doc 22 §Stale Triggers — story cache subset. When `message_id` falls at or
+/// before `cache_state.last_cached_message_id`, mark the story cache stale and
+/// emit `cache_state_changed`. Idempotent and safe when no cache exists.
+/// Returns the story_id we touched (so the caller doesn't re-query).
+fn mark_story_cache_stale_for_message(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    message_id: &str,
+) -> Result<(), LoomError> {
+    let result = access::with_active_conn(state, |conn| {
+        let Some(msg) = get_message(conn, message_id)? else {
+            return Ok(None);
+        };
+        if msg.kind != "story" {
+            return Ok(None);
+        }
+        if !cache_service::is_cached_story_message(conn, &msg.story_id, message_id)? {
+            return Ok(None);
+        }
+        cache_service::mark_story_stale(conn, &msg.story_id)?;
+        let status = db_cache::get(conn, &msg.story_id)?;
+        Ok(Some((msg.story_id, status)))
+    })?;
+    if let Some((story_id, status)) = result {
+        let _ = app.emit(
+            "cache_state_changed",
+            serde_json::json!({ "story_id": story_id, "status": status }),
+        );
+    }
+    Ok(())
 }
 
 fn resolve_params(
@@ -143,26 +178,232 @@ pub fn load_story_messages(
     access::with_active_conn(&state, |conn| list_story_messages(conn, &story_id))
 }
 
+/// Output of the synchronous prep #1 block — everything the cache decision
+/// needs but no Gemini-side state yet.
+struct SendPrepRaw {
+    model_name: String,
+    /// Inline (no-cache) request: SI + docs + history + new turn.
+    inline_request: AssembledRequest,
+    params: GenerationParams,
+    cache_state: CacheStatus,
+    /// Cache prefix that excludes the new user turn — used both for the
+    /// threshold gate and as the body of a cache-create POST.
+    would_be_prefix: cache_service::CachePrefix,
+    cache_min_tokens: i64,
+    cache_ttl_secs: u64,
+}
+
+/// Bundle returned by the synchronous prep block of `send_message`. The
+/// streaming task receives only by-value fields so no AppState locks are
+/// held across awaits.
+struct SendPrep {
+    model_name: String,
+    request: AssembledRequest,
+    params: GenerationParams,
+    /// Active cache name to refresh on a successful STOP, if any.
+    refresh_cache_name: Option<String>,
+    /// TTL to use when refreshing.
+    cache_ttl_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CacheUnavailablePayload<'a> {
+    story_id: &'a str,
+    reason: &'a str,
+}
+
+/// Decide whether this send rides an existing cache, creates a new one, or
+/// goes inline. Doc 22 §Auto-rebuild on Expiry. May issue a Gemini POST
+/// (cache create) — runs without holding any AppState lock.
+async fn decide_cache_path(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    api_key: &str,
+    story_id: &str,
+    raw: SendPrepRaw,
+) -> Result<SendPrep, LoomError> {
+    let SendPrepRaw {
+        model_name,
+        inline_request,
+        params,
+        cache_state,
+        would_be_prefix,
+        cache_min_tokens,
+        cache_ttl_secs,
+    } = raw;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let cache_active = cache_state.cache_name.is_some()
+        && !cache_state.is_stale
+        && cache_state
+            .expiry_at
+            .as_deref()
+            .map(|e| e > now.as_str())
+            .unwrap_or(false);
+
+    if cache_active {
+        let name = cache_state.cache_name.clone().unwrap();
+        let request = build_cached_request(&inline_request, name.clone());
+        return Ok(SendPrep {
+            model_name,
+            request,
+            params,
+            refresh_cache_name: Some(name),
+            cache_ttl_secs,
+        });
+    }
+
+    let estimated = cache_service::estimate_prefix_tokens(&would_be_prefix);
+    let needs_rebuild = cache_state.cache_name.is_some()
+        && (cache_state.is_stale
+            || cache_state
+                .expiry_at
+                .as_deref()
+                .map(|e| e <= now.as_str())
+                .unwrap_or(true));
+
+    if estimated < cache_min_tokens {
+        // Sub-threshold → inline. Best-effort delete any stale/expired cache
+        // so the row matches reality.
+        if needs_rebuild {
+            if let Some(stale) = cache_state.cache_name.as_deref() {
+                if let Err(e) = cache_service::delete_cache(GEMINI_BASE_URL, api_key, stale).await {
+                    warn!("decide_cache_path: stale cache delete failed: {e}");
+                }
+                let now2 = chrono::Utc::now().to_rfc3339();
+                let story_id_owned = story_id.to_string();
+                let _ = access::with_active_conn(state, |conn| {
+                    db_cache::clear_active(conn, &story_id_owned, &now2)
+                });
+                let _ = app.emit(
+                    "cache_state_changed",
+                    serde_json::json!({
+                        "story_id": story_id,
+                        "status": db_cache::CacheStatus::empty(),
+                    }),
+                );
+            }
+        }
+        return Ok(SendPrep {
+            model_name,
+            request: inline_request,
+            params,
+            refresh_cache_name: None,
+            cache_ttl_secs,
+        });
+    }
+
+    // Threshold met. Best-effort delete any stale/expired cache, then create.
+    if needs_rebuild {
+        if let Some(stale) = cache_state.cache_name.as_deref() {
+            if let Err(e) = cache_service::delete_cache(GEMINI_BASE_URL, api_key, stale).await {
+                warn!("decide_cache_path: stale cache delete failed: {e}");
+            }
+        }
+    }
+
+    match cache_service::create_cache(
+        GEMINI_BASE_URL,
+        api_key,
+        &model_name,
+        &would_be_prefix,
+        cache_ttl_secs,
+    )
+    .await
+    {
+        Ok(record) => {
+            let now = chrono::Utc::now().to_rfc3339();
+            let story_id_owned = story_id.to_string();
+            let prefix_for_persist = would_be_prefix.clone();
+            let record_for_persist = record.clone();
+            let now_for_persist = now.clone();
+            let status = access::with_active_conn(state, |conn| {
+                db_cache::upsert_active(
+                    conn,
+                    &story_id_owned,
+                    &record_for_persist.cache_name,
+                    &record_for_persist.expire_time,
+                    prefix_for_persist.last_cached_message_id.as_deref(),
+                    record_for_persist.total_token_count,
+                    &prefix_for_persist.doc_snapshots,
+                    &now_for_persist,
+                )?;
+                db_cache::get(conn, &story_id_owned)
+            })?;
+            let _ = app.emit(
+                "cache_state_changed",
+                serde_json::json!({ "story_id": story_id, "status": status }),
+            );
+            let request = build_cached_request(&inline_request, record.cache_name.clone());
+            Ok(SendPrep {
+                model_name,
+                request,
+                params,
+                refresh_cache_name: Some(record.cache_name),
+                cache_ttl_secs,
+            })
+        }
+        Err(e) => {
+            warn!("cache create failed; sending inline: {e}");
+            let _ = app.emit(
+                "cache_unavailable",
+                CacheUnavailablePayload {
+                    story_id,
+                    reason: "create_failed",
+                },
+            );
+            Ok(SendPrep {
+                model_name,
+                request: inline_request,
+                params,
+                refresh_cache_name: None,
+                cache_ttl_secs,
+            })
+        }
+    }
+}
+
+/// Build the cached-mode send body. The cache contains SI + docs + all
+/// history-up-to-prior-model; the request only carries the new user turn
+/// (which is the last entry of the inline request).
+fn build_cached_request(inline: &AssembledRequest, cache_name: String) -> AssembledRequest {
+    let last_turn = inline.contents.last().cloned();
+    AssembledRequest {
+        // SI lives in the cache; clear it locally so the body builder skips it.
+        system_instruction: String::new(),
+        contents: last_turn.map(|c| vec![c]).unwrap_or_default(),
+        cached_content_name: Some(cache_name),
+    }
+}
+
 #[tauri::command]
 pub async fn send_message(
     app: tauri::AppHandle,
     story_id: String,
     draft: UserContent,
 ) -> Result<SendMessageResult, LoomError> {
-    // 1. Synchronous prep under locks: validate, persist user + model
-    //    placeholder, resolve settings, assemble request, install token.
     let state = app.state::<AppState>();
     let api_key = access::with_api_key(&state, |k| Ok(k.to_owned()))?;
 
     let user_id = Uuid::new_v4().to_string();
     let model_id = Uuid::new_v4().to_string();
+    let story_id_for_closure = story_id.clone();
     let user_id_for_closure = user_id.clone();
     let model_id_for_closure = model_id.clone();
-    let story_id_for_closure = story_id.clone();
     let draft_for_closure = draft.clone();
 
-    let (model_name, request, params) = access::with_two_conns(&state, |app_db, world_db| {
+    // 1. Synchronous prep #1 (under locks): validate, capture prior tail,
+    //    persist user msg, build inline request, decide whether to attempt
+    //    cache create, capture would-be cache prefix.
+    let prep_in = access::with_two_conns(&state, |app_db, world_db| {
         require_story(world_db, &story_id_for_closure)?;
+
+        // Capture the high-water mark before inserting the new user msg. The
+        // cache prefix excludes the new turn (it's appended live by Gemini).
+        let prior_tail_id: Option<String> = list_story_messages(world_db, &story_id_for_closure)?
+            .last()
+            .map(|m| m.id.clone());
+
         let user_content_json = serde_json::to_string(&draft_for_closure)?;
         let user_msg = ChatMessage {
             id: user_id_for_closure,
@@ -186,7 +427,7 @@ pub async fn send_message(
         let system_instruction: String = resolve(world_db, app_db, AppSettingKey::StorySi)?;
         let aux_text = resolve_aux_text(world_db, app_db, &story_id_for_closure)?;
         let params = resolve_params(world_db, app_db)?;
-        let request = history::assemble_request(
+        let inline_request = history::assemble_request(
             world_db,
             ConversationMode::Story,
             AssembleInputs {
@@ -197,9 +438,24 @@ pub async fn send_message(
             },
         )?;
 
+        let cache_state = db_cache::get(world_db, &story_id_for_closure)?;
+        let cache_min_tokens: i64 =
+            resolve::<u32>(world_db, app_db, AppSettingKey::CacheMinTokens)? as i64;
+        let cache_ttl_secs: u32 = resolve(world_db, app_db, AppSettingKey::CacheTtlSecs)?;
+
+        // Build the would-be cache prefix only when needed (no active fresh
+        // cache or a fresh cache exists but we still want the prefix-hash for
+        // potential rebuild). We compute it unconditionally — it's cheap.
+        let would_be_prefix = cache_service::build_cache_prefix(
+            world_db,
+            app_db,
+            cache_service::CacheScope::Story(story_id_for_closure.clone()),
+            prior_tail_id.as_deref(),
+        )?;
+
         let model_msg = ChatMessage {
             id: model_id_for_closure,
-            story_id: story_id_for_closure,
+            story_id: story_id_for_closure.clone(),
             session_id: None,
             role: "model".into(),
             content_type: "text".into(),
@@ -215,8 +471,25 @@ pub async fn send_message(
         };
         insert_message(world_db, &model_msg)?;
 
-        Ok((model_name, request, params))
+        Ok(SendPrepRaw {
+            model_name,
+            inline_request,
+            params,
+            cache_state,
+            would_be_prefix,
+            cache_min_tokens,
+            cache_ttl_secs: cache_ttl_secs as u64,
+        })
     })?;
+
+    // 2. Decide cache path (no locks held — may issue a Gemini POST).
+    let SendPrep {
+        model_name,
+        request,
+        params,
+        refresh_cache_name,
+        cache_ttl_secs,
+    } = decide_cache_path(&app, &state, &api_key, &story_id, prep_in).await?;
 
     let cancel_token = access::install_cancel_token(&state)?;
     let user_message_id = user_id;
@@ -229,7 +502,7 @@ pub async fn send_message(
         "send_message: streaming"
     );
 
-    // 2. Spawn the stream task; return the ids immediately.
+    // 3. Spawn the stream task; return the ids immediately.
     let task_app = app.clone();
     let task_story_id = story_id.clone();
     let task_user_id = user_message_id.clone();
@@ -245,6 +518,8 @@ pub async fn send_message(
             request,
             params,
             cancel_token,
+            refresh_cache_name,
+            cache_ttl_secs,
         )
         .await
     });
@@ -268,6 +543,8 @@ async fn run_stream(
     request: AssembledRequest,
     params: GenerationParams,
     cancel_token: CancellationToken,
+    refresh_cache_name: Option<String>,
+    cache_ttl_secs: u64,
 ) {
     struct EventSink<'a> {
         app: &'a tauri::AppHandle,
@@ -317,7 +594,31 @@ async fn run_stream(
             outcome,
         ),
         Ok(outcome) => {
-            finalise_complete(&app, &state, &story_id, &model_message_id, &model, outcome)
+            let finished_clean = outcome
+                .finish_reason
+                .as_deref()
+                .map(|r| r == "STOP")
+                .unwrap_or(true);
+            finalise_complete(&app, &state, &story_id, &model_message_id, &model, outcome);
+            // Fire-and-forget TTL refresh after a clean STOP, per Doc 22.
+            // Errors are logged; the cache continues until TTL expires.
+            if finished_clean {
+                if let Some(name) = refresh_cache_name {
+                    let task_app = app.clone();
+                    let task_story_id = story_id.clone();
+                    let task_api_key = api_key.clone();
+                    tokio::spawn(async move {
+                        spawn_cache_refresh(
+                            task_app,
+                            task_story_id,
+                            task_api_key,
+                            name,
+                            cache_ttl_secs,
+                        )
+                        .await;
+                    });
+                }
+            }
         }
         Err(e) => finalise_failed(
             &app,
@@ -327,6 +628,34 @@ async fn run_stream(
             &model_message_id,
             e,
         ),
+    }
+}
+
+async fn spawn_cache_refresh(
+    app: tauri::AppHandle,
+    story_id: String,
+    api_key: String,
+    cache_name: String,
+    ttl_secs: u64,
+) {
+    match cache_service::refresh_cache_ttl(GEMINI_BASE_URL, &api_key, &cache_name, ttl_secs).await {
+        Ok(new_expiry) => {
+            let now = now_iso();
+            let story_id_for_db = story_id.clone();
+            let new_expiry_for_db = new_expiry.clone();
+            let state = app.state::<AppState>();
+            let status = access::with_active_conn(&state, |conn| {
+                let _ = db_cache::refresh_expiry(conn, &story_id_for_db, &new_expiry_for_db, &now)?;
+                db_cache::get(conn, &story_id_for_db)
+            });
+            if let Ok(s) = status {
+                let _ = app.emit(
+                    "cache_state_changed",
+                    serde_json::json!({ "story_id": story_id, "status": s }),
+                );
+            }
+        }
+        Err(e) => warn!("cache TTL refresh failed: {e}"),
     }
 }
 
@@ -478,6 +807,9 @@ pub async fn edit_user_message(
         Ok(pivot.story_id)
     })?;
 
+    // Stale-mark before truncate (truncate may delete the pivot itself).
+    mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+
     // Truncate (separate call because it needs `&mut Connection` for the
     // transaction). Then rewrite the user content.
     let pivot_id = message_id.clone();
@@ -552,6 +884,10 @@ async fn re_send_after_edit(
     // Re-issue: there's no separate user message id here — the caller is
     // responsible for knowing the existing one. We emit it as
     // `model_message_id` to keep the frontend listener generic.
+    //
+    // Edit/regenerate sends always go inline (no auto-create, no refresh).
+    // The stale-trigger path on edit/delete already invalidates any active
+    // cache; the next plain send rebuilds it.
     let task_app = app.clone();
     let task_story_id = story_id.clone();
     let task_model_id = model_message_id.clone();
@@ -568,6 +904,8 @@ async fn re_send_after_edit(
             request,
             params,
             cancel_token,
+            None,
+            0,
         )
         .await
     });
@@ -580,6 +918,7 @@ async fn re_send_after_edit(
 
 #[tauri::command]
 pub fn update_message_content(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     message_id: String,
     new_text: String,
@@ -593,7 +932,9 @@ pub fn update_message_content(
             ));
         }
         db_update_message_content(conn, &message_id, &new_text, None, None, None)
-    })
+    })?;
+    mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -604,7 +945,15 @@ pub async fn regenerate_last_response(
     let state = app.state::<AppState>();
 
     // 1. Drop the most recent message; ensure it was a model message.
+    //    Capture its id first so we can stale-mark if it was cached.
     let story_id_for_closure = story_id.clone();
+    let last_msg_id = access::with_active_conn(&state, |conn| {
+        let last = list_story_messages(conn, &story_id_for_closure)?;
+        Ok(last.last().map(|m| m.id.clone()))
+    })?;
+    if let Some(id) = last_msg_id {
+        mark_story_cache_stale_for_message(&app, &state, &id)?;
+    }
     let last_user_content = access::with_active_conn_mut(&state, |conn| {
         let last = list_story_messages(conn, &story_id_for_closure)?;
         let last_msg = last
@@ -632,7 +981,14 @@ pub async fn regenerate_last_response(
 }
 
 #[tauri::command]
-pub fn delete_exchange(state: State<'_, AppState>, message_id: String) -> Result<(), LoomError> {
+pub fn delete_exchange(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<(), LoomError> {
+    // Stale-mark BEFORE delete — otherwise the message is gone and we can't
+    // resolve its story_id. Idempotent if no cache exists.
+    mark_story_cache_stale_for_message(&app, &state, &message_id)?;
     access::with_active_conn_mut(&state, |conn| {
         db_delete_exchange(conn, &message_id)?;
         Ok(())
@@ -640,7 +996,12 @@ pub fn delete_exchange(state: State<'_, AppState>, message_id: String) -> Result
 }
 
 #[tauri::command]
-pub fn delete_from(state: State<'_, AppState>, message_id: String) -> Result<(), LoomError> {
+pub fn delete_from(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<(), LoomError> {
+    mark_story_cache_stale_for_message(&app, &state, &message_id)?;
     access::with_active_conn_mut(&state, |conn| {
         db_delete_from(conn, &message_id)?;
         Ok(())
@@ -649,13 +1010,16 @@ pub fn delete_from(state: State<'_, AppState>, message_id: String) -> Result<(),
 
 #[tauri::command]
 pub fn update_feedback(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     message_id: String,
     feedback: String,
 ) -> Result<(), LoomError> {
     access::with_active_conn(&state, |conn| {
         db_update_user_feedback(conn, &message_id, &feedback)
-    })
+    })?;
+    mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    Ok(())
 }
 
 #[tauri::command]

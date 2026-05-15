@@ -1,9 +1,12 @@
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
 
+import { useCacheStore } from '@/stores/cacheStore';
 import { useModeStore } from '@/stores/modeStore';
 import { useVaultStore } from '@/stores/vaultStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+
+import type { CacheStatus, SessionCacheStatus, SessionDivergence } from '@/lib/types';
 
 /**
  * Doc 07 §Events. Global subscription for backend-emitted events.
@@ -140,9 +143,73 @@ export function useWorkspaceEvents(): void {
       refreshSessions();
     });
 
+    // --- Cache (Phase 6) ---
+    track<{ story_id: string; status: CacheStatus }>('cache_state_changed', (p) => {
+      useCacheStore.getState().handleStoryCacheEvent(p.story_id, p.status);
+    });
+
+    track<{ session_id: string; status: SessionCacheStatus }>(
+      'session_cache_state_changed',
+      (p) => {
+        useCacheStore.getState().handleSessionCacheEvent(p.session_id, p.status);
+      },
+    );
+
+    track<{ story_id: string; reason: string }>('cache_unavailable', (p) => {
+      // Imported lazily to avoid a top-level cycle through the toast lib.
+      void import('sonner').then(({ toast }) => {
+        toast.warning('Cache unavailable; sending inline.', {
+          description: `story ${p.story_id.slice(0, 8)}: ${p.reason}`,
+        });
+      });
+    });
+
+    track<{ session_id: string; divergences: SessionDivergence[] }>(
+      'session_cache_diverged',
+      (p) => {
+        if (p.divergences.length === 0) return;
+        void import('sonner').then(({ toast }) => {
+          toast.warning('Story has changed since this session was created. Context may differ.', {
+            description: `${p.divergences.length} divergence${p.divergences.length === 1 ? '' : 's'} detected`,
+          });
+        });
+      },
+    );
+
     return () => {
       cancelled = true;
       for (const u of unlisteners) u();
     };
+  }, []);
+
+  // --- Cache lifecycle: load/clear story-cache state on activeStoryId change ---
+  useEffect(() => {
+    const unsub = useWorkspaceStore.subscribe((s, prev) => {
+      if (s.activeStoryId === prev.activeStoryId) return;
+      const cache = useCacheStore.getState();
+      if (s.activeStoryId === null) {
+        // Story closed — keep the alive list but drop the active byStory entry
+        // (a future open will re-load via loadStoryCache).
+        return;
+      }
+      void cache.loadStoryCache(s.activeStoryId).catch((e) => console.error('loadStoryCache', e));
+    });
+    return unsub;
+  }, []);
+
+  // --- Cache lifecycle: clear all caches on world switch / lock ---
+  useEffect(() => {
+    const unsub = useVaultStore.subscribe((s, prev) => {
+      if (s.activeWorldId !== prev.activeWorldId) {
+        useCacheStore.getState().clearAll();
+        if (s.activeWorldId !== null) {
+          void useCacheStore
+            .getState()
+            .refreshAlive()
+            .catch((e) => console.error('refreshAlive', e));
+        }
+      }
+    });
+    return unsub;
   }, []);
 }

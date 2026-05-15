@@ -317,6 +317,14 @@ pub fn detach_context_doc(
     Ok(ids)
 }
 
+/// Public re-export for cache stale-trigger paths in `commands/vault.rs`.
+pub fn stories_with_attached_doc_pub(
+    conn: &Connection,
+    doc_id: &str,
+) -> Result<Vec<String>, LoomError> {
+    stories_with_attached_doc(conn, doc_id)
+}
+
 /// Return every `story_id` whose `story_state.context_doc_ids` contains `doc_id`.
 /// JSON lookup uses a simple `LIKE` heuristic over the encoded list — fine
 /// because IDs are UUIDs (no false positives possible).

@@ -63,7 +63,10 @@ pub fn build_request_body(req: &AssembledRequest, params: &GenerationParams) -> 
             "maxOutputTokens": params.max_output_tokens,
         }
     });
-    if !req.system_instruction.trim().is_empty() {
+    if let Some(name) = req.cached_content_name.as_deref() {
+        // Cached path: SI lives inside the cache; do not duplicate in the body.
+        body["cachedContent"] = json!(name);
+    } else if !req.system_instruction.trim().is_empty() {
         body["systemInstruction"] = json!({
             "parts": [{ "text": req.system_instruction }]
         });
@@ -86,9 +89,9 @@ pub fn build_count_tokens_body(req: &AssembledRequest) -> Value {
             0,
             GeminiContent {
                 role: "user".into(),
-                parts: vec![crate::services::history::GeminiPart {
-                    text: req.system_instruction.clone(),
-                }],
+                parts: vec![crate::services::history::GeminiPart::text(
+                    req.system_instruction.clone(),
+                )],
             },
         );
     }
@@ -380,10 +383,9 @@ mod tests {
             system_instruction: "be helpful".into(),
             contents: vec![GeminiContent {
                 role: "user".into(),
-                parts: vec![GeminiPart {
-                    text: "[PLOT DIRECTION]\nopen with rain".into(),
-                }],
+                parts: vec![GeminiPart::text("[PLOT DIRECTION]\nopen with rain")],
             }],
+            cached_content_name: None,
         }
     }
 

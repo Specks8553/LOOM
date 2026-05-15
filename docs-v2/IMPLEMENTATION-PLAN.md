@@ -374,7 +374,11 @@
   - Inline doc rename for SourceDocument / Image — Phase 12 (context menu).
   - `list_templates` IPC + Settings → Templates management — Phase 11 (Doc 20).
 
-**Status:** Not started
+---
+
+## Phase 6 — Context Caching
+
+**Status:** Complete (2026-05-15)
 
 **Goal:** Caching is always on subject to `cache_min_tokens`; cache create / refresh / delete works against the Gemini File API; stale triggers fire correctly; right-pane Cache section reflects state in real time.
 
@@ -393,17 +397,158 @@
 5. Right-pane Cache section: TTL countdown (1 s tick), color-coded dot, create/update/delete buttons; CacheContentsModal with doc dirty-check (`crypto.subtle.digest`).
 
 **Testable Checkpoints:**
-- [ ] Send a message above `cache_min_tokens` → cache row created in DB and visible in right pane.
-- [ ] Edit an attached doc → cache marked stale; amber dot on Send button.
-- [ ] Refresh TTL → expiry advances; UI countdown updates.
-- [ ] Delete cache → row gone; next request goes inline.
-- [ ] Sub-threshold message → inline path used; no cache row created.
-- [ ] All `features/22` Testable Checkpoints pass.
+- [x] Send a message above `cache_min_tokens` → cache row created in DB and visible in right pane.
+- [x] Edit an attached doc → cache marked stale; amber dot on Send button.
+- [x] Refresh TTL → expiry advances; UI countdown updates.
+- [x] Delete cache → row gone; next request goes inline.
+- [x] Sub-threshold message → inline path used; no cache row created.
+- [x] All `features/22` Testable Checkpoints pass.
 
 **Out of scope:** Cache visuals beyond the row format (token colors, density — Phase 12 per O10 residual).
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-14: Pre-session prep (handover for the agent starting Phase 6 cold).**
+
+  **Audit gate — clean.** All Phase 6 audit items resolved at audit-reconciliation time:
+  - HB-6 — `LoomError::CacheCreate(String)` variant exists ([src-tauri/src/error.rs:33](src-tauri/src/error.rs#L33)).
+  - HB-7 — Doc 05 module map includes `services/cache.rs` + `services/file_api.rs`.
+  - CD-12 — `cache_enabled` toggle dropped entirely; caching is always-on subject to `cache_min_tokens` threshold. Doc 22 §Fallback to Inline rewritten — inline path triggers only on (a) prefix below threshold, (b) Gemini-side hard-minimum 400, or (c) cache-create failure.
+  - SD-4 — moot (resolved by CD-12).
+  - IP-9 — `AliveCacheRow` is in the ts-rs-generated `types.ts` list (commands return it).
+  - **Non-blockers:** NB-1 (TTL color thresholds — Phase 12 visual pass); TD-1 (`cache_min_tokens=4096` empirical verify — O16, post-launch).
+
+  **Phase 5 carries forward.** `services/cache.rs::mark_story_stale(conn: &Connection, story_id: &str) -> Result<(), LoomError>` is a no-op stub with **three live call sites** in [src-tauri/src/services/vault.rs](src-tauri/src/services/vault.rs): `update_item_content` (loops over `stories_with_attached_doc`), `attach_context_doc`, `detach_context_doc` (including the cascade path). Phase 6 fills the body (`UPDATE cache_state SET is_stale = 1`) without touching any caller, then adds new call sites for the remaining triggers below. Signature is correct as-is — do not change it.
+
+  **Proposed split (four sub-phases, mirrors Phase 5's rhythm):**
+
+  - **6A — Story cache core (backend + IPC).** ~45% of phase effort.
+    - Fill `services/cache.rs::mark_story_stale` body (`UPDATE cache_state SET is_stale = 1 WHERE story_id = ?`). Service does NOT emit events — that's command-layer responsibility per Doc 05.
+    - Add `services/cache.rs::build_cache_prefix(conn, scope: CacheScope) -> Result<CachePrefix, LoomError>` where `CacheScope = Story(story_id) | Session(session_id)`; 6A implements the `Story` arm only (Session lands in 6C). Returns SI (cascade-resolved) + attached doc list (wrapped in `=== SOURCE DOCUMENT: <subtype> — <name> ===` headers per Doc 22) + story-kind messages up to prior model + rolling SHA-256 hash + token estimate.
+    - Add `create_cache(prefix) -> Result<CacheRecord, LoomError>` (Gemini `POST /v1/cachedContents`); `refresh_cache_ttl(cache_name)` (fire-and-forget `PATCH`, never blocks send); `delete_cache(cache_name)` (best-effort `DELETE`, errors logged).
+    - `db/cache_state.rs` (new) — typed CRUD on `cache_state` table; existing schema is in place from Phase 0.
+    - New `commands/cache.rs`: `get_cache_state`, `create_story_cache`, `delete_story_cache`, `list_alive_caches`. Emit `cache_state_changed { story_id, status }` after each mutation.
+    - Wire `commands/conversation.rs::send_message` to auto-create cache when `prefix_token_count ≥ cache_min_tokens AND (cache_name IS NULL OR is_stale OR expiry_at ≤ now())`. On `LoomError::CacheCreate` or sub-threshold: inline-fallback path (one toast: "Cache unavailable, sending inline"). After a successful cached send, fire-and-forget `refresh_cache_ttl` via `tokio::spawn`.
+    - New stale-trigger call sites (the 4 not in vault):
+      - `commands/vault.rs::rename_item` — when item is `SourceDocument` (name is in `=== SOURCE DOCUMENT: ... — <name> ===` header), call `mark_story_stale` for every story attaching it.
+      - `commands/conversation.rs::{edit_user_message, update_message_content, regenerate_last_response, delete_exchange, delete_from, update_feedback}` — when the affected message is at-or-before `cache_state.last_cached_message_id`, mark stale + emit. Also require confirmation modal per Doc 22 §Cached-message Edit/Delete Protection.
+      - `commands/settings.rs` (when added in Phase 11) — `story_si`, `consulting_si`, `text_model_name` writes mark relevant story caches stale. Phase 6 stubs this with a `services/cache.rs::mark_world_stories_stale(conn, world_id)` helper that Phase 11 calls.
+      - Accordion triggers defer to Phase 7 — `commands/accordion.rs` does not exist yet. Phase 7 wires its own `mark_story_stale` calls when shipping summarise / use_summary / create_checkpoint / delete_checkpoint commands.
+    - Cargo tests: prefix assembly (SI cascade, doc order = attachment order, message ordering up to prior model), `mark_story_stale` writes `is_stale=1`, fallback path returns `LoomError::CacheCreate` on simulated Gemini failure, sub-threshold prefix routes to inline.
+    - **Open at 6A start:** how to mock Gemini HTTP for tests — Doc 25 §Tauri IPC mock recipe + wiremock (already in dev-deps from Phase 0.5). Use a per-test mock server URL injected via env-var / config; preserve existing test pattern.
+
+  - **6B — File API + image-doc URIs.** ~10% of phase effort.
+    - New `services/file_api.rs::get_or_upload_file_api_uri(conn, item_id, world_dir) -> Result<String, LoomError>`. Reads `items.file_api_uri` + `items.file_api_uploaded_at`; if cached URI is < 47 hours old, returns it; otherwise uploads via Gemini `POST /v1/files` and persists URI + timestamp.
+    - `build_cache_prefix` integrates: for `item_type='Image'` docs, the prefix block uses the Gemini `fileData` URI reference instead of inline content.
+    - Cargo tests: 47-hour boundary, re-upload after expiry, URI passthrough when fresh.
+    - **Open at 6B start:** none — surface is small and isolated.
+
+  - **6C — Consulting cache + snapshot reconstruction.** ~25% of phase effort.
+    - Add `services/cache.rs::mark_session_stale(conn, session_id) -> Result<(), LoomError>` (`UPDATE conversation_sessions SET cache_is_stale = 1`).
+    - `build_cache_prefix(Session(session_id))` — implements the `Session` arm. Uses `conversation_sessions.entry_snapshot` for re-entry: loads `story_message_ids` and uses **captured** accordion-segment summaries verbatim (not current ones), per Doc 22 §Re-entry algorithm. Computes rolling SHA-256 and compares to snapshot's stored hash; records divergences as non-blocking warnings.
+    - Session cache CRUD on `conversation_sessions` row (`cache_name`, `cache_expiry_at`, `cache_is_stale` — schema already exists from Phase 0).
+    - Hooks: `commands/modes.rs::start_consulting_session` and `enter_session` trigger session-cache create; `exit_session` triggers best-effort delete + NULL fields. Each emits `session_cache_state_changed { session_id, status }`.
+    - Stale triggers (consulting-cache-only): session message edit/delete in `commands/modes.rs::send_session_message` post-edit paths; snapshot-divergence on re-entry (mark stale + warn).
+    - Coexistence per Doc 22 §Coexistence with story cache: story cache stays alive but unrefreshed during a consulting session; handover sessions never cache (schema constraint enforces NULL cache fields).
+    - Cargo tests: snapshot reconstruction round-trip, divergence detection on missing message, captured-summary verbatim use, session-stale write.
+    - **Open at 6C start:** session-snapshot divergence UX wording (Doc 22 says "Story has changed since this session was created. Context may differ." — confirm phrasing; toast on session entry, non-blocking).
+
+  - **6D — Frontend (cacheStore + right-pane UI + Send affordances).** ~20% of phase effort.
+    - New `src/stores/cacheStore.ts`: `byStory: Record<string, CacheStatus>`, `bySession: Record<string, SessionCacheStatus>`, single shared `setInterval` ticker (1 Hz) for TTL countdowns when any cache row is mounted. Actions: `loadStoryCache`, `loadSessionCache`, `handleStoryCacheEvent`, `handleSessionCacheEvent`, `clearStory`, `clearSession`.
+    - Event listeners in `useWorkspaceEvents`: `cache_state_changed` → `handleStoryCacheEvent`; `session_cache_state_changed` → `handleSessionCacheEvent`.
+    - Right-pane **Cache section** (Doc 27 §Right Pane): collapsible "CACHE" header (11px uppercase per Doc 27 conventions); rows for each alive cache with `<story_name> · <tokens_k> tok · TTL <time> [status_badge]`; consulting row shown when active session has a cache; row click opens Cache Contents modal; row right-click → "Delete cache".
+    - **Cache Contents modal**: per-doc rows with name + token count + dirty-check (`crypto.subtle.digest` against `cache_state.doc_snapshots`); story-history row with message count + last-cached message excerpt; actions "Update cache" / "Delete cache" / "Close".
+    - **Send button** stale indicator (amber dot via `--color-warning` or accent fallback when `byStory[storyId].is_stale`); tooltip "Cache is outdated. Update it before sending for cost savings, or send anyway."; right-click → "Update cache" / "Send anyway".
+    - Vitest: ticker tick reduces TTL by 1 s; event reducer merges incoming `CacheStatus`; modal dirty-check matches hashes correctly.
+    - **Open at 6D start:** Cache Contents modal — `shadcn/ui` Dialog or custom? Doc 09 Dialog primitive lands in Phase 11 but the underlying shadcn primitive is already in deps. Recommend reusing the `Dialog` already generated for `WorldPickerModal` to stay consistent.
+
+  **Phase 6 Testable Checkpoints — sub-phase mapping:**
+  - 6A closes: "Send above `cache_min_tokens` → cache row created" (DB visible; UI lands in 6D), "Delete cache → row gone; next request goes inline", "Sub-threshold → inline path".
+  - 6B closes: no Phase-6 plan checkpoint directly (image-doc prefix is a Doc 22 §Image source documents sub-checkpoint).
+  - 6C closes: no Phase-6 plan checkpoint directly (covers Doc 22 consulting-cache checkpoints).
+  - 6D closes: "Edit attached doc → cache stale + amber dot on Send button", "Refresh TTL → expiry advances + UI countdown updates", and the visible half of the cache-row checkpoint.
+  - The fifth Plan checkpoint ("All `features/22` Testable Checkpoints pass") sweeps Doc 22's full list at `/phase-verify`.
+
+  **Cross-phase contracts (don't violate):**
+  - `services/cache.rs::mark_story_stale` signature stays `(conn: &Connection, story_id: &str) -> Result<(), LoomError>`. Six call sites depend on it.
+  - Service layer never emits events — Doc 05 §Dependency Rules. Always emit in the command layer after the service call returns.
+  - Inline-fallback path is the **same** request assembly as cached, minus the `cachedContents` reference. Don't introduce a second code path; share `build_cache_prefix` output with the inline send.
+  - Handover sessions never cache. Schema CHECK constraint already enforces NULL cache fields for `kind='handover'`. Don't add a runtime check — the constraint is the source of truth.
+
+  **Estimated work distribution:** 6A ~45%, 6B ~10%, 6C ~25%, 6D ~20%.
+
+  **Decisions/deferrals to log at phase start:**
+  1. Accordion stale triggers: defer to Phase 7 (commands don't exist).
+  2. TTL color thresholds: tokens-only (no hex); exact <5 min warning threshold per Doc 22.
+  3. `cache_min_tokens` default: accept 4096; mark `TODO(O16)` for post-launch tuning.
+  4. Gemini hard-minimum 400 response: fallback to inline (same path as sub-threshold).
+  5. Regenerate / edit-and-regenerate: no special path — falls through normal auto-create logic.
+
+- **2026-05-14: 6A landed (backend story-cache core).**
+  - `db/cache_state.rs` — typed CRUD (`get`, `upsert_active`, `refresh_expiry`, `mark_stale`, `clear_active`, `list_story_ids`, `list_alive_story_rows`); `CacheStatus` ts-rs export. 7 unit tests.
+  - `services/cache.rs` — `mark_story_stale` body lit (was Phase 5 stub), `mark_world_stories_stale` (Phase 11 stub), `is_cached_story_message`, `build_story_prefix` + `build_cache_prefix(Story)` with cascade-resolved SI, attached-doc headers, message ordering, SHA-256 doc snapshots and rolling prefix hash, `estimate_prefix_tokens` (chars/4 heuristic per TD-1), Gemini HTTP `create_cache` / `refresh_cache_ttl` / `delete_cache` (URL-injectable for wiremock). 5 unit tests + 2 wiremock tests.
+  - `commands/cache.rs` — 4 commands (`get_cache_state`, `create_story_cache`, `delete_story_cache`, `list_alive_caches`), all emit `cache_state_changed`. Registered in `lib.rs`.
+  - `commands/conversation.rs::send_message` rewired: `decide_cache_path` runs after the inline-prep block — picks cached fresh / create-then-cached / inline based on `cache_state` + `cache_min_tokens`. Fire-and-forget refresh on STOP. `LoomError::CacheCreate` triggers a `cache_unavailable` event + inline fallback.
+  - Stale-trigger sites added: `commands/vault.rs::rename_item` (SourceDocument/Image → all attached stories), `commands/conversation.rs::{update_message_content,delete_exchange,delete_from,update_feedback,edit_user_message,regenerate_last_response}`. Backend stale-marks silently; Doc 22's confirmation-modal contract is a 6D frontend-only UX gate per "Dismissal proceeds with the operation and marks the cache stale".
+  - `AssembledRequest` gained `cached_content_name: Option<String>`; `gemini::build_request_body` emits `cachedContent` (and skips top-level `systemInstruction` since the SI is in the cache) when present.
+  - **6A scope decisions:**
+    - `re_send_after_edit` (used by `edit_user_message` / `regenerate_last_response`) sends inline (no cache use, no refresh). Stale-trigger has already invalidated the cache; next plain send rebuilds. Documented inline.
+    - Image source-doc bodies are placeholder strings in the prefix; 6B replaces with `fileData` URI.
+  - `cargo build`, `cargo clippy --all-targets -- -D warnings`, `cargo test --lib` (156 passed), `tsc --noEmit`, `eslint .` all clean.
+  - **Open at 6A close:** `src/lib/types.ts` updated with `CacheStatus`, `AliveCacheRow`, `CacheStateChangedPayload`, `CacheUnavailablePayload`. Frontend `tauriApi/cache.ts` shipped (typed wrappers). No store / UI yet — that's 6D.
+
+- **2026-05-14: 6B landed (File API + image-doc URIs).**
+  - `services/file_api.rs` — `get_or_upload_file_api_uri(conn, base_url, api_key, item_id, world_dir)` reads `(file_api_uri, file_api_uploaded_at)` from `items`; if URI is < 47 hours old returns it; otherwise reads bytes from `asset_path` (resolved relative to world dir), `POST`s to `/upload/v1beta/files?uploadType=media`, persists URI + ISO timestamp via `db::vault::set_file_api_uri`. Internal `get_or_upload_with_now` injects "now" for deterministic tests. 6 tests (3 boundary + 3 wiremock).
+  - `db/vault.rs` — added `get_file_api_state(id) -> (Option<String>, Option<String>)` and `set_file_api_uri(id, uri, uploaded_at)` accessors. 47-hour check uses `chrono::Duration::hours(47)`.
+  - `services/history.rs::GeminiPart` extended: `text` is now `#[serde(skip_serializing_if = "String::is_empty")]` and a sibling `file_data: Option<GeminiFileData>` (with `fileUri` + `mimeType`) is `#[serde(skip_serializing_if = "Option::is_none")]`. Constructors `GeminiPart::text(s)` / `GeminiPart::file(uri, mime)` keep call sites tidy. All in-tree direct constructions migrated.
+  - `services/cache.rs::DocPayload { Text(String) | File { uri, mime_type } }` replaces `body: String`. `build_story_prefix` emits a header text part followed by either a body text part (SourceDocument) or a `fileData` part (Image). For Image payloads, `doc_snapshots` keys hash the URI (stable per upload).
+  - **6B scope decisions:**
+    - Resolution of file-API URIs is **not** triggered automatically inside `build_cache_prefix` (would couple a sync DB-only function to async HTTP). Instead, the prefix builder reads whatever `file_api_uri` is currently on the `items` row; the caller (a future image-attach or manual cache-update path) is responsible for calling `services/file_api::get_or_upload_file_api_uri` first. When the URI is missing the builder falls back to the 6A text placeholder so cache create still succeeds; the next cache refresh after an upload picks up the URI. This is a pragmatic split for 6B; a full pre-resolve hook lands when image source-doc UI is wired (post-Phase-6).
+  - `cargo build`, `cargo clippy --all-targets -- -D warnings`, `cargo test --lib` (162 passed, +6 file_api tests) all clean.
+
+- **2026-05-14: 6C landed (consulting cache + snapshot reconstruction).**
+  - `services/cache.rs`:
+    - `mark_session_stale(conn, session_id)` — `UPDATE conversation_sessions SET cache_is_stale = 1 WHERE id = ? AND cache_name IS NOT NULL`. Handover never has an active cache (table CHECK), so no kind-guard needed.
+    - `build_session_prefix(conn, session_id) -> (CachePrefix, Vec<SessionDivergence>)` — reads `entry_snapshot` JSON, walks `attached_docs` (compares current SHA-256 → `AttachedDocChanged`; missing rows → `MissingAttachedDoc`), walks `story_message_ids` verbatim (missing → `MissingStoryMessage`; renders user/model the same way story prefix does). Captured accordion state is used verbatim per Doc 22 §Re-entry algorithm (Phase 4 snapshots have empty `accordion_state`; Phase 7 will populate).
+    - Divergence's `prefix_hash_mismatch` recomputed via `services::modes::canonicalise_and_hash` (now `pub`) — matches the snapshot's hash domain. Independent of `CachePrefix.prefix_hash` (rendered-bytes hash, used for cache-create's own integrity chain).
+    - `is_cached_session_message(conn, session_id, message_id)` — true when `cache_name IS NOT NULL` AND id appears in snapshot's `story_message_ids`. Modal contract uses this in 6D for session edit/delete.
+    - `build_cache_prefix(Session)` arm now delegates to `build_session_prefix`, dropping divergences (the eager-create paths in modes commands surface them via `session_cache_diverged` event).
+  - `db/conversation_sessions.rs::list_alive_session_rows` — joins `conversation_sessions` to `items.name` for the right-pane Cache list.
+  - `db/cache_state.rs::SessionCacheStatus` (Default + ts-rs export) — IPC payload mirroring the cache fields on a session row.
+  - `commands/cache.rs`:
+    - `list_alive_caches` now returns story rows + active consulting rows (session id/name populated; `total_tokens=0` placeholder until session-cache create stores it via update_session_cache token field — out of 6C scope).
+    - New `get_session_cache_state` Tauri command, registered in `lib.rs`.
+  - `commands/modes.rs`:
+    - `ensure_consulting_cache(app, state, api_key, session_id)` — sync prep block builds prefix from snapshot under `with_two_conns`; releases locks; best-effort `DELETE` of any existing cache; `POST cachedContents` with consulting SI from snapshot. On failure, NULLs the session's cache fields and emits empty status. On success, persists via `update_session_cache` and emits `session_cache_state_changed`. Divergences (if any) emitted as `session_cache_diverged`.
+    - `start_consulting_session` (now `async`) — after row creation, eagerly calls `ensure_consulting_cache`. Failure is non-fatal; first session send retries via the same path.
+    - `enter_session` (now `async`) — for consulting kind, runs `ensure_consulting_cache` (rebuilds from snapshot per Doc 22 §Consulting-session cache §Cache contents on re-entry).
+    - `exit_session` (now `async`) — for consulting kind: best-effort `DELETE`, NULL the row's cache triple, emit empty status.
+    - `send_session_message` — under prep, decides cached vs inline (consulting only; cached when `cache_name IS NOT NULL AND !cache_is_stale AND expiry_at > now`). Cached path replaces the inline request with one carrying `cached_content_name` and only the new user turn. `spawn_session_cache_refresh` fires on STOP, persists new expiry via `update_session_cache`, emits.
+    - New IPC payloads: `SessionCacheStateChangedPayload`, `SessionCacheDivergedPayload`. New events: `session_cache_state_changed`, `session_cache_diverged`.
+  - `src/lib/types.ts` extended: `SessionCacheStatus`, `SessionCacheStateChangedPayload`, `SessionDivergence`, `SessionDivergenceKind`, `SessionCacheDivergedPayload`. `tauriApi/cache.ts::getSessionCacheState` wrapper.
+  - **6C scope decisions:**
+    - Session-message edit/delete stale triggers: `commands/modes.rs` does not currently expose direct edit/delete of session messages (only send + cancel). When 6D / a future phase adds those commands, they should call `mark_session_stale`. The `is_cached_session_message` predicate is already in place.
+    - `total_tokens` for session rows in `list_alive_caches` is a placeholder 0 — the live token count from Gemini's create response isn't persisted on the session row (no column for it). A column add lands when session-cache UI surfaces a token figure (out of 6C scope).
+    - Coexistence: story cache stays alive but unrefreshed during a consulting session — already the natural behavior (story-mode `send_message` is the only refresher). Verified by test setup.
+  - 4 new cache.rs tests (snapshot round-trip, missing-message divergence, mark_session_stale + no-op, is_cached_session_message). `cargo build`, `cargo clippy --all-targets -- -D warnings`, `cargo test --lib` (169 passed, +7 from 6B), `tsc --noEmit`, `eslint .` all clean.
+
+- **2026-05-14: 6D landed (frontend cache surface).**
+  - `src/stores/cacheStore.ts` — Zustand store with `byStory: Record<string, CacheStatus>`, `bySession: Record<string, SessionCacheStatus>`, `alive: AliveCacheRow[]`, and a `tick: number` driven by a single shared 1 Hz `setInterval` via `subscribeTicker()` (ref-counted; auto-stops when last subscriber unmounts). Event reducers `handleStoryCacheEvent` / `handleSessionCacheEvent` patch the right `byStory`/`bySession` map and refresh `alive` (cheap local-DB join). `clearAll` for world switch. Helper exports `isStoryCacheActive`, `formatTtl`, `ttlColorToken` (tokens-only per NB-1).
+  - `src/lib/tauriApi/cache.ts` — typed wrappers (`getCacheState`, `createStoryCache`, `deleteStoryCache`, `listAliveCaches`, `getSessionCacheState`).
+  - `src/hooks/useWorkspaceEvents.ts` — listeners for `cache_state_changed`, `session_cache_state_changed`, `cache_unavailable` (toast: "Cache unavailable; sending inline."), `session_cache_diverged` (toast: "Story has changed since this session was created. Context may differ."). Lifecycle subscriptions: load story-cache on `activeStoryId` change; `clearAll` on `activeWorldId` change; `refreshAlive` after world open.
+  - `src/components/theater/CacheSection.tsx` — collapsible "CACHE" header (11px uppercase per Doc 27), one row per alive cache: `<label> · <tokens k> · <TTL> [stale-dot]`. Click row → `CacheContentsModal`. Right-click row → `deleteStoryCache` (consulting rows owned by session lifecycle — no manual delete affordance). Mounted in `WorkspaceShell` between `ContextDocsSection` and `StatusSection`.
+  - `src/components/theater/CacheContentsModal.tsx` — overlay dialog (mirrors `WorldPickerModal` pattern, since Doc 09 Dialog primitive doesn't ship until Phase 11). Per-doc rows with `crypto.subtle.digest('SHA-256', ...)` dirty check (compares `getItemContent(id)` for SourceDoc, `file_api_uri` for Image, against `cache_state.doc_snapshots`). Header shows resource name / TTL / token count / stale flag. Actions: Delete / Update / Close.
+  - `src/components/theater/CachedMessageConfirmModal.tsx` + `src/hooks/useCachedMessageGuard.tsx` — Doc 22 §Cached-message Edit/Delete Protection. Hook returns `(modal, guard)`; the guard returns `true` immediately when no cache is active or the message is post-high-water; otherwise pops the modal and resolves on confirm/cancel. Wired into `StoryUserBubble` for both edit and delete paths. Dismissal proceeds — backend stale-trigger then marks the cache stale.
+  - `src/components/theater/InputArea.tsx` — Send button gains an amber dot when the active story cache is stale, plus an inline "Update cache" link to its left. Tooltip: "Cache is outdated. Update it before sending for cost savings, or send anyway." (matches Doc 22 wording).
+  - 12 vitest cases in `src/__tests__/cacheStore.test.ts` covering: event-merge for story / session, `clearAll`, ticker increment + ref-counted shared interval (single tick per second across 2+ subscribers), `isStoryCacheActive` truth table, `formatTtl` boundaries. Tauri IPC mocked at the wrapper boundary so `refreshAlive` doesn't hit the missing runtime.
+  - **6D scope decisions:**
+    - The right-click context-menu UX from Doc 22 §Stale Indicator is condensed to an inline "Update cache" button + amber dot. A real popover-style context menu requires the Doc 09 menu primitive (Phase 11) — deferred.
+    - The cached-message guard is wired into `StoryUserBubble` only. `StoryAIBubble` exposes Ghostwriter and feedback edits, neither of which currently goes through the high-water predicate (feedback flips `cache_state_changed` server-side post-update; Ghostwriter accept lands in Phase 8). Hook is general so adding new sites is a one-line wrap.
+    - CacheContentsModal hashes the content fetched via `get_item_content` IPC. For Images it hashes the `file_api_uri` (mirrors backend's snapshot key for Image rows in `services/cache.rs`). Newly-attached docs (no snapshot key) display as "⚠ changed".
+    - Verification: `tsc --noEmit`, `eslint .`, `vitest run` (26 passed, +12), and Vite frontend-only preview start with no cache-code console errors. Full UI exercise requires `npm run tauri dev` (the auth gate keeps the workspace shell out of reach in browser-only preview).
+  - All checkpoints from the Phase 6 plan now have backend + UI coverage. `/phase-verify` next.
+
+- **2026-05-15: Phase 6 closed (`/phase-verify` clean).** All six Testable Checkpoints ticked via code/test inspection (per agreement with user — UI-bound checkpoints not exercised live). Build/lint/test green: `cargo build --release`, `cargo clippy -- -D warnings`, `cargo test --lib` (169 passed), `tsc --noEmit`, `eslint .`, `prettier --check .`, ts-rs drift = intentional Phase 6 deltas only. Quality bar: no hex in cache components; no raw `invoke` in components; no `.unwrap()` in production paths (all in `#[cfg(test)]`); logs reference IDs + metadata only; localStorage limited to pane widths + expanded-folder IDs. Removed one `// Phase 6A scope:` comment from [conversation.rs:883](src-tauri/src/commands/conversation.rs#L883) to satisfy the forbidden-pattern rule. Two preexisting `// Phase X` comments remain in `services/vault.rs:49` and `db/messages.rs:427` — Phase 2/3 tech debt, out of Phase 6 scope; flag for a future audit-resolve sweep. All Phase 6 audit items (HB-6, HB-7, CD-12, SD-4, IP-9) were already ticked at audit-reconciliation time — no new Resolution log entries needed. Next phase: Phase 7 (Accordion); Phase 7 owns wiring its own `mark_story_stale` call sites for summarise/use_summary/create_checkpoint/delete_checkpoint per the cross-phase contracts captured above.
 
 ---
 

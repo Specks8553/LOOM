@@ -2,6 +2,7 @@
 //! into `services/`, `commands/`, or `security/`.
 
 pub mod attachment_history;
+pub mod cache_state;
 pub mod connection;
 pub mod conversation_sessions;
 pub mod messages;

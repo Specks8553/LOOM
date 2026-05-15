@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { InputArea } from '@/components/theater/InputArea';
+import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 import type { ChatMessage, UserContent } from '@/lib/types';
@@ -23,8 +24,15 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   const editUser = useWorkspaceStore((s) => s.editUser);
   const deleteExchange = useWorkspaceStore((s) => s.deleteExchange);
   const deleteFrom = useWorkspaceStore((s) => s.deleteFrom);
+  const { modal: cachedGuardModal, guard: guardCachedMessage } = useCachedMessageGuard();
 
   const parsed = safeParse(message.content);
+
+  async function handleEditClick() {
+    const proceed = await guardCachedMessage(message, 'edit');
+    if (!proceed) return;
+    setEditing(true);
+  }
 
   async function handleEditCommit(content: UserContent) {
     setEditing(false);
@@ -32,6 +40,8 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   }
 
   async function handleDelete(scope: 'exchange' | 'from') {
+    const proceed = await guardCachedMessage(message, 'delete');
+    if (!proceed) return;
     const label = scope === 'exchange' ? 'this exchange' : 'this and every exchange after';
     if (!window.confirm(`Delete ${label}?\nThis cannot be undone in v2.0.`)) return;
     if (scope === 'exchange') {
@@ -88,10 +98,11 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
       </div>
       <ActionRow
         disabled={isGenerating}
-        onEdit={() => setEditing(true)}
+        onEdit={() => void handleEditClick()}
         onDeleteExchange={() => void handleDelete('exchange')}
         onDeleteFrom={() => void handleDelete('from')}
       />
+      {cachedGuardModal}
     </div>
   );
 }

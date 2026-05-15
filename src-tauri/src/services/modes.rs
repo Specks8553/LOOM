@@ -81,7 +81,7 @@ pub struct AttachedDocEntry {
 /// 5 will add attached docs and Phase 7 will add accordion entries to the
 /// canonicalisation. Each phase appends fields at the end so old snapshots'
 /// hashes stay computable for comparison.
-fn canonicalise_and_hash(
+pub fn canonicalise_and_hash(
     system_instruction: &str,
     story_message_ids: &[String],
     accordion: &[AccordionSnapshotEntry],

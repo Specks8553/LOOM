@@ -227,3 +227,75 @@ export type StoryActiveMode = {
   active_mode: 'story' | 'handover' | 'consulting';
   active_session_id: string | null;
 };
+
+// --- Phase 6 — Context Caching (Doc 22) ---
+
+/** Doc 03 §TypeScript Interfaces §Context Caching. Story-cache status. */
+export type CacheStatus = {
+  cache_name: string | null;
+  expiry_at: string | null;
+  is_stale: boolean;
+  last_cached_message_id: string | null;
+  total_token_count: number | null;
+  /** doc_id → SHA-256 hex (BTreeMap on the Rust side; key order is sorted). */
+  doc_snapshots: Record<string, string>;
+};
+
+/** Right-pane Cache section row. Story rows have `session_id = null`;
+ *  consulting rows (Phase 6C) carry session_id + session_name. */
+export type AliveCacheRow = {
+  story_id: string;
+  story_name: string;
+  session_id: string | null;
+  session_name: string | null;
+  total_tokens: number;
+  expiry_at: string;
+  is_stale: boolean;
+};
+
+/** Payload of `cache_state_changed` event. */
+export type CacheStateChangedPayload = {
+  story_id: string;
+  status: CacheStatus;
+};
+
+/** Payload of `cache_unavailable` event — emitted when a cache create
+ *  failed and the send fell back to inline assembly. */
+export type CacheUnavailablePayload = {
+  story_id: string;
+  reason: 'create_failed';
+};
+
+/** Doc 03 §TypeScript Interfaces §Context Caching. Consulting-session cache. */
+export type SessionCacheStatus = {
+  cache_name: string | null;
+  expiry_at: string | null;
+  is_stale: boolean;
+};
+
+/** Payload of `session_cache_state_changed` event. */
+export type SessionCacheStateChangedPayload = {
+  session_id: string;
+  status: SessionCacheStatus;
+};
+
+/** Doc 22 §Re-entry algorithm. Non-blocking divergences recorded while
+ *  rebuilding a session's cache prefix from snapshot. */
+export type SessionDivergenceKind =
+  | 'missing_story_message'
+  | 'missing_attached_doc'
+  | 'attached_doc_changed'
+  | 'prefix_hash_mismatch';
+
+export type SessionDivergence = {
+  kind: SessionDivergenceKind;
+  /** id of the message / doc / segment; empty for prefix_hash_mismatch. */
+  id: string;
+};
+
+/** Payload of `session_cache_diverged` — surfaces as a non-blocking toast
+ *  on session re-entry per Doc 22 §Re-entry. */
+export type SessionCacheDivergedPayload = {
+  session_id: string;
+  divergences: SessionDivergence[];
+};

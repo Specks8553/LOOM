@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod config;
+pub mod file_api;
 pub mod gemini;
 pub mod history;
 pub mod modes;

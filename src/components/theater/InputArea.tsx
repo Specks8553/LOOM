@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { createStoryCache } from '@/lib/tauriApi/cache';
+import { useCacheStore } from '@/stores/cacheStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 import type { InputDraft, UserContent } from '@/lib/types';
@@ -49,6 +51,26 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
   }
 
   const canSubmit = localDraft.plot_direction.trim().length > 0;
+
+  // Doc 22 §Stale Indicator. Amber dot on Send when the active story cache
+  // is stale. No effect on Send behavior — the next send rebuilds.
+  const cacheStale = useCacheStore((s) =>
+    !editMode && activeStoryId !== null ? (s.byStory[activeStoryId]?.is_stale ?? false) : false,
+  );
+  const cacheActive = useCacheStore((s) =>
+    !editMode && activeStoryId !== null
+      ? (s.byStory[activeStoryId]?.cache_name ?? null) !== null
+      : false,
+  );
+
+  async function handleUpdateCache() {
+    if (activeStoryId === null) return;
+    try {
+      await createStoryCache(activeStoryId);
+    } catch (e) {
+      console.error('createStoryCache', e);
+    }
+  }
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -131,16 +153,40 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
             Cancel
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={
-              !canSubmit || (!editMode && isGenerating) || (!editMode && activeStoryId === null)
-            }
-            className="rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {submitLabel ?? 'Send'}
-          </button>
+          <>
+            {cacheActive && cacheStale && (
+              <button
+                type="button"
+                onClick={() => void handleUpdateCache()}
+                title="Cache is outdated. Update it before sending for cost savings, or send anyway."
+                className="text-[11px] text-[--color-text-muted] underline-offset-2 hover:text-[--color-text-primary] hover:underline"
+              >
+                Update cache
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={
+                !canSubmit || (!editMode && isGenerating) || (!editMode && activeStoryId === null)
+              }
+              title={
+                cacheStale
+                  ? 'Cache is outdated. Update it before sending for cost savings, or send anyway.'
+                  : undefined
+              }
+              className="relative rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitLabel ?? 'Send'}
+              {cacheStale && (
+                <span
+                  aria-label="Cache is stale"
+                  className="absolute -right-1 -top-1 h-2 w-2 rounded-full"
+                  style={{ background: 'var(--color-warning, #f59e0b)' }}
+                />
+              )}
+            </button>
+          </>
         )}
       </div>
     </div>

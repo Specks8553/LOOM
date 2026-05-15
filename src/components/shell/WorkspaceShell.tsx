@@ -5,6 +5,7 @@ import { PaneDivider } from '@/components/layout/PaneDivider';
 import { RightPane } from '@/components/layout/RightPane';
 import { Theater } from '@/components/layout/Theater';
 import { Navigator } from '@/components/navigator/Navigator';
+import { CacheSection } from '@/components/theater/CacheSection';
 import { ContextDocsSection } from '@/components/theater/ContextDocsSection';
 import { DocEditor } from '@/components/theater/DocEditor';
 import { StatusSection } from '@/components/theater/StatusSection';
@@ -195,6 +196,7 @@ export function WorkspaceShell() {
             <div className="flex h-full flex-col">
               <div className="flex-1" />
               <ContextDocsSection />
+              <CacheSection />
               <StatusSection />
             </div>
           </RightPane>

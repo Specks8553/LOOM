@@ -155,6 +155,48 @@ pub fn list_items(
     Ok(items)
 }
 
+/// Read the Gemini File API URI + upload timestamp for an Image item. Both
+/// fields are nullable until the first successful upload (Doc 22 §Image
+/// source documents, Phase 6B). Returns `(None, None)` for items without an
+/// upload yet, or for non-Image rows.
+pub fn get_file_api_state(
+    conn: &Connection,
+    id: &str,
+) -> Result<(Option<String>, Option<String>), LoomError> {
+    let row = conn
+        .query_row(
+            "SELECT file_api_uri, file_api_uploaded_at FROM items WHERE id = ?1",
+            params![id],
+            |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()?;
+    Ok(row.unwrap_or((None, None)))
+}
+
+/// Persist a freshly-uploaded File API URI for an Image item. Caller is
+/// responsible for `now_iso()` formatting.
+pub fn set_file_api_uri(
+    conn: &Connection,
+    id: &str,
+    uri: &str,
+    uploaded_at: &str,
+) -> Result<(), LoomError> {
+    let n = conn.execute(
+        "UPDATE items SET file_api_uri = ?1, file_api_uploaded_at = ?2, modified_at = ?2
+         WHERE id = ?3",
+        params![uri, uploaded_at, id],
+    )?;
+    if n == 0 {
+        return Err(LoomError::NotFound(format!("item {id} not found")));
+    }
+    Ok(())
+}
+
 /// Read an item's `content` column. Returns `None` if the item does not
 /// exist. Empty string for items without source-doc content (the schema
 /// default).

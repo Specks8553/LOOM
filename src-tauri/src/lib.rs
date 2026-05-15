@@ -87,6 +87,11 @@ pub fn run() {
             commands::modes::set_session_collapsed,
             commands::modes::get_story_active_mode,
             commands::modes::set_story_active_mode,
+            commands::cache::get_cache_state,
+            commands::cache::create_story_cache,
+            commands::cache::delete_story_cache,
+            commands::cache::list_alive_caches,
+            commands::cache::get_session_cache_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

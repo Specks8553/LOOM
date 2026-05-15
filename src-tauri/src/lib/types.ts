@@ -3,6 +3,14 @@
 export type AccordionSnapshotEntry = { segment_id: string, is_collapsed: boolean, summary: string | null, summary_hash: string | null, };
 
 /**
+ * Row shape for the right-pane Cache section. Lives here because Doc 03 §IPC
+ * names `services/cache.rs::AliveCacheRow` as the authoritative ts-rs source.
+ * Story rows have `session_id = None`; consulting rows (added in 6C) carry
+ * the active session id + name.
+ */
+export type AliveCacheRow = { story_id: string, story_name: string, session_id: string | null, session_name: string | null, total_tokens: bigint, expiry_at: string, is_stale: boolean, };
+
+/**
  * Full `app_config.json` payload.
  */
 export type AppConfig = { worlds: Array<WorldEntry>, active_world_id: string | null, salt_hex: string, key_check: Sentinel, };
@@ -14,6 +22,16 @@ export type AppConfig = { worlds: Array<WorldEntry>, active_world_id: string | n
 export type AppPhase = "onboarding" | "locked" | "workspace";
 
 export type AttachedDocEntry = { doc_id: string, content_hash: string, };
+
+/**
+ * IPC payload per Doc 03 §TypeScript Interfaces §Context Caching.
+ * Returned by `get_cache_state` and embedded in `cache_state_changed` events.
+ */
+export type CacheStatus = { cache_name: string | null, expiry_at: string | null, is_stale: boolean, last_cached_message_id: string | null, total_token_count: bigint | null, 
+/**
+ * `doc_id -> SHA-256 hex` map. Empty when no cache is active.
+ */
+doc_snapshots: { [key in string]?: string }, };
 
 /**
  * Per Doc 03 §TypeScript Interfaces §Conversation. The IPC payload type for
@@ -67,6 +85,28 @@ export type SendSessionMessageResult = { user_message_id: string, model_message_
  * Sentinel payload stored in `app_config.json`.
  */
 export type Sentinel = { nonce_hex: string, ciphertext_hex: string, };
+
+/**
+ * Session cache status (Doc 03 §TypeScript Interfaces §Context Caching).
+ * Populated only for consulting sessions; handover always has all fields
+ * NULL/false (table CHECK enforces).
+ */
+export type SessionCacheStatus = { cache_name: string | null, expiry_at: string | null, is_stale: boolean, };
+
+/**
+ * Doc 22 §Re-entry algorithm — diagnostic record of every snapshot/state
+ * disagreement encountered while rebuilding a session prefix. Non-blocking:
+ * the prefix is still returned, and the caller surfaces these via a
+ * `session_cache_diverged` event for the frontend toast.
+ */
+export type SessionDivergence = { kind: SessionDivergenceKind, 
+/**
+ * The id of the message / doc / segment in question. Empty for
+ * `PrefixHashMismatch`.
+ */
+id: string, };
+
+export type SessionDivergenceKind = "missing_story_message" | "missing_attached_doc" | "attached_doc_changed" | "prefix_hash_mismatch";
 
 /**
  * Doc 23 enumerates these as `'handover' | 'consulting'`. Story is *not* a

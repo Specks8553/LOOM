@@ -13,13 +13,16 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+use crate::db::cache_state::SessionCacheStatus;
 use crate::db::conversation_sessions::{
     delete_session as db_delete_session, get_session, list_sessions_for_story,
-    update_session_collapsed, update_session_name, ConversationSession,
+    update_session_cache, update_session_collapsed, update_session_name, ConversationSession,
 };
 use crate::db::messages::{insert_message, list_story_messages, ChatMessage};
 use crate::db::settings::{get_story_state, set_story_state};
 use crate::error::LoomError;
+use crate::services::cache as cache_service;
+use crate::services::cache::SessionDivergence;
 use crate::services::gemini::{self, ChunkSink, GenerationParams, StreamOutcome, GEMINI_BASE_URL};
 use crate::services::history::{self, AssembledRequest, SessionAssembleInputs};
 use crate::services::modes::{create_session, CreateSessionInputs, SessionKind};
@@ -115,6 +118,138 @@ struct SessionStateChangedPayload<'a> {
     status: &'a str,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct SessionCacheStateChangedPayload<'a> {
+    session_id: &'a str,
+    status: &'a SessionCacheStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SessionCacheDivergedPayload<'a> {
+    session_id: &'a str,
+    divergences: &'a [SessionDivergence],
+}
+
+fn emit_session_cache_state_changed(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    status: &SessionCacheStatus,
+) {
+    let _ = app
+        .emit(
+            "session_cache_state_changed",
+            SessionCacheStateChangedPayload { session_id, status },
+        )
+        .map_err(|e| warn!("emit session_cache_state_changed: {e}"));
+}
+
+/// Build the consulting cache, POST it to Gemini, persist, emit. Best-effort
+/// on failures: if the create fails the session row stays cache-less and the
+/// next session message falls back to inline assembly. Returns the recorded
+/// divergences (if any) so the caller can also emit the warning event.
+async fn ensure_consulting_cache(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    api_key: &str,
+    session_id: &str,
+) -> Result<Vec<SessionDivergence>, LoomError> {
+    // 1. Synchronous prep — build the prefix from snapshot, delete any
+    //    pre-existing cache fields under one with_two_conns block.
+    let session_id_for_closure = session_id.to_string();
+    let (prefix, divergences, model, ttl_secs, existing_cache_name) =
+        access::with_two_conns(state, |app_db, world_db| {
+            let model: String = resolve(world_db, app_db, AppSettingKey::TextModelName)?;
+            let ttl_secs: u32 = resolve(world_db, app_db, AppSettingKey::CacheTtlSecs)?;
+            let session = get_session(world_db, &session_id_for_closure)?.ok_or_else(|| {
+                LoomError::NotFound(format!("session {session_id_for_closure} not found"))
+            })?;
+            if session.kind != "consulting" {
+                return Err(LoomError::validation(format!(
+                    "ensure_consulting_cache called on session kind '{}'",
+                    session.kind
+                )));
+            }
+            let (prefix, divergences) =
+                cache_service::build_session_prefix(world_db, &session_id_for_closure)?;
+            Ok((
+                prefix,
+                divergences,
+                model,
+                ttl_secs as u64,
+                session.cache_name,
+            ))
+        })?;
+
+    // 2. Best-effort delete of any existing cache (no lock).
+    if let Some(name) = existing_cache_name {
+        if let Err(e) = cache_service::delete_cache(GEMINI_BASE_URL, api_key, &name).await {
+            warn!("ensure_consulting_cache: stale delete failed: {e}");
+        }
+    }
+
+    // 3. Create new cache.
+    let record = match cache_service::create_cache(
+        GEMINI_BASE_URL,
+        api_key,
+        &model,
+        &prefix,
+        ttl_secs,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("consulting cache create failed; session will run inline: {e}");
+            // Persist NULL fields so retries are predictable.
+            let now = now_iso();
+            let session_id_owned = session_id.to_string();
+            let _ = access::with_active_conn(state, |conn| {
+                update_session_cache(conn, &session_id_owned, None, None, false, &now)
+            });
+            let status = SessionCacheStatus::default();
+            emit_session_cache_state_changed(app, session_id, &status);
+            return Err(e);
+        }
+    };
+
+    // 4. Persist + emit.
+    let now = now_iso();
+    let session_id_owned = session_id.to_string();
+    let cache_name = record.cache_name.clone();
+    let expire = record.expire_time.clone();
+    let now_for_db = now.clone();
+    access::with_active_conn(state, |conn| {
+        update_session_cache(
+            conn,
+            &session_id_owned,
+            Some(&cache_name),
+            Some(&expire),
+            false,
+            &now_for_db,
+        )
+    })?;
+    let status = SessionCacheStatus {
+        cache_name: Some(record.cache_name),
+        expiry_at: Some(record.expire_time),
+        is_stale: false,
+    };
+    emit_session_cache_state_changed(app, session_id, &status);
+
+    if !divergences.is_empty() {
+        let _ = app
+            .emit(
+                "session_cache_diverged",
+                SessionCacheDivergedPayload {
+                    session_id,
+                    divergences: &divergences,
+                },
+            )
+            .map_err(|e| warn!("emit session_cache_diverged: {e}"));
+    }
+
+    Ok(divergences)
+}
+
 // --- Commands ---------------------------------------------------------------
 
 #[tauri::command]
@@ -178,8 +313,6 @@ pub async fn start_consulting_session(
 ) -> Result<ConversationSession, LoomError> {
     let state = app.state::<AppState>();
     let row = start_session_inner(&state, story_id.clone(), SessionKind::Consulting)?;
-    // Phase 6 will create the Gemini cache here. Phase 4 leaves the cache
-    // fields NULL and relies on inline assembly.
     let _ = app
         .emit(
             "session_created",
@@ -190,29 +323,59 @@ pub async fn start_consulting_session(
             },
         )
         .map_err(|e| warn!("emit session_created: {e}"));
+
+    // Eagerly create the Gemini cache for this session. Failure is logged
+    // and the session falls back to inline; the writer's first send will
+    // retry create automatically via the same path.
+    if let Ok(api_key) = access::with_api_key(&state, |k| Ok(k.to_owned())) {
+        if let Err(e) = ensure_consulting_cache(&app, &state, &api_key, &row.id).await {
+            warn!("start_consulting_session: cache create failed: {e}");
+        }
+    }
     Ok(row)
 }
 
 #[tauri::command]
-pub fn enter_session(state: State<'_, AppState>, session_id: String) -> Result<(), LoomError> {
-    // For Phase 4 entering is a UI-state-only operation: the workspace's
-    // `modeStore.activeSessionId` (frontend) tracks who is being driven; the
-    // backend just validates the session exists. Phase 6 adds consulting
-    // cache rebuild here.
-    access::with_active_conn(&state, |conn| {
-        require_session(conn, &session_id)?;
-        Ok(())
-    })
+pub async fn enter_session(app: tauri::AppHandle, session_id: String) -> Result<(), LoomError> {
+    let state = app.state::<AppState>();
+    let kind = access::with_active_conn(&state, |conn| {
+        let row = require_session(conn, &session_id)?;
+        Ok(row.kind)
+    })?;
+    if kind == "consulting" {
+        if let Ok(api_key) = access::with_api_key(&state, |k| Ok(k.to_owned())) {
+            if let Err(e) = ensure_consulting_cache(&app, &state, &api_key, &session_id).await {
+                warn!("enter_session: cache rebuild failed: {e}");
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn exit_session(state: State<'_, AppState>, session_id: String) -> Result<(), LoomError> {
-    // Phase 4 no-op (cache lifecycle is Phase 6). Validates the session
-    // exists so accidental front-end calls surface a clean error.
+pub async fn exit_session(app: tauri::AppHandle, session_id: String) -> Result<(), LoomError> {
+    let state = app.state::<AppState>();
+    let (kind, cache_name) = access::with_active_conn(&state, |conn| {
+        let row = require_session(conn, &session_id)?;
+        Ok((row.kind, row.cache_name))
+    })?;
+    if kind != "consulting" {
+        return Ok(());
+    }
+    if let Some(name) = cache_name {
+        if let Ok(api_key) = access::with_api_key(&state, |k| Ok(k.to_owned())) {
+            if let Err(e) = cache_service::delete_cache(GEMINI_BASE_URL, &api_key, &name).await {
+                warn!("exit_session: best-effort cache delete failed: {e}");
+            }
+        }
+    }
+    let now = now_iso();
+    let session_id_owned = session_id.clone();
     access::with_active_conn(&state, |conn| {
-        require_session(conn, &session_id)?;
-        Ok(())
-    })
+        update_session_cache(conn, &session_id_owned, None, None, false, &now)
+    })?;
+    emit_session_cache_state_changed(&app, &session_id, &SessionCacheStatus::default());
+    Ok(())
 }
 
 /// Payload returned by `send_session_message` — same shape as
@@ -241,7 +404,7 @@ pub async fn send_session_message(
     let session_id_for_closure = session_id.clone();
     let text_for_closure = text.clone();
 
-    let (kind, model_name, request, params) =
+    let (kind, model_name, mut request, params, cache_name, cache_ttl_secs) =
         access::with_two_conns(&state, |app_db, world_db| {
             let session = require_session(world_db, &session_id_for_closure)?;
             let kind = match session.kind.as_str() {
@@ -303,9 +466,48 @@ pub async fn send_session_message(
             };
             insert_message(world_db, &model_msg)?;
 
-            Ok((kind, model_name, request, params))
+            // Decide cached vs inline. Consulting only — handover never caches.
+            let now = chrono::Utc::now().to_rfc3339();
+            let cache_active = kind == SessionKind::Consulting
+                && session.cache_name.is_some()
+                && !session.cache_is_stale
+                && session
+                    .cache_expiry_at
+                    .as_deref()
+                    .map(|e| e > now.as_str())
+                    .unwrap_or(false);
+            let cache_name = if cache_active {
+                session.cache_name
+            } else {
+                None
+            };
+            let cache_ttl_secs: u32 = resolve(world_db, app_db, AppSettingKey::CacheTtlSecs)?;
+
+            Ok((
+                kind,
+                model_name,
+                request,
+                params,
+                cache_name,
+                cache_ttl_secs as u64,
+            ))
         })?;
-    let _ = kind; // currently unused once params are resolved; reserved for Phase 6 cache routing.
+    let _ = kind; // routing decided above; kind retained for later (gen-param-by-mode).
+
+    // When riding an active cache, replace the inline request with a
+    // cache-bound one carrying only the new user turn (the cached prefix
+    // covers SI + story-up-to-entry + session-history-pre-edit).
+    let refresh_cache_name = if let Some(name) = cache_name.as_ref() {
+        let last_turn = request.contents.last().cloned();
+        request = AssembledRequest {
+            system_instruction: String::new(),
+            contents: last_turn.map(|c| vec![c]).unwrap_or_default(),
+            cached_content_name: Some(name.clone()),
+        };
+        Some(name.clone())
+    } else {
+        None
+    };
 
     let cancel_token = access::install_cancel_token(&state)?;
     let user_message_id = user_id;
@@ -333,6 +535,8 @@ pub async fn send_session_message(
             request,
             params,
             cancel_token,
+            refresh_cache_name,
+            cache_ttl_secs,
         )
         .await
     });
@@ -354,6 +558,8 @@ async fn run_session_stream(
     request: AssembledRequest,
     params: GenerationParams,
     cancel_token: CancellationToken,
+    refresh_cache_name: Option<String>,
+    cache_ttl_secs: u64,
 ) {
     struct EventSink<'a> {
         app: &'a tauri::AppHandle,
@@ -402,14 +608,38 @@ async fn run_session_stream(
             &model,
             outcome,
         ),
-        Ok(outcome) => finalise_complete(
-            &app,
-            &state,
-            &session_id,
-            &model_message_id,
-            &model,
-            outcome,
-        ),
+        Ok(outcome) => {
+            let finished_clean = outcome
+                .finish_reason
+                .as_deref()
+                .map(|r| r == "STOP")
+                .unwrap_or(true);
+            finalise_complete(
+                &app,
+                &state,
+                &session_id,
+                &model_message_id,
+                &model,
+                outcome,
+            );
+            if finished_clean {
+                if let Some(name) = refresh_cache_name {
+                    let task_app = app.clone();
+                    let task_session_id = session_id.clone();
+                    let task_api_key = api_key.clone();
+                    tokio::spawn(async move {
+                        spawn_session_cache_refresh(
+                            task_app,
+                            task_session_id,
+                            task_api_key,
+                            name,
+                            cache_ttl_secs,
+                        )
+                        .await;
+                    });
+                }
+            }
+        }
         Err(e) => finalise_failed(
             &app,
             &state,
@@ -418,6 +648,40 @@ async fn run_session_stream(
             &model_message_id,
             e,
         ),
+    }
+}
+
+async fn spawn_session_cache_refresh(
+    app: tauri::AppHandle,
+    session_id: String,
+    api_key: String,
+    cache_name: String,
+    ttl_secs: u64,
+) {
+    match cache_service::refresh_cache_ttl(GEMINI_BASE_URL, &api_key, &cache_name, ttl_secs).await {
+        Ok(new_expiry) => {
+            let now = now_iso();
+            let session_id_for_db = session_id.clone();
+            let new_expiry_for_db = new_expiry.clone();
+            let state = app.state::<AppState>();
+            let _ = access::with_active_conn(&state, |conn| {
+                update_session_cache(
+                    conn,
+                    &session_id_for_db,
+                    Some(&cache_name),
+                    Some(&new_expiry_for_db),
+                    false,
+                    &now,
+                )
+            });
+            let status = SessionCacheStatus {
+                cache_name: Some(cache_name),
+                expiry_at: Some(new_expiry),
+                is_stale: false,
+            };
+            emit_session_cache_state_changed(&app, &session_id, &status);
+        }
+        Err(e) => warn!("session cache TTL refresh failed: {e}"),
     }
 }
 

@@ -47,22 +47,55 @@ pub struct GeminiContent {
     pub parts: Vec<GeminiPart>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GeminiPart {
+    /// Plain-text part. Empty when `file_data` is set; serde drops empty
+    /// strings so the wire body stays clean.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// Reference to a file uploaded to Gemini's File API (Doc 22 §Image
+    /// source documents). Mutually exclusive with `text`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "fileData")]
+    pub file_data: Option<GeminiFileData>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GeminiFileData {
+    #[serde(rename = "fileUri")]
+    pub file_uri: String,
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+}
+
+impl GeminiPart {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            file_data: None,
+        }
+    }
+    pub fn file(uri: impl Into<String>, mime: impl Into<String>) -> Self {
+        Self {
+            text: String::new(),
+            file_data: Some(GeminiFileData {
+                file_uri: uri.into(),
+                mime_type: mime.into(),
+            }),
+        }
+    }
 }
 
 impl GeminiContent {
     fn user(text: String) -> Self {
         Self {
             role: "user".into(),
-            parts: vec![GeminiPart { text }],
+            parts: vec![GeminiPart::text(text)],
         }
     }
     fn model(text: String) -> Self {
         Self {
             role: "model".into(),
-            parts: vec![GeminiPart { text }],
+            parts: vec![GeminiPart::text(text)],
         }
     }
 }
@@ -112,7 +145,7 @@ pub fn render_user_content(content: &UserContent) -> String {
 
 /// Append the writer's feedback to a model message's stored text per
 /// Doc 15 §History Assembly. Empty feedback is a no-op.
-fn append_feedback(content: &str, feedback: Option<&str>) -> String {
+pub(crate) fn append_feedback(content: &str, feedback: Option<&str>) -> String {
     match feedback {
         Some(fb) if !fb.is_empty() => format!("{content}\n\n[WRITER FEEDBACK]\n{fb}"),
         _ => content.to_owned(),
@@ -132,10 +165,17 @@ fn apply_aux(rendered_user_turn: &str, aux: &str) -> String {
 
 /// Output of `assemble_request` — what `services/gemini.rs::stream_generate`
 /// needs to issue the call.
+///
+/// `cached_content_name`, when set, names a Gemini `cachedContents/...`
+/// resource. The wire body emits `cachedContent` in place of the cached
+/// prefix; `contents` then carries only the post-cache delta (any uncached
+/// story messages plus the current user turn) and the top-level
+/// `systemInstruction` is omitted (the SI is baked into the cache).
 #[derive(Debug, Clone)]
 pub struct AssembledRequest {
     pub system_instruction: String,
     pub contents: Vec<GeminiContent>,
+    pub cached_content_name: Option<String>,
 }
 
 /// Inputs for story-mode assembly. Caller (the conversation command) is
@@ -195,6 +235,7 @@ pub fn assemble_story_request(
     Ok(AssembledRequest {
         system_instruction: inputs.system_instruction.to_owned(),
         contents,
+        cached_content_name: None,
     })
 }
 
@@ -325,6 +366,7 @@ pub fn assemble_session_request(
     Ok(AssembledRequest {
         system_instruction: inputs.system_instruction.to_owned(),
         contents,
+        cached_content_name: None,
     })
 }
 
