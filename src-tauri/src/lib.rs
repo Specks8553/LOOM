@@ -101,6 +101,10 @@ pub fn run() {
             commands::accordion::set_segment_use_summary,
             commands::accordion::clear_segment_summary,
             commands::accordion::summarise_segment,
+            commands::ghostwriter::send_ghostwriter_request,
+            commands::ghostwriter::cancel_ghostwriter_generation,
+            commands::ghostwriter::save_ghostwriter_edit,
+            commands::ghostwriter::revert_ghostwriter_edit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

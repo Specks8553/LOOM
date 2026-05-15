@@ -592,7 +592,7 @@
 
 ## Phase 8 — Ghostwriter
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-15)
 
 **Goal:** Ghostwriter rewrites a selection in any of the three modes via the surgical-stitching protocol; in-place edit on non-latest messages; floating panel anchored to the bubble per Doc 27.
 
@@ -622,7 +622,13 @@
 **Out of scope:** `blocks` content-type support (deferred to v2.1).
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-15: Phase 8A backend landed.** `services/ghostwriter.rs` owns request assembly (mode-aware history truncated at the edited message, synthetic user turn with the `<context_*>`/instruction tag block per Doc 17 §Request Assembly), the canonical `GhostwriterEdit` struct (HB-1 shape — `edited_at` / `original_content` / `new_content` / `instruction` / `selected_text`), the `DEFAULT_GHOSTWRITER_SI` constant baseline (used when `prompt_ghostwriter` resolves empty), and the `append_history_entry` / `pop_history_entry` JSON helpers. UTF-16-aware `slice_selection` matches the JS `Selection` API. `commands/ghostwriter.rs` ships `send_ghostwriter_request` (non-streaming, shares global cancel token), `cancel_ghostwriter_generation`, `save_ghostwriter_edit` (single transaction: read history → append → UPDATE content+history), `revert_ghostwriter_edit` (single transaction: read → pop → UPDATE). Defensive `<selected_passage>…</selected_passage>` wrapper-strip on response. Accept + revert mark story cache stale (when message is at-or-before high-water mark) and silently mark the containing accordion segment stale, matching the `update_message_content` precedent in Phase 3.
+  - **Gemini visibility tweak.** Promoted `GeminiContent::user` / `::model` from private to `pub(crate)` so the ghostwriter service can build the synthetic user turn without duplicating the helper.
+  - **Cache-stale gap (carried forward).** Consulting-session caches whose snapshot includes the edited story message are NOT marked stale by Phase 8A — same gap as Phase 3's `update_message_content`. The story-cache + segment-stale path matches existing precedent. Doc 22's "either cache's range" rule for ghostwriter accept/revert will need a follow-up pass alongside the session-message edit/regenerate work deferred from Phase 4.
+  - **ts-rs regen.** `GhostwriterEdit`, `GhostwriterResponse`, `RevertResult` exported via `cargo test`; reference lives in `src-tauri/src/lib/types.ts`. The hand-maintained frontend mirror `src/lib/types.ts` is NOT yet updated — that happens in 8B (the IPC-wrapper task).
+  - **Verification at 8A close.** `cargo build --lib` clean. `cargo test --lib` 215 passed (up from 196). `cargo clippy --all-targets --release -- -D warnings` clean.
+- **Status:** 8B frontend (panel, store, bubble wiring, escape chain, modals) not started.
 
 ---
 

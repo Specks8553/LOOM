@@ -87,13 +87,13 @@ impl GeminiPart {
 }
 
 impl GeminiContent {
-    fn user(text: String) -> Self {
+    pub(crate) fn user(text: String) -> Self {
         Self {
             role: "user".into(),
             parts: vec![GeminiPart::text(text)],
         }
     }
-    fn model(text: String) -> Self {
+    pub(crate) fn model(text: String) -> Self {
         Self {
             role: "model".into(),
             parts: vec![GeminiPart::text(text)],

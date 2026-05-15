@@ -77,6 +77,24 @@ export type ConversationSession = { id: string, story_id: string, kind: string, 
 cache_name: string | null, cache_expiry_at: string | null, cache_is_stale: boolean, created_at: string, modified_at: string, };
 
 /**
+ * Canonical Ghostwriter edit record per Doc 03 §`GhostwriterEdit` (HB-1).
+ * Stored as one element in the `messages.ghostwriter_history` JSON array.
+ * Wire-equivalent name in IPC payloads is `GhostwriterEditRecord` (IP-5).
+ */
+export type GhostwriterEdit = { edited_at: string, original_content: string, new_content: string, instruction: string, selected_text: string, };
+
+/**
+ * Returned by `send_ghostwriter_request`. The frontend stitches per Doc 17
+ * §Response: `new = before + revised_passage.trim() + after`.
+ */
+export type GhostwriterResponse = { revised_passage: string, token_count: bigint | null, 
+/**
+ * `true` iff the user cancelled mid-flight. When true, `revised_passage`
+ * is empty and the frontend returns the panel to `selecting` silently.
+ */
+cancelled: boolean, };
+
+/**
  * Per Doc 03 §IPC Payload and Result Types. Image item metadata.
  */
 export type ImageAssetMeta = { width: bigint, height: bigint, mime_type: string, };
@@ -86,6 +104,12 @@ export type ImageAssetMeta = { width: bigint, height: bigint, mime_type: string,
  * Eleven variants — adding a twelfth requires a Doc 05 amendment.
  */
 export type LoomError = { "kind": "crypto" } & string | { "kind": "database" } & string | { "kind": "not_found" } & string | { "kind": "validation", validation_kind: ValidationKind, key: string | null, reason: string, } | { "kind": "forbidden" } & string | { "kind": "api_error" } & string | { "kind": "cache_create" } & string | { "kind": "rate_limited" } & string | { "kind": "io" } & string | { "kind": "serialization" } & string | { "kind": "internal" } & string;
+
+/**
+ * Returned by `revert_ghostwriter_edit` so the frontend can re-render the
+ * bubble and decide whether to keep showing the `[Revert]` action.
+ */
+export type RevertResult = { restored_content: string, remaining_history_len: number, };
 
 /**
  * Returned by `send_message` so the frontend can attach the optimistic user

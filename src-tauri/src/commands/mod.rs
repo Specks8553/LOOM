@@ -9,5 +9,6 @@ pub mod app_phase;
 pub mod auth;
 pub mod cache;
 pub mod conversation;
+pub mod ghostwriter;
 pub mod modes;
 pub mod vault;
