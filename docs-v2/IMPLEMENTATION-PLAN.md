@@ -592,7 +592,7 @@
 
 ## Phase 8 — Ghostwriter
 
-**Status:** In progress (last touched 2026-05-15)
+**Status:** In progress (last touched 2026-05-16)
 
 **Goal:** Ghostwriter rewrites a selection in any of the three modes via the surgical-stitching protocol; in-place edit on non-latest messages; floating panel anchored to the bubble per Doc 27.
 
@@ -628,7 +628,18 @@
   - **Cache-stale gap (carried forward).** Consulting-session caches whose snapshot includes the edited story message are NOT marked stale by Phase 8A — same gap as Phase 3's `update_message_content`. The story-cache + segment-stale path matches existing precedent. Doc 22's "either cache's range" rule for ghostwriter accept/revert will need a follow-up pass alongside the session-message edit/regenerate work deferred from Phase 4.
   - **ts-rs regen.** `GhostwriterEdit`, `GhostwriterResponse`, `RevertResult` exported via `cargo test`; reference lives in `src-tauri/src/lib/types.ts`. The hand-maintained frontend mirror `src/lib/types.ts` is NOT yet updated — that happens in 8B (the IPC-wrapper task).
   - **Verification at 8A close.** `cargo build --lib` clean. `cargo test --lib` 215 passed (up from 196). `cargo clippy --all-targets --release -- -D warnings` clean.
-- **Status:** 8B frontend (panel, store, bubble wiring, escape chain, modals) not started.
+- **2026-05-16: Phase 8B frontend landed.** Full Ghostwriter UI wired:
+  - `lib/types.ts` — added `GhostwriterEdit`, `GhostwriterResponse`, `RevertResult`, `GhostwriterSelection`, `DiffSpan` (mirror the 8A ts-rs reference; `GhostwriterResponse.token_count` is `bigint | null`, matching `Option<i64>`).
+  - `lib/tauriApi/ghostwriter.ts` — typed wrappers for all four commands.
+  - `lib/diff.ts` — word-level LCS diff. **Design decision:** spans always recombine to the *revision* (`join('') === revised`); deleted tokens are dropped (nothing to render in the new content). This is load-bearing — `GhostwriterBubble` renders `gw.diff` directly as the bubble body, so it must equal `pendingNewContent`. Doc 17's "render the deletion as a changed span" edge note is incompatible with that invariant; deletion-marker visual is deferred to the visual phase. 6 unit tests in `src/__tests__/diff.test.ts`.
+  - `workspaceStore` — `ghostwriter: GhostwriterMode | null` field + 9 actions per Doc 17 §Frontend State. `generateGhostwriter` raises the global `isGenerating` for the call duration (Doc 17 §isGenerating) and stitches `before + revised.trim() + after`. Reset on story switch / clear.
+  - `GhostwriterPanel.tsx` — `fixed`/portal floating panel, 4 phase states, right-gutter vertical-clamp per Doc 17 formula, phase-sensitive Escape, cached-message guard on Accept (`useCachedMessageGuard`).
+  - `GhostwriterBubble.tsx` — shared in-mode rendering (pulse frame, plain-text + feature-coloured selection capture via `selectionchange`, diff highlight). Used by both story and session bubbles.
+  - `StoryAIBubble.tsx` / `SessionBubble.tsx` — `✦ Ghostwriter` action + context-menu entry, `[Revert]` action when `ghostwriter_history` non-empty, delegate to `GhostwriterBubble` when active. SessionBubble gained an action row (was read-only) — Ghostwriter available in handover + consulting per Doc 17.
+  - `globals.css` — added the `--color-ghostwriter[-hover/-subtle/-diff]` triad (⚠️ provisional, NB-1) + `.gw-selectable::selection`, `.gw-diff-changed`, `.gw-active-frame` pulse keyframe.
+  - **Decisions:** discard-pending confirmation uses `window.confirm` (consistent with the existing StoryAIBubble delete / AccordionBanner prompt pattern; visual phase replaces). No central escape-chain function exists yet — the panel owns its own Escape listener (`capture` phase). One shared `GhostwriterBubble` avoids duplicating selection/diff logic across the two bubble types.
+  - **Verification at 8B close.** `npx tsc -b` clean, `npx eslint .` clean (0 problems), `npx vitest run` 37/37 pass. Browser-preview verification skipped — the flow needs the Tauri backend (unlock vault, load story, Gemini call) which the vite preview cannot exercise.
+- **Status:** 8B code complete. Testable Checkpoints not yet ticked — they need manual verification in the running Tauri app (run `/phase-verify`).
 
 ---
 

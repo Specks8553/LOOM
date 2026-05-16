@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { diffWords } from '@/lib/diff';
 import {
   clearSegmentSummary as ipcClearSegmentSummary,
   createCheckpoint as ipcCreateCheckpoint,
@@ -26,6 +27,12 @@ import {
   updateMessageContent as ipcUpdateMessageContent,
 } from '@/lib/tauriApi/conversation';
 import {
+  cancelGhostwriterGeneration as ipcCancelGhostwriter,
+  revertGhostwriterEdit as ipcRevertGhostwriter,
+  saveGhostwriterEdit as ipcSaveGhostwriter,
+  sendGhostwriterRequest as ipcSendGhostwriter,
+} from '@/lib/tauriApi/ghostwriter';
+import {
   cancelSessionGeneration as ipcCancelSessionGeneration,
   sendSessionMessage as ipcSendSessionMessage,
 } from '@/lib/tauriApi/modes';
@@ -40,11 +47,34 @@ import type {
   AccordionSegment,
   ChatMessage,
   Checkpoint,
+  DiffSpan,
+  GhostwriterEdit,
+  GhostwriterSelection,
   InputDraft,
   TokenEstimate,
   UserContent,
   VaultItemMeta,
 } from '@/lib/types';
+
+/** Doc 17 §Frontend State. Ghostwriter mode is workspace-scoped, one bubble
+ *  at a time. The whole object is `null` when no bubble is in mode. */
+export interface GhostwriterMode {
+  /** The model bubble currently in Ghostwriter mode. */
+  activeMessageId: string;
+  phase: 'selecting' | 'composing' | 'generating' | 'reviewing';
+  selection: GhostwriterSelection | null;
+  instruction: string;
+  /** Populated in `reviewing` — word-level diff of original vs revision. */
+  diff: DiffSpan[] | null;
+  /** The stitched result awaiting accept / reject. */
+  pendingNewContent: string | null;
+}
+
+/** A selection is valid (≥ 1 word, Doc 17 §Selection constraints) iff it has
+ *  at least one non-whitespace character. */
+function isValidSelection(sel: GhostwriterSelection | null): boolean {
+  return sel !== null && /\S/u.test(sel.selectedText);
+}
 
 /** Doc 15 §Status View. The Theater Status section maps these to glyph + copy. */
 export type GenerationStatus =
@@ -113,6 +143,10 @@ interface WorkspaceState {
    *  show a per-segment spinner. */
   summarisingSegmentIds: Set<string>;
 
+  // --- Phase 8: Ghostwriter (Doc 17) ---
+  /** Non-null when a model bubble is in Ghostwriter mode. */
+  ghostwriter: GhostwriterMode | null;
+
   // --- Actions ---
   setIsGenerating(val: boolean): void; // legacy seam — Phase 3 keeps it for any non-IPC callers
   setActiveStory(storyId: string | null): Promise<void>;
@@ -160,6 +194,29 @@ interface WorkspaceState {
    *  the frontend (the backend gates this via the cancellation token install).
    *  Resolves to the new summary, or `null` on cancellation. */
   summariseSegment(segmentId: string): Promise<string | null>;
+
+  // --- Phase 8: Ghostwriter (Doc 17) ---
+  /** Enter Ghostwriter mode on a model bubble. Callers must resolve the
+   *  one-bubble-at-a-time discard confirmation (Doc 17) before calling. */
+  enterGhostwriter(messageId: string): void;
+  /** Exit mode — drops the pulse frame, panel, and plain-text rendering. */
+  exitGhostwriter(): void;
+  /** Record the current in-bubble selection; transitions selecting<->composing. */
+  setGhostwriterSelection(sel: GhostwriterSelection | null): void;
+  setGhostwriterInstruction(text: string): void;
+  /** Run `send_ghostwriter_request`; on success computes the diff and moves to
+   *  `reviewing`. On cancel returns to `selecting`; on error to `composing`. */
+  generateGhostwriter(): Promise<void>;
+  /** Signal the in-flight Ghostwriter generation to cancel. */
+  cancelGhostwriterGeneration(): Promise<void>;
+  /** Persist the pending revision via `save_ghostwriter_edit`, then exit mode.
+   *  Callers must resolve the cached-message guard (Doc 22) beforehand. */
+  acceptGhostwriter(): Promise<void>;
+  /** Discard the pending diff; return to `composing` with instruction kept. */
+  rejectGhostwriter(): void;
+  /** Pop the most-recent accepted edit for a message via
+   *  `revert_ghostwriter_edit`. Works whether or not the bubble is in mode. */
+  revertGhostwriter(messageId: string): Promise<void>;
 
   // --- Event handlers (called by useWorkspaceEvents) ---
   onMessageChunk(storyId: string, chunk: string): void;
@@ -285,6 +342,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   segments: [],
   summarisingSegmentIds: new Set<string>(),
 
+  ghostwriter: null,
+
   setIsGenerating(val) {
     set({ isGenerating: val });
   },
@@ -311,6 +370,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         checkpoints: [],
         segments: [],
         summarisingSegmentIds: new Set<string>(),
+        ghostwriter: null,
       });
       return;
     }
@@ -326,6 +386,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       checkpoints: [],
       segments: [],
       summarisingSegmentIds: new Set<string>(),
+      ghostwriter: null,
     });
 
     const [messages, draft, attached, accordion] = await Promise.all([
@@ -734,6 +795,167 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
+  // --- Phase 8: Ghostwriter (Doc 17) ---
+
+  enterGhostwriter(messageId) {
+    set({
+      ghostwriter: {
+        activeMessageId: messageId,
+        phase: 'selecting',
+        selection: null,
+        instruction: '',
+        diff: null,
+        pendingNewContent: null,
+      },
+    });
+  },
+
+  exitGhostwriter() {
+    set({ ghostwriter: null });
+  },
+
+  setGhostwriterSelection(sel) {
+    const gw = get().ghostwriter;
+    if (gw === null) return;
+    // Once a request is in flight or under review the selection is frozen.
+    if (gw.phase === 'generating' || gw.phase === 'reviewing') return;
+    const valid = isValidSelection(sel);
+    set({ ghostwriter: { ...gw, selection: sel, phase: valid ? 'composing' : 'selecting' } });
+  },
+
+  setGhostwriterInstruction(text) {
+    const gw = get().ghostwriter;
+    if (gw === null) return;
+    set({ ghostwriter: { ...gw, instruction: text } });
+  },
+
+  async generateGhostwriter() {
+    const gw = get().ghostwriter;
+    if (gw === null || gw.phase !== 'composing') return;
+    const sel = gw.selection;
+    if (!isValidSelection(sel) || sel === null) return;
+    if (gw.instruction.trim().length === 0) return;
+    if (get().isGenerating) return;
+    const message = get().messages.find((m) => m.id === gw.activeMessageId);
+    if (message === undefined) return;
+    const original = message.content;
+
+    set({ isGenerating: true, ghostwriter: { ...gw, phase: 'generating' } });
+
+    let result;
+    try {
+      result = await ipcSendGhostwriter(
+        gw.activeMessageId,
+        sel.startOffset,
+        sel.endOffset,
+        gw.instruction,
+      );
+    } catch (e) {
+      set({ isGenerating: false });
+      const cur = get().ghostwriter;
+      if (cur !== null && cur.activeMessageId === gw.activeMessageId) {
+        set({ ghostwriter: { ...cur, phase: 'composing' } });
+      }
+      void import('sonner').then(({ toast }) => {
+        toast.error("Couldn't generate revision", {
+          description: e instanceof Error ? e.message : String(e),
+        });
+      });
+      return;
+    }
+
+    set({ isGenerating: false });
+    const cur = get().ghostwriter;
+    // Mode may have been exited or moved to another bubble while awaiting.
+    if (cur === null || cur.activeMessageId !== gw.activeMessageId) return;
+
+    if (result.cancelled) {
+      set({ ghostwriter: { ...cur, phase: 'selecting' } });
+      return;
+    }
+
+    const revised = result.revised_passage.trim();
+    const newContent = original.slice(0, sel.startOffset) + revised + original.slice(sel.endOffset);
+    const diff = diffWords(original, newContent);
+    set({ ghostwriter: { ...cur, phase: 'reviewing', diff, pendingNewContent: newContent } });
+  },
+
+  async cancelGhostwriterGeneration() {
+    try {
+      await ipcCancelGhostwriter();
+    } catch (e) {
+      console.error('cancel_ghostwriter_generation failed', e);
+    }
+  },
+
+  async acceptGhostwriter() {
+    const gw = get().ghostwriter;
+    if (gw === null || gw.phase !== 'reviewing') return;
+    if (gw.pendingNewContent === null || gw.selection === null) return;
+    const message = get().messages.find((m) => m.id === gw.activeMessageId);
+    if (message === undefined) return;
+
+    const record: GhostwriterEdit = {
+      edited_at: new Date().toISOString(),
+      original_content: message.content,
+      new_content: gw.pendingNewContent,
+      instruction: gw.instruction,
+      selected_text: gw.selection.selectedText,
+    };
+
+    try {
+      await ipcSaveGhostwriter(gw.activeMessageId, gw.pendingNewContent, record);
+    } catch (e) {
+      console.error('save_ghostwriter_edit failed', e);
+      void import('sonner').then(({ toast }) => {
+        toast.error("Couldn't save revision", {
+          description: e instanceof Error ? e.message : String(e),
+        });
+      });
+      return;
+    }
+
+    const storyId = get().activeStoryId;
+    if (storyId !== null) {
+      try {
+        const messages = await ipcLoadMessages(storyId);
+        if (get().activeStoryId === storyId) set({ messages });
+      } catch (e) {
+        console.error('load_messages after ghostwriter accept failed', e);
+      }
+    }
+    set({ ghostwriter: null });
+  },
+
+  rejectGhostwriter() {
+    const gw = get().ghostwriter;
+    if (gw === null) return;
+    set({ ghostwriter: { ...gw, phase: 'composing', diff: null, pendingNewContent: null } });
+  },
+
+  async revertGhostwriter(messageId) {
+    try {
+      await ipcRevertGhostwriter(messageId);
+    } catch (e) {
+      console.error('revert_ghostwriter_edit failed', e);
+      void import('sonner').then(({ toast }) => {
+        toast.error("Couldn't revert revision", {
+          description: e instanceof Error ? e.message : String(e),
+        });
+      });
+      return;
+    }
+    const storyId = get().activeStoryId;
+    if (storyId !== null) {
+      try {
+        const messages = await ipcLoadMessages(storyId);
+        if (get().activeStoryId === storyId) set({ messages });
+      } catch (e) {
+        console.error('load_messages after ghostwriter revert failed', e);
+      }
+    }
+  },
+
   onMessageChunk(storyId, chunk) {
     if (get().activeStoryId !== storyId) return;
     const modelId = get().currentModelMessageId;
@@ -903,6 +1125,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       checkpoints: [],
       segments: [],
       summarisingSegmentIds: new Set<string>(),
+      ghostwriter: null,
     });
   },
 

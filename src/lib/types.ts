@@ -343,3 +343,44 @@ export type AccordionStateChangedPayload = {
   segment_id: string | null;
   checkpoint_id: string | null;
 };
+
+// --- Phase 8 — Ghostwriter (Doc 17) ---
+
+/** Canonical Ghostwriter edit record per Doc 03 §`GhostwriterEdit` (HB-1).
+ *  Stored as one element in the `messages.ghostwriter_history` JSON array. */
+export type GhostwriterEdit = {
+  edited_at: string;
+  original_content: string;
+  new_content: string;
+  instruction: string;
+  selected_text: string;
+};
+
+/** Returned by `send_ghostwriter_request`. The frontend stitches per Doc 17
+ *  §Response: `new = before + revised_passage.trim() + after`. `cancelled`
+ *  is `true` iff the user cancelled mid-flight (then `revised_passage` is
+ *  empty and the panel returns to `selecting`). */
+export type GhostwriterResponse = {
+  revised_passage: string;
+  token_count: bigint | null;
+  cancelled: boolean;
+};
+
+/** Returned by `revert_ghostwriter_edit`. Lets the frontend re-render the
+ *  bubble and decide whether to keep the `[Revert]` action visible. */
+export type RevertResult = {
+  restored_content: string;
+  remaining_history_len: number;
+};
+
+/** Doc 17 §Selection. Character offsets into `messages.content` (UTF-16 code
+ *  units, matching the JS `Selection` API). */
+export type GhostwriterSelection = {
+  startOffset: number;
+  endOffset: number;
+  selectedText: string;
+};
+
+/** Doc 17 §Diff Display. One span of the word-level LCS diff between the
+ *  original message content and the stitched revision. */
+export type DiffSpan = { kind: 'unchanged'; text: string } | { kind: 'changed'; text: string };

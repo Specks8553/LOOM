@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { GhostwriterBubble } from '@/components/theater/GhostwriterBubble';
+import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 import type { ChatMessage } from '@/lib/types';
+
+/** Doc 17 §Revert — count accepted edits stored in `ghostwriter_history`. */
+function ghostwriterHistoryLength(historyJson: string): number {
+  try {
+    const parsed: unknown = JSON.parse(historyJson);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
 
 interface StoryAIBubbleProps {
   message: ChatMessage;
@@ -30,6 +42,15 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   const deleteExchange = useWorkspaceStore((s) => s.deleteExchange);
   const createCheckpoint = useWorkspaceStore((s) => s.createCheckpoint);
   const checkpoints = useWorkspaceStore((s) => s.checkpoints);
+  const ghostwriterActiveId = useWorkspaceStore((s) => s.ghostwriter?.activeMessageId ?? null);
+  const enterGhostwriter = useWorkspaceStore((s) => s.enterGhostwriter);
+  const revertGhostwriter = useWorkspaceStore((s) => s.revertGhostwriter);
+
+  const { modal: revertGuardModal, guard: revertGuard } = useCachedMessageGuard();
+
+  const isGhostwriterActive = ghostwriterActiveId === message.id;
+  const isBlocks = message.content_type === 'blocks';
+  const historyLen = ghostwriterHistoryLength(message.ghostwriter_history);
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -79,6 +100,23 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
     await deleteExchange(message.id);
   }
 
+  function handleGhostwriter() {
+    setMenuPos(null);
+    // Doc 17 §One-bubble-at-a-time — switching off a bubble with a pending
+    // diff under review needs an explicit discard confirmation.
+    const cur = useWorkspaceStore.getState().ghostwriter;
+    if (cur !== null && cur.activeMessageId !== message.id && cur.phase === 'reviewing') {
+      if (!window.confirm('Discard pending Ghostwriter changes?')) return;
+    }
+    enterGhostwriter(message.id);
+  }
+
+  async function handleRevert() {
+    const ok = await revertGuard(message, 'edit');
+    if (!ok) return;
+    await revertGhostwriter(message.id);
+  }
+
   // Streaming placeholder with empty content yet — show a subtle "thinking" hint.
   const showThinkingHint = streaming && message.content.length === 0;
   const showStoppedBadge =
@@ -91,6 +129,10 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
     if (streaming || editing) return;
     e.preventDefault();
     setMenuPos({ x: e.clientX, y: e.clientY });
+  }
+
+  if (isGhostwriterActive) {
+    return <GhostwriterBubble message={message} />;
   }
 
   return (
@@ -151,6 +193,16 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
           className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
         >
+          {!isBlocks && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleGhostwriter}
+              className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-soft]"
+            >
+              ✦ Ghostwriter…
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -164,6 +216,16 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
       )}
       {!editing && !streaming && (
         <div className="pointer-events-none absolute -top-1 right-0 flex gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+          {!isBlocks && (
+            <ActionButton disabled={false} onClick={handleGhostwriter}>
+              ✦ Ghostwriter
+            </ActionButton>
+          )}
+          {historyLen > 0 && (
+            <ActionButton disabled={isGenerating} onClick={() => void handleRevert()}>
+              Revert
+            </ActionButton>
+          )}
           <ActionButton
             disabled={isGenerating}
             onClick={() => {
@@ -183,6 +245,7 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </ActionButton>
         </div>
       )}
+      {revertGuardModal}
     </div>
   );
 }

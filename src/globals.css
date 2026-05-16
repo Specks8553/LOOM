@@ -10,6 +10,13 @@
   --color-text-muted: #888888;
   --color-border: #262626;
   --color-accent: #7c3aed;
+
+  /* Ghostwriter feature triad (Doc 17 / CD-2). ⚠️ Provisional values —
+   * NB-1 marks these for tuning in the visual-polish phase. */
+  --color-ghostwriter: #2dd4bf;
+  --color-ghostwriter-hover: #14b8a6;
+  --color-ghostwriter-subtle: #134e4a;
+  --color-ghostwriter-diff: #2dd4bf;
 }
 
 :root {
@@ -28,4 +35,37 @@ body {
   color: var(--color-text-primary);
   font-family: ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* --- Ghostwriter (Doc 17) --- */
+
+/* Selection inside a bubble in Ghostwriter mode reads as the feature colour
+ * rather than the OS selection-blue (Doc 17 §Selection). */
+.gw-selectable::selection {
+  background: var(--color-ghostwriter-subtle);
+}
+
+/* Word-level diff: a changed span in the `reviewing` phase. */
+.gw-diff-changed {
+  background: color-mix(in srgb, var(--color-ghostwriter-diff) 30%, transparent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ghostwriter-diff);
+}
+
+/* Pulsing accent frame on the bubble in Ghostwriter mode (Doc 17 §What enter
+ * does — opacity-only pulse, 1500 ms). */
+@keyframes gw-frame-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.gw-active-frame {
+  outline: 2px solid var(--color-ghostwriter);
+  outline-offset: 3px;
+  animation: gw-frame-pulse 1500ms ease-in-out infinite;
 }
