@@ -687,7 +687,7 @@
 
 ## Phase 10 — Source-document delivery & cache safety
 
-**Status:** In progress (last touched 2026-05-16)
+**Status:** Complete (2026-05-16)
 
 > **Re-scoped 2026-05-16 (D-20 / D-21).** Originally "Media (slim)". Phase 10 implementation surfaced two gaps: (a) source documents only ever reached the model via the cache prefix — a story below `cache_min_tokens` silently dropped *all* attached docs; (b) image delivery was entangled with the unresolved cache-vs-inline question. Decision: defer all media to v2.1 (D-20) and make this phase close the source-document *delivery* gap (D-21).
 
@@ -706,11 +706,11 @@
 4. Media (image upload, File API integration, DocEditor lightbox, thumbnails) deferred to v2.1 (D-20); Doc 19 status flipped; dormant `services/file_api.rs` retained.
 
 **Testable Checkpoints:**
-- [ ] Story below `cache_min_tokens` with an attached text doc → send → the request carries the doc inline (no docs silently dropped).
-- [ ] Story above threshold → cache created → doc in the cache prefix.
-- [ ] Cache-create failure with `inline_context_fallback = false` → send aborts, user warned, no orphan user/model rows.
-- [ ] Cache-create failure with `inline_context_fallback = true` → send proceeds via the inline fake cache, doc included.
-- [ ] Handover and consulting sends include attached source documents.
+- [x] Story below `cache_min_tokens` with an attached text doc → send → the request carries the doc inline (no docs silently dropped).
+- [x] Story above threshold → cache created → doc in the cache prefix.
+- [x] Cache-create failure with `inline_context_fallback = false` → send aborts, user warned, no orphan user/model rows.
+- [x] Cache-create failure with `inline_context_fallback = true` → send proceeds via the inline fake cache, doc included.
+- [x] Handover and consulting sends include attached source documents.
 
 **Out of scope:** All media — image upload, File API request integration, DocEditor lightbox, Navigator thumbnails, `content_type='blocks'`, image generation, TTS — deferred to v2.1 (D-20).
 
@@ -721,6 +721,7 @@
   - `commands/conversation.rs`: `build_fakecache_request` helper (prefix contents + new turn, no `cachedContent`); `decide_cache_path` sub-threshold path now uses the fake cache (was bare doc-less inline); cache-create failure → fake cache iff `inline_context_fallback`, else `Err(LoomError::CacheCreate)`; `send_message` deletes the optimistic exchange and returns the error on abort.
   - `services/cache.rs`: `build_doc_pairs` — standalone leading source-doc `user`/`model` pairs, for session inline reuse.
   - `commands/modes.rs`: `send_session_message` prepends `build_doc_pairs` to the request when the turn won't ride a cache (handover always; consulting without a live cache).
+- **Status:** Phase 10 complete — all five Testable Checkpoints verified in the running Tauri app (2026-05-16).
 
 ---
 
