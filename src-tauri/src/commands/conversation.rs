@@ -222,15 +222,21 @@ pub fn load_story_messages(
 /// needs but no Gemini-side state yet.
 struct SendPrepRaw {
     model_name: String,
-    /// Inline (no-cache) request: SI + docs + history + new turn.
+    /// Bare request: SI + history + new turn, no source documents. Used only
+    /// as the carrier of the freshly-rendered new turn — the doc-bearing
+    /// prefix is `would_be_prefix` (D-21).
     inline_request: AssembledRequest,
     params: GenerationParams,
     cache_state: CacheStatus,
-    /// Cache prefix that excludes the new user turn — used both for the
-    /// threshold gate and as the body of a cache-create POST.
+    /// Cache prefix that excludes the new user turn — used for the threshold
+    /// gate, as the body of a cache-create POST, and as the inline "fake
+    /// cache" body (D-21).
     would_be_prefix: cache_service::CachePrefix,
     cache_min_tokens: i64,
     cache_ttl_secs: u64,
+    /// `inline_context_fallback` setting — when a cache-create fails, fall
+    /// back to the inline fake cache instead of aborting (D-21).
+    inline_context_fallback: bool,
 }
 
 /// Bundle returned by the synchronous prep block of `send_message`. The
@@ -270,6 +276,7 @@ async fn decide_cache_path(
         would_be_prefix,
         cache_min_tokens,
         cache_ttl_secs,
+        inline_context_fallback,
     } = raw;
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -303,8 +310,8 @@ async fn decide_cache_path(
                 .unwrap_or(true));
 
     if estimated < cache_min_tokens {
-        // Sub-threshold → inline. Best-effort delete any stale/expired cache
-        // so the row matches reality.
+        // Sub-threshold → inline "fake cache" (D-21: docs are still included).
+        // Best-effort delete any stale/expired cache so the row matches reality.
         if needs_rebuild {
             if let Some(stale) = cache_state.cache_name.as_deref() {
                 if let Err(e) = cache_service::delete_cache(GEMINI_BASE_URL, api_key, stale).await {
@@ -326,7 +333,7 @@ async fn decide_cache_path(
         }
         return Ok(SendPrep {
             model_name,
-            request: inline_request,
+            request: build_fakecache_request(&inline_request, &would_be_prefix),
             params,
             refresh_cache_name: None,
             cache_ttl_secs,
@@ -384,22 +391,52 @@ async fn decide_cache_path(
             })
         }
         Err(e) => {
-            warn!("cache create failed; sending inline: {e}");
-            let _ = app.emit(
-                "cache_unavailable",
-                CacheUnavailablePayload {
-                    story_id,
-                    reason: "create_failed",
-                },
-            );
-            Ok(SendPrep {
-                model_name,
-                request: inline_request,
-                params,
-                refresh_cache_name: None,
-                cache_ttl_secs,
-            })
+            warn!("cache create failed: {e}");
+            if inline_context_fallback {
+                // D-21: writer opted into inline fallback — proceed via the
+                // fake cache (docs included), informational toast only.
+                let _ = app.emit(
+                    "cache_unavailable",
+                    CacheUnavailablePayload {
+                        story_id,
+                        reason: "create_failed",
+                    },
+                );
+                Ok(SendPrep {
+                    model_name,
+                    request: build_fakecache_request(&inline_request, &would_be_prefix),
+                    params,
+                    refresh_cache_name: None,
+                    cache_ttl_secs,
+                })
+            } else {
+                // D-21: default — abort the send rather than silently answer
+                // without the writer's source documents. `send_message`
+                // cleans up the optimistic rows on this error.
+                Err(LoomError::CacheCreate(format!(
+                    "Couldn't create the context cache — send aborted. Enable \
+                     inline context fallback in Settings to send anyway. ({e})"
+                )))
+            }
         }
+    }
+}
+
+/// Build an inline "fake cache" request (D-21): the cache prefix prepended
+/// verbatim, with the freshly-rendered new user turn appended. No
+/// `cachedContent` — the same bytes a real cache would hold, sent inline.
+fn build_fakecache_request(
+    inline: &AssembledRequest,
+    prefix: &cache_service::CachePrefix,
+) -> AssembledRequest {
+    let mut contents = prefix.contents.clone();
+    if let Some(turn) = inline.contents.last() {
+        contents.push(turn.clone());
+    }
+    AssembledRequest {
+        system_instruction: prefix.system_instruction.clone(),
+        contents,
+        cached_content_name: None,
     }
 }
 
@@ -485,6 +522,8 @@ pub async fn send_message(
         let cache_min_tokens: i64 =
             resolve::<u32>(world_db, app_db, AppSettingKey::CacheMinTokens)? as i64;
         let cache_ttl_secs: u32 = resolve(world_db, app_db, AppSettingKey::CacheTtlSecs)?;
+        let inline_context_fallback: bool =
+            resolve(world_db, app_db, AppSettingKey::InlineContextFallback)?;
 
         // Build the would-be cache prefix only when needed (no active fresh
         // cache or a fresh cache exists but we still want the prefix-hash for
@@ -522,6 +561,7 @@ pub async fn send_message(
             would_be_prefix,
             cache_min_tokens,
             cache_ttl_secs: cache_ttl_secs as u64,
+            inline_context_fallback,
         })
     })?;
 
@@ -532,7 +572,18 @@ pub async fn send_message(
         params,
         refresh_cache_name,
         cache_ttl_secs,
-    } = decide_cache_path(&app, &state, &api_key, &story_id, prep_in).await?;
+    } = match decide_cache_path(&app, &state, &api_key, &story_id, prep_in).await {
+        Ok(prep) => prep,
+        Err(e) => {
+            // D-21: cache-create failed and inline fallback is off. Abort the
+            // send cleanly — hard-delete the optimistic user/model rows so no
+            // orphan exchange survives.
+            let uid = user_id.clone();
+            let _ = access::with_active_conn_mut(&state, |conn| db_delete_exchange(conn, &uid));
+            warn!(story_id = %story_id, "send_message aborted: {e}");
+            return Err(e);
+        }
+    };
 
     let cancel_token = access::install_cancel_token(&state)?;
     let user_message_id = user_id;

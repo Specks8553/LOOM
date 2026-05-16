@@ -1,7 +1,8 @@
 # LOOM 2.0 — Documentation Index
 
 > **Status:** In progress — implementation phase open; Phase 0 and Phase 0.5 complete
-> **Last updated:** 2026-05-07 — Doc 25 (Testing Strategy) complete; D-19 (Testing Strategy umbrella) added; ST-3 ticked. Vitest + wiremock + happy-dom tooling landed; all recipes demonstrated by passing canary tests; Playwright E2E deferred to v2.0.x. Phase 0 complete (2026-05-07): all 9 checkpoints ticked, SB-1..SB-6 closed.
+> **Last updated:** 2026-05-16 — Phase 10 re-scoped. D-20: the media surface (image source documents included) is deferred wholesale to v2.1 — Doc 19 status flipped to Deferred. D-21: source-document request delivery model locked — a single prefix builder feeds either a real Gemini cache or an inline "fake cache" (prepended verbatim); a failed cache-create aborts the send with a warning unless the new `inline_context_fallback` setting is on. Doc 03 (`inline_context_fallback` app-settings key), Doc 19 (status), Doc 22 (delivery model section) amended.
+> **Earlier:** 2026-05-07 — Doc 25 (Testing Strategy) complete; D-19 (Testing Strategy umbrella) added; ST-3 ticked. Vitest + wiremock + happy-dom tooling landed; all recipes demonstrated by passing canary tests; Playwright E2E deferred to v2.0.x. Phase 0 complete (2026-05-07): all 9 checkpoints ticked, SB-1..SB-6 closed.
 > **Earlier:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted: 14 phases (0 Substrate → 0.5 Doc 25 Testing → 1 Auth → 2 Vault/Worlds → 3 Conversation Engine story-mode → 4 Modes → 5 Source Documents → 6 Caching → 7 Accordion → 8 Ghostwriter → 9 Feedback → 10 Media slim → 11 Settings/Themes → 12 Visual polish → 13 Build/Release/Doc 26). Each phase has Status / Goal / Inputs / Scope / Testable Checkpoints / Out of Scope / Resumption notes. `_new_claude.md` §The phase model amended: `Resumption notes:` must be updated **live, not at session end** — sessions end abruptly. Document Map below adds `IMPLEMENTATION-PLAN.md` as the canonical phase ledger.
 > **Earlier:** 2026-05-04 — Doc 24 (Coding Standards) complete; D-18 (Coding Standards umbrella) added; ST-2 closed. Three enforcement tiers (🔴 Linted / 🟡 Reviewed / ⚪ Convention); `tracing` over `log`; `safecommand!` macro dropped; Conventional Commits; `ts-rs` generated `types.ts` committed with CI drift-check; husky + lint-staged pre-commit; SB-1..SB-3, SB-5, SB-6 substrate items have rule home + `<!-- SB-N -->` anchors here (code lands in Phase 0); SB-4 (cancellation lifecycle) deferred to a dedicated Doc 05 amendment pass; v1.0 anti-pattern appendix (13 items) with Forbidden / Preferred snippet pairs. Doc 05 (lock-helper rule cross-ref, `tracing` note, cancellation cross-ref), Doc 06 (`types.ts` SoT line, ESLint enforcement note on §Store Rules) amended; PRE-IMPLEMENTATION-AUDIT ST-2 ticked; IMPROVEMENT-BACKLOG R3 / R5 / R13 / R19 closed, R2 / R4 / R17 / R18 marked "spec'd in Doc 24 — code pending Phase 0"; v1 rule files in `.claude/rules/` annotated with v2.0 banners.
 > **Earlier:** 2026-05-04 — Doc 28 (Feedback) complete; D-17 (Feedback umbrella) added; per-bubble inline strip is the sole affordance, v1's right-pane Feedback Overlay dropped; explicit Apply / Cancel (no auto-save on blur); `--color-feedback` triad (default `#f59e0b`, world-overridable, does not track accent); Doc 11 §Escape Chain fully rewritten (CD-6 closed) — priority 5 = Feedback edit; Doc 03 (`feedback_color` key, `ResolvedSettings`), Doc 06 (`workspaceStore.feedbackEditingMessageId` + 3 actions), Doc 07 (`update_feedback` notes), Doc 08 (token triad), Doc 11 (escape chain), Doc 15 (cross-ref Doc 28), Doc 20 (Features tab row, ThemeSnapshot, applyTheme writes), Doc 27 (bubble-strip placement) amended; PRE-IMPLEMENTATION-AUDIT CD-13 added + ticked, CD-6 ticked.
@@ -59,7 +60,7 @@ Navigation hub and decision log for LOOM 2.0. All architectural decisions are re
 | [16](features/16-context-compression.md) | Context Compression (Accordion) | Complete |
 | [17](features/17-ghostwriter.md) | Ghostwriter | Complete |
 | [18](features/18-source-documents.md) | Source Documents | Complete |
-| [19](features/19-media.md) | Media System | Complete (slim — v2.0 scope) |
+| [19](features/19-media.md) | Media System | Deferred to v2.1 (D-20) |
 | [20](features/20-settings-and-themes.md) | Settings and Themes | Complete — visual values provisional |
 | [21](features/21-export-and-reader.md) | Export and Reader View | Deferred to v2.0.x |
 | [22](features/22-context-caching.md) | Context Caching | Complete |
@@ -535,6 +536,44 @@ src-tauri/src/
 **Rationale:** Vitest over Jest because it is Vite-native (zero extra config for the ESM + `@` alias setup already present) and faster in watch mode. `happy-dom` over `jsdom` because LOOM's component tests mock the IPC layer and don't rely on real browser APIs — `happy-dom` is faster with no native deps. `globals: false` matches the broader project convention of explicit imports. `wiremock` was chosen (over `httpmock`, `mockito`) because Doc 24 already names it, it handles async SSE-style chunked responses cleanly, and its `MockServer` lifecycle matches `tokio::test` naturally. The "mock at the IPC wrapper boundary, not the typed-wrapper boundary" rule is the critical one: it means the wrapper function is real code under test, which catches import drift, type errors, and wrong command names — the failure modes that matter.
 
 **Affects:** Doc 25 (full spec); PRE-IMPLEMENTATION-AUDIT.md (ST-3 ticked); `vite.config.ts` (test block added); `package.json` (`pnpm test` + `pnpm test:ui` scripts; vitest + @testing-library/react + happy-dom devDeps); `src-tauri/Cargo.toml` (wiremock + reqwest devDeps); `src-tauri/tests/canary.rs` + `tests/gemini_sse_mock.rs` (canary + SSE recipe tests); `src/__tests__/setup.ts` + `appStore.test.ts` + `ipc_mock.test.tsx` (canary + IPC recipe tests).
+
+---
+
+### D-20 — Media Deferred to v2.1 (2026-05-16)
+
+**Decision:** The entire media surface — **including image source documents** — is deferred to v2.1. This supersedes D-15's "slim v2.0 scope" (image-as-source-doc was the one media feature D-15 kept for v2.0). v2.0 source documents are **text only**.
+
+| Sub-decision | Locked value |
+|---|---|
+| What's deferred | Image upload (`upload_image`), the File API URI cache integration, the DocEditor lightbox, Navigator hover thumbnails, `content_type = 'blocks'`, image generation, TTS — the whole of Doc 19 |
+| Why now (not at D-15) | Phase 10 implementation surfaced that image delivery is entangled with the unresolved source-doc request-delivery question (D-21). Shipping image-as-source-doc would have meant resolving the File API integration *and* the cache-vs-inline delivery model in one phase. Text source documents alone deliver the v2.0 writer value (a reference library the model sees); images are the smaller, riskier half |
+| Dormant code retained | `services/file_api.rs` (complete + wiremock-tested) and the `Image` branches in `services/cache.rs::build_*_prefix` stay in the tree, reserved for the v2.1 pickup. `services/vault.rs` continues to reject `Image` item creation (message updated to cite v2.1) |
+| Schema | `items.asset_path` / `asset_meta` / `file_api_uri` / `file_api_uploaded_at` columns remain (Doc 03) — harmless, reserved |
+| Doc 18 consequence | Image source documents (lightbox, image-as-context) are marked v2.1-deferred in Doc 18; the v2.0 surface there is text source documents |
+
+**Rationale:** D-15 already deferred image *generation* and TTS; the one media feature it kept was image-as-source-doc. Phase 10 found that feature can't ship coherently without also resolving how *any* source document reaches the model (D-21) and wiring an async File API upload into request assembly. That is two hard problems for a "slim" phase. Deferring images wholesale lets Phase 10 do one thing well — text source-document delivery — and lets v2.1 pick up media as a coherent unit with `file_api.rs` already built and tested.
+
+**Affects:** Doc 19 (status → Deferred to v2.1); Doc 18 (image-source-doc sections marked v2.1-deferred); `services/vault.rs` (Image-rejection message cites v2.1); `IMPLEMENTATION-PLAN.md` (Phase 10 re-scoped from "Media (slim)" to "Source-document delivery & cache safety").
+
+---
+
+### D-21 — Source-Document Request Delivery (2026-05-16)
+
+**Decision:** Source documents reach the model through a **single prefix builder** whose output is delivered either as a real Gemini cache or as an inline "fake cache" (the same content prepended verbatim where the cache would sit). A cache-create failure **aborts the send with a warning** rather than silently sending without context, unless the writer opts into inline fallback.
+
+| Sub-decision | Locked value |
+|---|---|
+| Single prefix builder | `services/cache.rs::build_*_prefix` is the one place SI + source docs + history are assembled. The inline path no longer has its own (doc-less) assembly — it reuses the prefix |
+| Two delivery routes | (a) **Real cache** — `create_cache` → Gemini `cachedContent`. (b) **Inline fake cache** — `prefix.contents` prepended directly into the request, no cache object |
+| Sub-threshold | When the prefix is below `cache_min_tokens`, the send uses the inline fake cache — docs are still included. (Previously: sub-threshold dropped all source docs — a silent-context-loss bug) |
+| Cache-create failure | Default: **abort the send**, hard-delete the optimistic user/model rows, surface `LoomError::CacheCreate`. The writer is told context could not be attached rather than getting a degraded answer |
+| `inline_context_fallback` | New `app_settings` boolean key, default `false`. When `true`, a failed cache-create falls back to the inline fake cache instead of aborting — the writer trades cache cost-savings for send reliability. Toggle UI lands in Settings (Phase 11); the key carries its default until then |
+| All three modes | Story (this model), handover (never caches → always inline fake cache, now with docs prepended), consulting (cache when active; inline fake cache on absence/failure) |
+| Supersedes | CD-12's loose "inline path triggers on real failure or below-threshold" — D-21 makes the inline path *include the docs* and makes failure a stop, not a silent degrade |
+
+**Rationale:** Phase 5 wired source-document storage and attach/detach but never wired docs into the Gemini request; Phase 6 added doc inclusion only inside the cache prefix. The result was a latent bug: a story below `cache_min_tokens` (default 4096) sent none of its attached documents, silently. The fix is to make the prefix builder the single source of doc-inclusion truth and let the *delivery* (cache object vs. inline prepend) be the only thing that varies. Aborting on cache-create failure — rather than the prior silent inline fallback — is the safety posture the writer needs: a missing context cache means the model would answer without the world bible / character sheets, and a degraded answer the writer can't distinguish from a good one is worse than an explicit stop. `inline_context_fallback` exists for the writer who would rather pay full token price than have a send fail.
+
+**Affects:** Doc 03 (`inline_context_fallback` app-settings key); Doc 22 (delivery-model section; CD-12 fallback semantics tightened); `services/settings_keys.rs` (`InlineContextFallback`); `commands/conversation.rs` + `commands/modes.rs` (delivery rework); `IMPLEMENTATION-PLAN.md` (Phase 10 scope + checkpoints).
 
 ---
 

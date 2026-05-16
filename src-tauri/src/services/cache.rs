@@ -333,6 +333,43 @@ pub fn build_story_prefix(inputs: StoryPrefixInputs<'_>) -> Result<CachePrefix, 
     })
 }
 
+/// Build the leading source-document `user`/`model` pairs for a story — the
+/// `=== SOURCE DOCUMENT ===` blocks a cache prefix opens with. Factored out so
+/// the session-mode inline "fake cache" (D-21) can prepend the same content
+/// without a full prefix build.
+///
+/// v2.0 source documents are text only (D-20 deferred images). An `Image`
+/// item — which cannot be created in v2.0 — degrades to a `[image: name]`
+/// placeholder rather than a `fileData` part.
+pub fn build_doc_pairs(
+    world: &Connection,
+    story_id: &str,
+) -> Result<Vec<GeminiContent>, LoomError> {
+    use crate::services::history::GeminiPart;
+    let metas = list_attached_docs(world, story_id)?;
+    let mut contents: Vec<GeminiContent> = Vec::with_capacity(metas.len() * 2);
+    for meta in &metas {
+        let header = doc_header(meta);
+        let body = if meta.item_type == "Image" {
+            format!("[image: {}]", meta.name)
+        } else {
+            crate::db::vault::get_item_content(world, &meta.id)?.unwrap_or_default()
+        };
+        contents.push(GeminiContent {
+            role: "user".into(),
+            parts: vec![
+                GeminiPart::text(format!("{header}\n")),
+                GeminiPart::text(body),
+            ],
+        });
+        contents.push(GeminiContent {
+            role: "model".into(),
+            parts: vec![GeminiPart::text("Acknowledged.")],
+        });
+    }
+    Ok(contents)
+}
+
 /// Resolve all ingredients and assemble the story prefix. `up_to_message_id`
 /// is the high-water mark — every story-kind message with `created_at <=` that
 /// message's `created_at` is included. `None` means "all story-kind messages".
@@ -910,6 +947,33 @@ mod tests {
             ghostwriter_history: "[]".into(),
             kind: "story".into(),
         }
+    }
+
+    #[test]
+    fn build_doc_pairs_emits_header_and_body_per_attached_doc() {
+        let c = fresh_world();
+        insert_doc(&c, "docA", "World", "Atlas", "Continent map.");
+        insert_doc(&c, "docB", "Character", "Mira", "Detective.");
+        crate::services::vault::attach_context_doc(&c, "story1", "docA").unwrap();
+        crate::services::vault::attach_context_doc(&c, "story1", "docB").unwrap();
+
+        let pairs = build_doc_pairs(&c, "story1").unwrap();
+        // One user/model pair per attached doc, in insertion order.
+        assert_eq!(pairs.len(), 4);
+        assert_eq!(pairs[0].role, "user");
+        assert_eq!(pairs[1].role, "model");
+        let first: String = pairs[0].parts.iter().map(|p| p.text.clone()).collect();
+        assert!(first.contains("Atlas"), "header carries the doc name");
+        assert!(first.contains("Continent map."), "body is included");
+        assert_eq!(pairs[1].parts[0].text, "Acknowledged.");
+        let third: String = pairs[2].parts.iter().map(|p| p.text.clone()).collect();
+        assert!(third.contains("Detective."));
+    }
+
+    #[test]
+    fn build_doc_pairs_empty_when_no_docs_attached() {
+        let c = fresh_world();
+        assert!(build_doc_pairs(&c, "story1").unwrap().is_empty());
     }
 
     #[test]

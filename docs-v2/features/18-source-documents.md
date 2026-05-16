@@ -1,7 +1,8 @@
 # 18 — Source Documents
 
-> **Status:** Complete
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: `attachment_history.event` (and new `reason` column) reconciled with Doc 03 (HB-2); `vault_updated` event payload documented as `{ world_id }` matching Doc 07 — frontend reloads via `list_items` (IP-8); `attach_context_doc` / `detach_context_doc` returning `Vec<String>` confirmed (CD-8).
+> **Status:** Complete (text source documents are v2.0; image source documents deferred to v2.1)
+> **Last updated:** 2026-05-16 — D-20: **image source documents are deferred to v2.1.** Every passage below describing an `Image` source document, the DocEditor lightbox, or image-as-context (notably the §Layout image rows, the §Request-Assembly `fileData` part, and §Cache Interaction image handling) is v2.1-deferred and **not v2.0 scope.** v2.0 ships text source documents only. D-21: source-document request-assembly inclusion is now delivered via the single prefix builder — see Doc 22 §Delivery Model.
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: `attachment_history.event` (and new `reason` column) reconciled with Doc 03 (HB-2); `vault_updated` event payload documented as `{ world_id }` matching Doc 07 — frontend reloads via `list_items` (IP-8); `attach_context_doc` / `detach_context_doc` returning `Vec<String>` confirmed (CD-8).
 > **Earlier:** 2026-04-29 — first full design pass; Source Document Creator deferred to v2.1 (see `docs-v2/future/source-document-creator.md`); editor model retains v1's textarea + Markdown preview toggle; save changes to debounced auto-save (~1 s); attach via vault paperclip / right-click only, detach via right pane only; soft-delete cascades to detach; image lightbox spec'd here, File API mechanics owned by Doc 19
 > **Scope:** Source Documents — text or image vault items that supply the model with reference material (world bible, character sheets, scene notes, lore images). The doc covers the editor (DocEditor), the attach / detach lifecycle, request-assembly inclusion rules across all three modes, and template management.
 

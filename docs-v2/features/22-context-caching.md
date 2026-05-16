@@ -231,17 +231,33 @@ The token meter (Doc 15 §Token Counting) compares the assembled request size ag
 
 ---
 
-## Fallback to Inline Path
+## Delivery Model — Real Cache vs. Inline Fake Cache
 
-When the cache cannot or should not be used:
+> **D-21 (2026-05-16).** The earlier "fallback to inline" wording (CD-12) is superseded by this section. The key change: the inline path now *carries the source documents* (it never did in the implemented Phase 5/6 code — a silent context-loss bug), and a cache-create failure is treated as a **stop**, not a silent degrade.
 
-- Cache below `cache_min_tokens` threshold → assemble inline. (Threshold tuning per TODO O16; default 4096 ⚠️ provisional.)
-- Cache create call failed (network, 4xx, 5xx) → toast a warning, assemble inline for this send, retry create on next send. Backend returns `LoomError::CacheCreate` (Doc 05) so the caller routes to the inline path without confusing the failure with a generation-class error.
-- Cache deleted by Gemini between refresh and send (race) → 404 on send; transparently rebuild + retry.
+There is exactly one **prefix builder** (`services/cache.rs::build_*_prefix`). It assembles `SI + source documents + story/session history` — the bytes that *would* be cached. That prefix reaches the model by one of two routes:
 
-Caching is always on — there is no per-world `cache_enabled` toggle in v2.0. The `cache_min_tokens` threshold is the cost-control knob; below it, inline assembly is automatic. Adding a binary disable would offer little over tuning the threshold to a very large value, and writers would have to learn one more setting to reason about.
+| Route | When | Mechanism |
+|---|---|---|
+| **Real cache** | Prefix ≥ `cache_min_tokens` and `create_cache` succeeds | Gemini `cachedContent` object; the request carries only the new turn |
+| **Inline fake cache** | Prefix < `cache_min_tokens`, OR cache-create failed and `inline_context_fallback` is on | `prefix.contents` are prepended verbatim into the request body where the cache would sit — no cache object. Same bytes, just not cached |
 
-Inline assembly arranges SI + docs as a leading user/model pair (v1.0 PRD §10.2) so that Gemini's implicit caching has the best chance of hitting on the stable prefix. Implicit caching is not actively managed — we only lay out the request to be friendly.
+The fake cache is "everything the cache would contain, prepended where the cache would normally sit." Sub-threshold sends always use it — so a small story still sends all of its attached documents. (Before D-21 the sub-threshold path dropped every source doc.)
+
+### Cache-create failure
+
+When the prefix is ≥ `cache_min_tokens` so a real cache *should* be created, and `create_cache` fails (network, 4xx, 5xx):
+
+- **`inline_context_fallback = false` (default)** → the send is **aborted**. The optimistic user/model rows are hard-deleted, and `LoomError::CacheCreate` surfaces to the writer: *"Couldn't create the context cache — send aborted. Enable inline context fallback in Settings to send anyway."* The writer is never given a degraded answer (one missing the world bible / character sheets) that they can't distinguish from a good one.
+- **`inline_context_fallback = true`** → the send proceeds via the inline fake cache. The writer trades the cache's token-cost savings for send reliability.
+
+`inline_context_fallback` is an `app_settings` boolean, default `false` (Doc 03). Its toggle lives in Settings → Features (Phase 11).
+
+Cache deleted by Gemini between refresh and send (race) → 404 on send; transparently rebuild + retry.
+
+Caching is still always on — there is no per-world `cache_enabled` toggle. `cache_min_tokens` is the cost-control knob; below it the fake cache is automatic.
+
+The fake cache arranges SI + docs as a leading user/model pair (v1.0 PRD §10.2) so Gemini's implicit caching has the best chance of hitting the stable prefix. Implicit caching is not actively managed — we only lay out the request to be friendly.
 
 ---
 

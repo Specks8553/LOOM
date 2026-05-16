@@ -34,7 +34,7 @@
 | 7 | Accordion (context compression) | Segments, summarisation, fake-pairs, banner |
 | 8 | Ghostwriter | Surgical-stitching protocol; in-place edits; all three modes |
 | 9 | Feedback | Per-bubble inline strip; Apply / Cancel; escape-chain slot 5 |
-| 10 | Media (slim) | Image-as-source-doc; File API URI cache; rendering primitives |
+| 10 | Source-document delivery & cache safety | Docs reach the model on every send; cache-fail aborts safely; media deferred to v2.1 |
 | 11 | Settings & Themes | Full-surface Settings; cascade UX; theme tokens; applyTheme |
 | 12 | Visual polish & copy pass | NB-1..NB-4 resolved or intentionally deferred |
 | 13 | Build, Release & Doc 26 | First signed build for all three platforms |
@@ -685,34 +685,42 @@
 
 ---
 
-## Phase 10 — Media (slim)
+## Phase 10 — Source-document delivery & cache safety
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-16)
 
-**Goal:** Image source documents upload, persist, render in DocEditor with a lightbox layout, and survive the File API URI cache lifecycle.
+> **Re-scoped 2026-05-16 (D-20 / D-21).** Originally "Media (slim)". Phase 10 implementation surfaced two gaps: (a) source documents only ever reached the model via the cache prefix — a story below `cache_min_tokens` silently dropped *all* attached docs; (b) image delivery was entangled with the unresolved cache-vs-inline question. Decision: defer all media to v2.1 (D-20) and make this phase close the source-document *delivery* gap (D-21).
+
+**Goal:** Source documents (text) reach the model on every send — story, handover, consulting — via a single prefix builder delivered either as a real Gemini cache or an inline "fake cache". A cache-create failure aborts the send with a warning unless `inline_context_fallback` is enabled.
 
 **Inputs:**
-- `features/19-media.md` (Complete, slim).
-- `foundation/03-data-model.md` §image fields on `vault_items`, §`file_api_uri`.
-- `architecture/05-backend-modules.md` §`services/file_api.rs`.
+- `features/22-context-caching.md` §Delivery Model (D-21).
+- `foundation/03-data-model.md` §`inline_context_fallback`.
+- `00-INDEX.md` D-20 (media deferral), D-21 (delivery model).
 
 **Scope / Deliverables:**
 
-1. Image upload command per Doc 19 (`upload_image`).
-2. File API URI cache with expiry handling (O6 closed in Doc 19).
-3. DocEditor lightbox layout for image source documents (CD-5).
-4. Image rendering primitives in story bubbles only when an image source doc is attached as context.
+1. `inline_context_fallback` app-settings key (default `false`).
+2. Story sends: sub-threshold and cache-fail-with-fallback deliver the inline fake cache (docs included — fixes the silent-drop bug); cache-fail without fallback aborts the send cleanly (optimistic rows deleted, `LoomError::CacheCreate` surfaced).
+3. Handover + consulting sends: source-doc pairs prepended inline when the turn does not ride a cache.
+4. Media (image upload, File API integration, DocEditor lightbox, thumbnails) deferred to v2.1 (D-20); Doc 19 status flipped; dormant `services/file_api.rs` retained.
 
 **Testable Checkpoints:**
-- [ ] Upload an image → vault row created → File API URI persisted.
-- [ ] Attach image to a story → next request includes the image part per Gemini API spec.
-- [ ] File API URI expiry triggers re-upload transparently.
-- [ ] All `features/19` Testable Checkpoints pass.
+- [ ] Story below `cache_min_tokens` with an attached text doc → send → the request carries the doc inline (no docs silently dropped).
+- [ ] Story above threshold → cache created → doc in the cache prefix.
+- [ ] Cache-create failure with `inline_context_fallback = false` → send aborts, user warned, no orphan user/model rows.
+- [ ] Cache-create failure with `inline_context_fallback = true` → send proceeds via the inline fake cache, doc included.
+- [ ] Handover and consulting sends include attached source documents.
 
-**Out of scope:** Image generation (v2.1); per-turn user-message images (v2.1); AI-generated `blocks` model messages (v2.1); TTS (v2.1).
+**Out of scope:** All media — image upload, File API request integration, DocEditor lightbox, Navigator thumbnails, `content_type='blocks'`, image generation, TTS — deferred to v2.1 (D-20).
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-16: Phase 10 re-scoped + implemented.** D-20 (media deferral) + D-21 (delivery model) added to 00-INDEX; Doc 19 → Deferred, Doc 18 image sections marked v2.1, Doc 22 §Delivery Model written, Doc 03 `inline_context_fallback` key added.
+  - `AppSettingKey::InlineContextFallback` (default `"false"`) in `settings_keys.rs`.
+  - `commands/conversation.rs`: `build_fakecache_request` helper (prefix contents + new turn, no `cachedContent`); `decide_cache_path` sub-threshold path now uses the fake cache (was bare doc-less inline); cache-create failure → fake cache iff `inline_context_fallback`, else `Err(LoomError::CacheCreate)`; `send_message` deletes the optimistic exchange and returns the error on abort.
+  - `services/cache.rs`: `build_doc_pairs` — standalone leading source-doc `user`/`model` pairs, for session inline reuse.
+  - `commands/modes.rs`: `send_session_message` prepends `build_doc_pairs` to the request when the turn won't ride a cache (handover always; consulting without a live cache).
 
 ---
 

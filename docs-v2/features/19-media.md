@@ -1,9 +1,9 @@
 # 19 — Media System
 
-> **Status:** Complete (slim — v2.0 scope)
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: dropped reference to nonexistent `vault_read_item` command — the existing vault `list_items` / `get_item` paths cover the debugging case (IP-2).
-> **Earlier:** 2026-04-29 — first full design pass; v2.0 scope cut to image-as-source-doc only; image generation, TTS, per-turn user-message images, and `content_type = 'blocks'` AI-generated-image messages all deferred to v2.1; design captured in `docs-v2/future/media-generation.md`; world backup (export/import as `.loom-backup` zip) lives in Doc 14 §World Backup
-> **Scope:** Image upload, asset storage, Gemini File API URI cache, and the rendering primitives shared between the Navigator and the DocEditor lightbox. v2.0 ships images strictly as **vault Image items that can be attached as Context Documents** — there are no per-turn image attachments, no AI-generated images, and no TTS/audio.
+> **Status:** Deferred to v2.1 (D-20, 2026-05-16)
+> **Last updated:** 2026-05-16 — D-20: the entire media surface — image source documents included — is deferred to v2.1. Phase 10's re-scope dropped image-as-source-doc from v2.0 (the File API integration and the inline-vs-cache delivery question were entangled; v2.0 ships text source documents only). The implemented-but-dormant `services/file_api.rs` and the `Image` branches in `services/cache.rs` are retained, reserved for the v2.1 pickup. The body below is the v2.1 design carry-forward — **none of it is v2.0 scope.**
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: dropped reference to nonexistent `vault_read_item` command (IP-2). 2026-04-29 — first full design pass; v2.0 scope cut to image-as-source-doc only; image generation, TTS, per-turn user-message images, and `content_type = 'blocks'` messages deferred to v2.1.
+> **Scope:** Image upload, asset storage, Gemini File API URI cache, and rendering primitives. **All deferred to v2.1 per D-20.** v2.0 source documents are text-only (Doc 18). World backup (`.loom-backup` zip) is unaffected — it lives in Doc 14 §World Backup and ships in v2.0.
 
 `Image` is one of four `items.item_type` values (alongside `Story`, `Folder`, `SourceDocument`). Per Doc 18, an Image item is a kind of source document — it has a caption (stored in `items.content`), it's attachable to stories via the same paperclip surface as text source documents, and it's sent to Gemini on every relevant request as a Context Document. Doc 19's job is the **byte-level layer**: how the bytes get onto disk, how the bytes get to Gemini, and how the bytes get back into the UI as pixels.
 

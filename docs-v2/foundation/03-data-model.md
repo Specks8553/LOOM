@@ -1,7 +1,8 @@
 # 03 — Data Model
 
 > **Status:** Complete
-> **Last updated:** 2026-05-04 — Feedback design pass (D-17): `feedback_color` added to world-overridable `settings` keys and to `ResolvedSettings`; default `#f59e0b`. Drives the `--color-feedback` triad per Doc 28.
+> **Last updated:** 2026-05-16 — D-21: `inline_context_fallback` app-settings key added (default `false`) — controls cache-create-failure behaviour (Doc 22 §Delivery Model).
+> **Earlier:** 2026-05-04 — Feedback design pass (D-17): `feedback_color` added to world-overridable `settings` keys and to `ResolvedSettings`; default `#f59e0b`. Drives the `--color-feedback` triad per Doc 28.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution batch: `attachment_history.action` renamed to `event` and `reason TEXT NULL` column added (HB-2); `prompt_handover_seed` and `prompt_consulting_seed` added to `app_settings` keys (HB-5); `ghostwriter_frame_color` renamed to `ghostwriter_color` (CD-2); `story_state.active_session_id` known-key added (CD-9); `WorldMetaPatch`, `ResolvedSettings`, `Telemetry`, `AliveCacheRow`, `UnlockResult`, `GhostwriterResponse`, `RevertResult` TypeScript interfaces added (IP-3, IP-9 — annotated as ts-rs-generated authoritative); `GhostwriterEdit` interface shape updated to match Doc 17 (HB-1); `MessageBlock` flagged v2.1-reserved (SD-6).
 > **Earlier:** 2026-05-03 — Doc 20 (Settings & Themes) design pass: `modificator_presets` removed from both `app_settings` and `settings` (modificators are per-turn free-text per Doc 15, no catalogue); `cache_min_tokens` added to `app_settings` (default 4096 ⚠️ provisional); `cache_ttl_secs`, `cache_min_tokens`, `context_token_limit` added to the world-overridable list
 > **Earlier:** 2026-04-29 — Doc 16 design pass: `accordion_segments.use_summary` column added (decoupled from `is_collapsed`); four `gen_summarise_*` keys added to `app_settings` and the world-overridable `settings` cascade; checkpoint naming is inverted (`name what comes next`); start sentinel auto-named `Chapter 1`
@@ -250,6 +251,7 @@ CREATE TABLE app_settings (
 | `tts_model_name` | `""` | TTS provider/model |
 | `cache_ttl_secs` | `3600` | Explicit cache TTL in seconds (app-wide default; 3600 = 1 hour) |
 | `cache_min_tokens` | `4096` | Minimum prefix size before auto-create cache fires (⚠️ provisional — Gemini 2.5 Pro published minimum; verify empirically per TODO O16) |
+| `inline_context_fallback` | `false` | When a cache-create fails, fall back to inline "fake cache" delivery instead of aborting the send (Doc 22 §Delivery Model, D-21). Default `false` = safe stop-and-warn. |
 | `story_si` | `""` | Default story mode system instruction |
 | `handover_si` | `""` | Default handover mode system instruction |
 | `consulting_si` | `""` | Default consulting mode system instruction |

@@ -46,13 +46,13 @@ fn validate_item_name(name: &str) -> Result<String, LoomError> {
     Ok(trimmed.to_owned())
 }
 
-/// Allowed item types accepted at the IPC boundary. `Image` is reserved for
-/// Phase 10; v2.0 Phase 2 only creates Story / Folder / SourceDocument.
+/// Allowed item types accepted at the IPC boundary. `Image` is deferred to
+/// v2.1 (D-20); v2.0 only creates Story / Folder / SourceDocument.
 fn validate_item_type(item_type: &str) -> Result<(), LoomError> {
     match item_type {
         "Story" | "Folder" | "SourceDocument" => Ok(()),
         "Image" => Err(LoomError::validation(
-            "Image items cannot be created directly; use upload_image (Phase 10).",
+            "Image items are deferred to LOOM 2.1 (D-20).",
         )),
         other => Err(LoomError::validation(format!("Unknown item type: {other}"))),
     }

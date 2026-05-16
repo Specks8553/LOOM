@@ -441,7 +441,7 @@ pub async fn send_session_message(
             let fake_user_prompt: String =
                 resolve(world_db, app_db, AppSettingKey::PromptAccordionFakeUser)?;
             let params = resolve_params(world_db, app_db)?;
-            let request = history::assemble_session_request(
+            let mut request = history::assemble_session_request(
                 world_db,
                 SessionAssembleInputs {
                     session_id: &session_id_for_closure,
@@ -479,6 +479,18 @@ pub async fn send_session_message(
                     .as_deref()
                     .map(|e| e > now.as_str())
                     .unwrap_or(false);
+            // D-21: when this turn won't ride a cache (handover never caches;
+            // consulting without a live cache), source documents must be
+            // delivered inline — prepend them as the leading "fake cache".
+            if !cache_active {
+                let doc_pairs = cache_service::build_doc_pairs(world_db, &session.story_id)?;
+                if !doc_pairs.is_empty() {
+                    let mut prefixed = doc_pairs;
+                    prefixed.append(&mut request.contents);
+                    request.contents = prefixed;
+                }
+            }
+
             let cache_name = if cache_active {
                 session.cache_name
             } else {
