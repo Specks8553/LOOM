@@ -1,7 +1,8 @@
 # 03 — Data Model
 
 > **Status:** Complete
-> **Last updated:** 2026-05-16 — D-21: `inline_context_fallback` app-settings key added (default `false`) — controls cache-create-failure behaviour (Doc 22 §Delivery Model).
+> **Last updated:** 2026-05-16 — Phase 11 reconciliation: the six visual colour keys (`bubble_user_color`, `bubble_ai_color`, `ghostwriter_color`, `checkpoint_color`, `accordion_color`, `feedback_color`) are now full `app_settings` keys *and* world-overridable — they were previously listed world-only, which contradicted Doc 20 §Features ("App + World") and `ResolvedSettings`'s cascade resolution. The cascade is uniform for every visual key; empty feature/bubble colours are resolved by `applyTheme` (feature → accent, bubble → token default; `feedback_color` defaults to a literal `#f59e0b`).
+> **Earlier:** 2026-05-16 — D-21: `inline_context_fallback` app-settings key added (default `false`) — controls cache-create-failure behaviour (Doc 22 §Delivery Model).
 > **Earlier:** 2026-05-04 — Feedback design pass (D-17): `feedback_color` added to world-overridable `settings` keys and to `ResolvedSettings`; default `#f59e0b`. Drives the `--color-feedback` triad per Doc 28.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution batch: `attachment_history.action` renamed to `event` and `reason TEXT NULL` column added (HB-2); `prompt_handover_seed` and `prompt_consulting_seed` added to `app_settings` keys (HB-5); `ghostwriter_frame_color` renamed to `ghostwriter_color` (CD-2); `story_state.active_session_id` known-key added (CD-9); `WorldMetaPatch`, `ResolvedSettings`, `Telemetry`, `AliveCacheRow`, `UnlockResult`, `GhostwriterResponse`, `RevertResult` TypeScript interfaces added (IP-3, IP-9 — annotated as ts-rs-generated authoritative); `GhostwriterEdit` interface shape updated to match Doc 17 (HB-1); `MessageBlock` flagged v2.1-reserved (SD-6).
 > **Earlier:** 2026-05-03 — Doc 20 (Settings & Themes) design pass: `modificator_presets` removed from both `app_settings` and `settings` (modificators are per-turn free-text per Doc 15, no catalogue); `cache_min_tokens` added to `app_settings` (default 4096 ⚠️ provisional); `cache_ttl_secs`, `cache_min_tokens`, `context_token_limit` added to the world-overridable list
@@ -240,6 +241,12 @@ CREATE TABLE app_settings (
 | `gen_summarise_max_output_tokens` | `2048` | Gemini `maxOutputTokens` for summarisation (⚠️ provisional — summaries are shorter than story output) |
 | `accent_color` | `#7c3aed` | Default accent color (hex) |
 | `body_font` | `serif` | Default prose font family |
+| `bubble_user_color` | `""` | User bubble background; empty resolves to the token default |
+| `bubble_ai_color` | `""` | AI bubble background; empty resolves to the token default |
+| `ghostwriter_color` | `""` | Ghostwriter feature colour; empty tracks the accent |
+| `checkpoint_color` | `""` | Checkpoint marker colour; empty tracks the accent |
+| `accordion_color` | `""` | Accordion card colour; empty tracks the accent |
+| `feedback_color` | `#f59e0b` | Feedback annotation colour (Doc 28); does **not** track the accent |
 | `auto_lock_secs` | `900` | Auto-lock timer in seconds (15 min default) |
 | `rate_limit_rpm` | `10` | Requests per minute limit |
 | `rate_limit_tpm` | `250000` | Tokens per minute limit |
@@ -294,12 +301,12 @@ CREATE TABLE settings (
 | `gen_summarise_max_output_tokens` | ✅ | World-specific summarisation maxOutputTokens |
 | `accent_color` | ✅ | World accent color |
 | `body_font` | ✅ | World prose font |
-| `bubble_user_color` | — | User bubble background (empty = token default); world-only |
-| `bubble_ai_color` | — | AI bubble background; world-only |
-| `ghostwriter_color` | — | Ghostwriter feature colour; world-only. Drives `--color-ghostwriter` and its derived `-hover` / `-subtle` / `-diff` tokens. |
-| `checkpoint_color` | — | Checkpoint marker color; world-only |
-| `accordion_color` | — | Accordion card color; world-only |
-| `feedback_color` | — | Feedback annotation colour; world-only. Drives `--color-feedback` and its derived `-hover` / `-subtle` tokens. Default `#f59e0b` (Doc 28). |
+| `bubble_user_color` | ✅ | User bubble background (empty = token default) |
+| `bubble_ai_color` | ✅ | AI bubble background (empty = token default) |
+| `ghostwriter_color` | ✅ | Ghostwriter feature colour. Drives `--color-ghostwriter` and its derived `-hover` / `-subtle` / `-diff` tokens. |
+| `checkpoint_color` | ✅ | Checkpoint marker color |
+| `accordion_color` | ✅ | Accordion card color |
+| `feedback_color` | ✅ | Feedback annotation colour. Drives `--color-feedback` and its derived `-hover` / `-subtle` tokens. Default `#f59e0b` (Doc 28). |
 | `story_si` | ✅ | World story mode system instruction |
 | `handover_si` | ✅ | World handover mode system instruction |
 | `consulting_si` | ✅ | World consulting mode system instruction |
