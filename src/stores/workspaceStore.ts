@@ -147,6 +147,12 @@ interface WorkspaceState {
   /** Non-null when a model bubble is in Ghostwriter mode. */
   ghostwriter: GhostwriterMode | null;
 
+  // --- Phase 9: Feedback (Doc 28) ---
+  /** Message id whose feedback strip is in edit mode; null = none open.
+   *  Only the fact of editing is global — the textarea value is local to
+   *  the `FeedbackStrip` component. */
+  feedbackEditingMessageId: string | null;
+
   // --- Actions ---
   setIsGenerating(val: boolean): void; // legacy seam — Phase 3 keeps it for any non-IPC callers
   setActiveStory(storyId: string | null): Promise<void>;
@@ -217,6 +223,16 @@ interface WorkspaceState {
   /** Pop the most-recent accepted edit for a message via
    *  `revert_ghostwriter_edit`. Works whether or not the bubble is in mode. */
   revertGhostwriter(messageId: string): Promise<void>;
+
+  // --- Phase 9: Feedback (Doc 28) ---
+  /** Open the feedback editor on a bubble. Implicitly cancels any other
+   *  bubble's open edit (one editor at a time). */
+  beginFeedbackEdit(messageId: string): void;
+  /** Close the feedback editor without saving. */
+  cancelFeedbackEdit(): void;
+  /** Persist a feedback value via `update_feedback`, then close the editor.
+   *  Callers resolve the cached-message guard (Doc 22) beforehand. */
+  commitFeedbackEdit(messageId: string, value: string): Promise<void>;
 
   // --- Event handlers (called by useWorkspaceEvents) ---
   onMessageChunk(storyId: string, chunk: string): void;
@@ -343,6 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   summarisingSegmentIds: new Set<string>(),
 
   ghostwriter: null,
+  feedbackEditingMessageId: null,
 
   setIsGenerating(val) {
     set({ isGenerating: val });
@@ -371,6 +388,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         segments: [],
         summarisingSegmentIds: new Set<string>(),
         ghostwriter: null,
+        feedbackEditingMessageId: null,
       });
       return;
     }
@@ -387,6 +405,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       segments: [],
       summarisingSegmentIds: new Set<string>(),
       ghostwriter: null,
+      feedbackEditingMessageId: null,
     });
 
     const [messages, draft, attached, accordion] = await Promise.all([
@@ -807,6 +826,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         diff: null,
         pendingNewContent: null,
       },
+      // Ghostwriter hides the feedback affordance (Doc 28 §With Ghostwriter).
+      feedbackEditingMessageId: null,
     });
   },
 
@@ -953,6 +974,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       } catch (e) {
         console.error('load_messages after ghostwriter revert failed', e);
       }
+    }
+  },
+
+  // --- Phase 9: Feedback (Doc 28) ---
+
+  beginFeedbackEdit(messageId) {
+    set({ feedbackEditingMessageId: messageId });
+  },
+
+  cancelFeedbackEdit() {
+    set({ feedbackEditingMessageId: null });
+  },
+
+  async commitFeedbackEdit(messageId, value) {
+    await get().updateFeedback(messageId, value);
+    if (get().feedbackEditingMessageId === messageId) {
+      set({ feedbackEditingMessageId: null });
     }
   },
 
@@ -1126,6 +1164,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       segments: [],
       summarisingSegmentIds: new Set<string>(),
       ghostwriter: null,
+      feedbackEditingMessageId: null,
     });
   },
 

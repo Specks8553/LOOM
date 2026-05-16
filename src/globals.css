@@ -17,6 +17,12 @@
   --color-ghostwriter-hover: #14b8a6;
   --color-ghostwriter-subtle: #134e4a;
   --color-ghostwriter-diff: #2dd4bf;
+
+  /* Feedback feature triad (Doc 28). ⚠️ Provisional values — independent of
+   * --color-warning so writers can theme feedback distinctly (Doc 20). */
+  --color-feedback: #f59e0b;
+  --color-feedback-hover: #fbbf24;
+  --color-feedback-subtle: rgba(245, 158, 11, 0.06);
 }
 
 :root {

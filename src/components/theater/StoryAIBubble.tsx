@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { FeedbackStrip } from '@/components/theater/FeedbackStrip';
 import { GhostwriterBubble } from '@/components/theater/GhostwriterBubble';
 import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -45,12 +46,15 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   const ghostwriterActiveId = useWorkspaceStore((s) => s.ghostwriter?.activeMessageId ?? null);
   const enterGhostwriter = useWorkspaceStore((s) => s.enterGhostwriter);
   const revertGhostwriter = useWorkspaceStore((s) => s.revertGhostwriter);
+  const beginFeedbackEdit = useWorkspaceStore((s) => s.beginFeedbackEdit);
+  const cancelFeedbackEdit = useWorkspaceStore((s) => s.cancelFeedbackEdit);
 
   const { modal: revertGuardModal, guard: revertGuard } = useCachedMessageGuard();
 
   const isGhostwriterActive = ghostwriterActiveId === message.id;
   const isBlocks = message.content_type === 'blocks';
   const historyLen = ghostwriterHistoryLength(message.ghostwriter_history);
+  const hasFeedback = (message.user_feedback ?? '').length > 0;
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,6 +119,16 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
     const ok = await revertGuard(message, 'edit');
     if (!ok) return;
     await revertGhostwriter(message.id);
+  }
+
+  function handleFeedback() {
+    // Toggle: a second click on a bubble already in feedback edit closes it.
+    const editingId = useWorkspaceStore.getState().feedbackEditingMessageId;
+    if (editingId === message.id) {
+      cancelFeedbackEdit();
+    } else {
+      beginFeedbackEdit(message.id);
+    }
   }
 
   // Streaming placeholder with empty content yet — show a subtle "thinking" hint.
@@ -186,6 +200,7 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </div>
         )}
       </div>
+      {!isBlocks && !streaming && <FeedbackStrip message={message} />}
       {menuPos !== null && (
         <div
           ref={menuRef}
@@ -221,6 +236,11 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
               ✦ Ghostwriter
             </ActionButton>
           )}
+          {!isBlocks && (
+            <ActionButton disabled={false} active={hasFeedback} onClick={handleFeedback}>
+              Feedback
+            </ActionButton>
+          )}
           {historyLen > 0 && (
             <ActionButton disabled={isGenerating} onClick={() => void handleRevert()}>
               Revert
@@ -253,10 +273,14 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
 function ActionButton({
   onClick,
   disabled,
+  active = false,
   children,
 }: {
   onClick: () => void;
   disabled: boolean;
+  /** Doc 28 — tints the entry with the feedback colour when the bubble
+   *  already carries feedback. */
+  active?: boolean;
   children: string;
 }) {
   return (
@@ -264,7 +288,9 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
+      className={`rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50 ${
+        active ? 'text-[--color-feedback]' : 'text-[--color-text-muted]'
+      }`}
     >
       {children}
     </button>
