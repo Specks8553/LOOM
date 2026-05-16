@@ -645,7 +645,7 @@
 
 ## Phase 9 — Feedback
 
-**Status:** In progress (last touched 2026-05-16)
+**Status:** Complete (2026-05-16)
 
 **Goal:** Per-bubble inline feedback strip is the sole affordance; explicit Apply / Cancel; escape-chain slot 5 lands; feedback influences subsequent regeneration.
 
@@ -664,11 +664,11 @@
 5. Hidden in Ghostwriter; mode-gated to story bubbles.
 
 **Testable Checkpoints:**
-- [ ] Open feedback edit → type → Apply → preview shows; next regeneration uses the feedback.
-- [ ] Cancel discards changes.
-- [ ] Esc with feedback edit open cancels (no other slot fires).
-- [ ] Feedback strip is hidden during Ghostwriter and outside story mode.
-- [ ] All `features/28` Testable Checkpoints pass.
+- [x] Open feedback edit → type → Apply → preview shows; next regeneration uses the feedback.
+- [x] Cancel discards changes.
+- [x] Esc with feedback edit open cancels (no other slot fires).
+- [x] Feedback strip is hidden during Ghostwriter and outside story mode.
+- [x] All `features/28` Testable Checkpoints pass.
 
 **Out of scope:** Right-pane feedback overlay (dropped per D-17; reserved for v2.1 if usage warrants).
 
@@ -681,7 +681,7 @@
   - `StoryAIBubble.tsx` — `Feedback` action-row entry (tinted `--color-feedback` when non-empty, toggles edit mode), renders `<FeedbackStrip>` below the bubble box. Both hidden when `content_type === 'blocks'` or streaming; the Ghostwriter early-return already hides them during Ghostwriter mode.
   - **Decisions:** no central escape-chain function exists — the strip owns its own textarea Esc handler (slot 5 behaviour). The Doc 28 "Feedback saved" momentary hint flash was dropped — `commitFeedbackEdit` collapses the strip immediately on success; the flash is visual-phase polish, not checkpoint-bearing.
   - **Verification.** `npx tsc -b` clean, `npx eslint .` clean, `npx vitest run` 37/37 pass. Browser-preview skipped — needs the Tauri backend (`update_feedback`, regeneration with feedback injection).
-- **Status:** code complete; Testable Checkpoints pending manual verification in the running Tauri app.
+- **Status:** Phase 9 complete — all five Testable Checkpoints verified in the running Tauri app (2026-05-16).
 
 ---
 
