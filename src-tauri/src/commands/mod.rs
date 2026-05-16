@@ -11,4 +11,5 @@ pub mod cache;
 pub mod conversation;
 pub mod ghostwriter;
 pub mod modes;
+pub mod settings;
 pub mod vault;

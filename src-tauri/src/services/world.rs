@@ -172,6 +172,8 @@ pub fn create_world(
     let result = (|| -> Result<(WorldEntry, WorldMeta), LoomError> {
         // Open + migrate the encrypted DB; SQLCipher creates the file.
         let conn = open_and_migrate(&db_path, master_key, MigrationRoot::World)?;
+        // Seed the built-in source-document templates (Doc 20 §Templates).
+        crate::db::templates::ensure_builtins(&conn, &now_iso())?;
         drop(conn); // close immediately; the caller `open_world` will reopen
 
         let now = now_iso();
@@ -231,7 +233,11 @@ pub fn open_world(
     debug!(world_id = %world_id, "open_world: opening encrypted DB");
     // Re-applying migrations on open is safe (no-op when up to date) and
     // keeps us forward-compatible with future schema versions.
-    open_and_migrate(path, master_key, MigrationRoot::World)
+    let conn = open_and_migrate(path, master_key, MigrationRoot::World)?;
+    // Idempotent — worlds created before the templates feature gain the
+    // built-ins lazily on first open (Doc 20 §Templates).
+    crate::db::templates::ensure_builtins(&conn, &now_iso())?;
+    Ok(conn)
 }
 
 /// Return all worlds with full metadata. Reads `app_config.json` for the

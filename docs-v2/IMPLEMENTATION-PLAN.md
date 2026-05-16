@@ -727,7 +727,9 @@
 
 ## Phase 11 — Settings & Themes
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-16)
+
+> **Re-scoped 2026-05-16.** Phase 11 implementation surfaced two backend gaps: no rate limiter / telemetry pipeline exists, and no template code/seeding exists. Decisions: (a) the **Rate Limits tab is deferred** — the rate limiter + telemetry population + `get_telemetry` / `telemetry_tick` / `reset_rate_limiter` are tracked as a follow-up; App chapter ships 7 tabs, not 8. (b) the **Templates tab is built in full** — built-in seeding + CRUD land here.
 
 **Goal:** Full-surface Settings replaces v1's modal; cascade UX (auto-create override on edit, `↺` revert, per-tab Reset all overrides) works across App and World scopes; `applyTheme` writes the full token snapshot.
 
@@ -753,10 +755,13 @@
 - [ ] API key entry persists in `app_settings.db`; never appears in logs or localStorage.
 - [ ] All `features/20` Testable Checkpoints pass.
 
-**Out of scope:** Light mode (v2.1); story-scope settings (removed per D-16).
+**Out of scope:** Light mode (v2.1); story-scope settings (removed per D-16); **Rate Limits tab** (deferred 2026-05-16 — rate limiter + telemetry pipeline unbuilt).
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-16: Phase 11 started.** Scope confirmed: Rate Limits tab deferred (no rate limiter exists); Templates tab built in full. App chapter = 7 tabs.
+- **2026-05-16: Backend landed.** `AppSettingKey` gained 6 colour variants (`bubble_user/ai_color`, `ghostwriter/checkpoint/accordion/feedback_color`) + `ALL` + `from_key_str`. `services/settings.rs`: `ResolvedSettings`, `resolve_all` / `resolve_all_app_only`, `validate_setting`, `world_tab_keys`, `prompt_baseline`. `db/templates.rs`: `Template` + CRUD + `ensure_builtins` (seeded on world create *and* open — idempotent). `commands/settings.rs`: 12 commands + `settings_changed` event. Registered in lib.rs; ts-rs exports `ResolvedSettings` + `Template`. cargo build/clippy clean; 25 new tests pass.
+- **Decisions:** (a) the 6 colour keys are full `AppSettingKey` variants (App + World), reconciling Doc 03's "world-only" annotation with Doc 20 §Features "App + World" and `ResolvedSettings`'s cascade — Doc 03 amendment pending. (b) Templates are world-scoped (the `templates` table lives only in `loom.db`); the "App scope" templates in Doc 20 §Templates have no store — treating all templates as per-world. (c) `export_settings_bundle` + Startup-behaviour radio deferred from the General tab (need backup infra / a new schema key — outside the 5 checkpoints).
 
 ---
 

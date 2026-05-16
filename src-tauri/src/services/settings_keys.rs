@@ -22,6 +22,12 @@ pub enum AppSettingKey {
     GenSummariseMaxOutputTokens,
     AccentColor,
     BodyFont,
+    BubbleUserColor,
+    BubbleAiColor,
+    GhostwriterColor,
+    CheckpointColor,
+    AccordionColor,
+    FeedbackColor,
     AutoLockSecs,
     RateLimitRpm,
     RateLimitTpm,
@@ -75,6 +81,12 @@ impl AppSettingKey {
             Self::GenSummariseMaxOutputTokens => "gen_summarise_max_output_tokens",
             Self::AccentColor => "accent_color",
             Self::BodyFont => "body_font",
+            Self::BubbleUserColor => "bubble_user_color",
+            Self::BubbleAiColor => "bubble_ai_color",
+            Self::GhostwriterColor => "ghostwriter_color",
+            Self::CheckpointColor => "checkpoint_color",
+            Self::AccordionColor => "accordion_color",
+            Self::FeedbackColor => "feedback_color",
             Self::AutoLockSecs => "auto_lock_secs",
             Self::RateLimitRpm => "rate_limit_rpm",
             Self::RateLimitTpm => "rate_limit_tpm",
@@ -119,6 +131,9 @@ impl AppSettingKey {
             Self::GenSummariseMaxOutputTokens => "2048",
             Self::AccentColor => "#7c3aed",
             Self::BodyFont => "serif",
+            // Feedback uses a stable amber by default — it does not track
+            // accent (Doc 28 / Doc 20 §Features).
+            Self::FeedbackColor => "#f59e0b",
             Self::AutoLockSecs => "900",
             Self::RateLimitRpm => "10",
             Self::RateLimitTpm => "250000",
@@ -132,9 +147,17 @@ impl AppSettingKey {
             Self::AuxSlot1Name => "Slot 1",
             Self::AuxSlot2Name => "Slot 2",
             // Empty string defaults — keys that are populated at runtime or by user input.
+            // The empty colour keys resolve in `applyTheme`: bubble colours
+            // fall back to the CSS token default; ghostwriter / checkpoint /
+            // accordion colours track the accent (Doc 20 §Theme System).
             Self::ApiKey
             | Self::ImgGenProviderId
             | Self::TtsModelName
+            | Self::BubbleUserColor
+            | Self::BubbleAiColor
+            | Self::GhostwriterColor
+            | Self::CheckpointColor
+            | Self::AccordionColor
             | Self::StorySi
             | Self::HandoverSi
             | Self::ConsultingSi
@@ -146,6 +169,60 @@ impl AppSettingKey {
             | Self::PromptHandoverSeed
             | Self::PromptConsultingSeed => "",
         }
+    }
+
+    /// Every `AppSettingKey` variant. Used to enumerate raw values for the
+    /// Settings UI and to map column keys back to the typed enum.
+    pub const ALL: &'static [AppSettingKey] = &[
+        Self::ApiKey,
+        Self::TextModelName,
+        Self::GenTemperature,
+        Self::GenTopP,
+        Self::GenTopK,
+        Self::GenMaxOutputTokens,
+        Self::GenSummariseTemperature,
+        Self::GenSummariseTopP,
+        Self::GenSummariseTopK,
+        Self::GenSummariseMaxOutputTokens,
+        Self::AccentColor,
+        Self::BodyFont,
+        Self::BubbleUserColor,
+        Self::BubbleAiColor,
+        Self::GhostwriterColor,
+        Self::CheckpointColor,
+        Self::AccordionColor,
+        Self::FeedbackColor,
+        Self::AutoLockSecs,
+        Self::RateLimitRpm,
+        Self::RateLimitTpm,
+        Self::RateLimitRpd,
+        Self::ContextTokenLimit,
+        Self::ImgGenProviderId,
+        Self::ImgGenDefaultWidth,
+        Self::ImgGenDefaultHeight,
+        Self::TtsModelName,
+        Self::CacheTtlSecs,
+        Self::CacheMinTokens,
+        Self::InlineContextFallback,
+        Self::StorySi,
+        Self::HandoverSi,
+        Self::ConsultingSi,
+        Self::AuxSlot1Name,
+        Self::AuxSlot1Content,
+        Self::AuxSlot2Name,
+        Self::AuxSlot2Content,
+        Self::PromptGhostwriter,
+        Self::PromptAccordionSummarise,
+        Self::PromptAccordionFakeUser,
+        Self::PromptHandoverSeed,
+        Self::PromptConsultingSeed,
+    ];
+
+    /// Parse a raw column key (the literal `app_settings.key` value) back into
+    /// the typed enum. `None` for an unknown key — callers reject it as a
+    /// validation error rather than silently accepting an untyped write.
+    pub fn from_key_str(key: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|k| k.as_str() == key)
     }
 }
 
@@ -195,47 +272,7 @@ mod tests {
     #[test]
     fn keys_unique() {
         // No duplicate `as_str()` values across AppSettingKey variants.
-        let keys: Vec<&'static str> = [
-            AppSettingKey::ApiKey,
-            AppSettingKey::TextModelName,
-            AppSettingKey::GenTemperature,
-            AppSettingKey::GenTopP,
-            AppSettingKey::GenTopK,
-            AppSettingKey::GenMaxOutputTokens,
-            AppSettingKey::GenSummariseTemperature,
-            AppSettingKey::GenSummariseTopP,
-            AppSettingKey::GenSummariseTopK,
-            AppSettingKey::GenSummariseMaxOutputTokens,
-            AppSettingKey::AccentColor,
-            AppSettingKey::BodyFont,
-            AppSettingKey::AutoLockSecs,
-            AppSettingKey::RateLimitRpm,
-            AppSettingKey::RateLimitTpm,
-            AppSettingKey::RateLimitRpd,
-            AppSettingKey::ContextTokenLimit,
-            AppSettingKey::ImgGenProviderId,
-            AppSettingKey::ImgGenDefaultWidth,
-            AppSettingKey::ImgGenDefaultHeight,
-            AppSettingKey::TtsModelName,
-            AppSettingKey::CacheTtlSecs,
-            AppSettingKey::CacheMinTokens,
-            AppSettingKey::InlineContextFallback,
-            AppSettingKey::StorySi,
-            AppSettingKey::HandoverSi,
-            AppSettingKey::ConsultingSi,
-            AppSettingKey::AuxSlot1Name,
-            AppSettingKey::AuxSlot1Content,
-            AppSettingKey::AuxSlot2Name,
-            AppSettingKey::AuxSlot2Content,
-            AppSettingKey::PromptGhostwriter,
-            AppSettingKey::PromptAccordionSummarise,
-            AppSettingKey::PromptAccordionFakeUser,
-            AppSettingKey::PromptHandoverSeed,
-            AppSettingKey::PromptConsultingSeed,
-        ]
-        .iter()
-        .map(|k| k.as_str())
-        .collect();
+        let keys: Vec<&'static str> = AppSettingKey::ALL.iter().map(|k| k.as_str()).collect();
         let mut sorted = keys.clone();
         sorted.sort_unstable();
         sorted.dedup();
@@ -244,5 +281,13 @@ mod tests {
             sorted.len(),
             "duplicate AppSettingKey column keys"
         );
+    }
+
+    #[test]
+    fn from_key_str_round_trips_every_variant() {
+        for &k in AppSettingKey::ALL {
+            assert_eq!(AppSettingKey::from_key_str(k.as_str()), Some(k));
+        }
+        assert_eq!(AppSettingKey::from_key_str("not_a_real_key"), None);
     }
 }

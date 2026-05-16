@@ -14,7 +14,9 @@ use loom_app_lib::commands::conversation::SendMessageResult;
 use loom_app_lib::commands::modes::{SendSessionMessageResult, StoryActiveMode};
 use loom_app_lib::db::conversation_sessions::ConversationSession;
 use loom_app_lib::db::messages::ChatMessage;
+use loom_app_lib::db::templates::Template;
 use loom_app_lib::db::vault::{ImageAssetMeta, VaultItemMeta};
+use loom_app_lib::services::settings::ResolvedSettings;
 use loom_app_lib::error::{LoomError, ValidationKind};
 use loom_app_lib::security::sentinel::Sentinel;
 use loom_app_lib::services::config::{AppConfig, WorldEntry};
@@ -56,4 +58,7 @@ fn export_all_ts_types() {
     AttachedDocEntry::export_all().expect("AttachedDocEntry export failed");
     SendSessionMessageResult::export_all().expect("SendSessionMessageResult export failed");
     StoryActiveMode::export_all().expect("StoryActiveMode export failed");
+    // Phase 11 types (Doc 20)
+    ResolvedSettings::export_all().expect("ResolvedSettings export failed");
+    Template::export_all().expect("Template export failed");
 }

@@ -384,3 +384,72 @@ export type GhostwriterSelection = {
 /** Doc 17 §Diff Display. One span of the word-level LCS diff between the
  *  original message content and the stitched revision. */
 export type DiffSpan = { kind: 'unchanged'; text: string } | { kind: 'changed'; text: string };
+
+// --- Phase 11 — Settings & Themes (Doc 20) ---
+
+/**
+ * Doc 03 §`ResolvedSettings`. Merged settings cascade (world override → app
+ * default → hardcoded fallback) returned by `get_resolved_settings`. The
+ * frontend consumes this directly — theme, runtime gen params, ceilings.
+ */
+export type ResolvedSettings = {
+  // Gemini
+  text_model_name: string;
+  gen_temperature: number;
+  gen_top_p: number;
+  gen_top_k: number;
+  gen_max_output_tokens: number;
+  gen_summarise_temperature: number;
+  gen_summarise_top_p: number;
+  gen_summarise_top_k: number;
+  gen_summarise_max_output_tokens: number;
+  cache_ttl_secs: number;
+  cache_min_tokens: number;
+  context_token_limit: number;
+  // Theme
+  accent_color: string;
+  body_font: string;
+  bubble_user_color: string;
+  bubble_ai_color: string;
+  ghostwriter_color: string;
+  accordion_color: string;
+  checkpoint_color: string;
+  feedback_color: string;
+  // System Instructions
+  story_si: string;
+  handover_si: string;
+  consulting_si: string;
+  aux_slot_1_name: string;
+  aux_slot_1_content: string;
+  aux_slot_2_name: string;
+  aux_slot_2_content: string;
+  // App-only (world cannot override)
+  has_api_key: boolean;
+  auto_lock_secs: number;
+  rate_limit_rpm: number;
+  rate_limit_tpm: number;
+  rate_limit_rpd: number;
+};
+
+/** Doc 03 §`templates`. A source-document template — built-in or user-created. */
+export type Template = {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string;
+  default_content: string;
+  /** Forward-compat for the v2.1 Source Document Creator — not surfaced in v2.0. */
+  creator_instructions: string;
+  is_builtin: boolean;
+  sort_order: number;
+  created_at: string;
+  modified_at: string;
+};
+
+/** Payload of the `settings_changed` event. Frontend re-fetches the cascade
+ *  and re-runs `applyTheme` on receipt. `key` is the changed setting key, or
+ *  the tab name for a bulk tab-clear, or `'templates'` for a template change. */
+export type SettingsChangedPayload = {
+  scope: 'app' | 'world';
+  key: string;
+};

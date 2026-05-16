@@ -105,6 +105,18 @@ pub fn run() {
             commands::ghostwriter::cancel_ghostwriter_generation,
             commands::ghostwriter::save_ghostwriter_edit,
             commands::ghostwriter::revert_ghostwriter_edit,
+            commands::settings::get_resolved_settings,
+            commands::settings::get_app_settings,
+            commands::settings::get_world_settings,
+            commands::settings::save_app_setting,
+            commands::settings::save_world_setting,
+            commands::settings::clear_world_override,
+            commands::settings::clear_all_world_overrides_in_tab,
+            commands::settings::restore_prompt_default,
+            commands::settings::list_templates,
+            commands::settings::save_template,
+            commands::settings::delete_template,
+            commands::settings::restore_template_default,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

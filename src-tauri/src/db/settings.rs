@@ -111,6 +111,18 @@ pub fn clear_world_setting(conn: &Connection, key: AppSettingKey) -> Result<(), 
     Ok(())
 }
 
+/// Every world-level override currently set (the raw `settings` rows). Used by
+/// the Settings UI's World chapter to render the `↺` revert affordance.
+pub fn all_world_overrides(conn: &Connection) -> Result<Vec<(String, String)>, LoomError> {
+    let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// Read a per-story state value, falling back to the key's `default_value()`.
 pub fn get_story_state<T: FromSettingValue>(
     conn: &Connection,
