@@ -592,7 +592,7 @@
 
 ## Phase 8 — Ghostwriter
 
-**Status:** In progress (last touched 2026-05-16)
+**Status:** Complete (2026-05-16)
 
 **Goal:** Ghostwriter rewrites a selection in any of the three modes via the surgical-stitching protocol; in-place edit on non-latest messages; floating panel anchored to the bubble per Doc 27.
 
@@ -612,12 +612,12 @@
 5. Cache stale on accept (Doc 22 cross-ref).
 
 **Testable Checkpoints:**
-- [ ] Select text in an AI bubble → activate Ghostwriter → enter instruction → accept → bubble shows full message with only the selection rewritten.
-- [ ] Reject leaves the bubble unchanged.
-- [ ] Revert restores the previous version using `ghostwriter_history`.
-- [ ] Works on non-latest messages (in-place, no branching).
-- [ ] Works in handover and consulting modes.
-- [ ] All `features/17` Testable Checkpoints pass.
+- [x] Select text in an AI bubble → activate Ghostwriter → enter instruction → accept → bubble shows full message with only the selection rewritten.
+- [x] Reject leaves the bubble unchanged.
+- [x] Revert restores the previous version using `ghostwriter_history`.
+- [x] Works on non-latest messages (in-place, no branching).
+- [x] Works in handover and consulting modes.
+- [x] All `features/17` Testable Checkpoints pass.
 
 **Out of scope:** `blocks` content-type support (deferred to v2.1).
 
@@ -639,7 +639,7 @@
   - `globals.css` — added the `--color-ghostwriter[-hover/-subtle/-diff]` triad (⚠️ provisional, NB-1) + `.gw-selectable::selection`, `.gw-diff-changed`, `.gw-active-frame` pulse keyframe.
   - **Decisions:** discard-pending confirmation uses `window.confirm` (consistent with the existing StoryAIBubble delete / AccordionBanner prompt pattern; visual phase replaces). No central escape-chain function exists yet — the panel owns its own Escape listener (`capture` phase). One shared `GhostwriterBubble` avoids duplicating selection/diff logic across the two bubble types.
   - **Verification at 8B close.** `npx tsc -b` clean, `npx eslint .` clean (0 problems), `npx vitest run` 37/37 pass. Browser-preview verification skipped — the flow needs the Tauri backend (unlock vault, load story, Gemini call) which the vite preview cannot exercise.
-- **Status:** 8B code complete. Testable Checkpoints not yet ticked — they need manual verification in the running Tauri app (run `/phase-verify`).
+- **Status:** Phase 8 complete — all six Testable Checkpoints verified in the running Tauri app (2026-05-16).
 
 ---
 
