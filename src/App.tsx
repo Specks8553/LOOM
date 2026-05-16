@@ -7,6 +7,7 @@ import { WorkspaceShell } from '@/components/shell/WorkspaceShell';
 import { checkOnboarding } from '@/lib/tauriApi/auth';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useVaultStore } from '@/stores/vaultStore';
 
 export function App() {
@@ -34,13 +35,25 @@ export function App() {
   // On entering workspace: load the world list. On leaving (lock): clear vault state.
   const refreshWorlds = useVaultStore((s) => s.refreshWorlds);
   const clearVault = useVaultStore((s) => s.clear);
+  const activeWorldId = useVaultStore((s) => s.activeWorldId);
+  const refreshResolved = useSettingsStore((s) => s.refreshResolved);
+  const clearSettings = useSettingsStore((s) => s.clear);
   useEffect(() => {
     if (phase === 'workspace') {
       void refreshWorlds().catch(console.error);
     } else {
       clearVault();
+      clearSettings();
     }
-  }, [phase, refreshWorlds, clearVault]);
+  }, [phase, refreshWorlds, clearVault, clearSettings]);
+
+  // Doc 20 §applyTheme triggers 1–3: resolve the cascade and apply the theme
+  // when the workspace opens and on every world open / switch. Trigger 4
+  // (settingsStore field change) is handled inside the store's save actions.
+  useEffect(() => {
+    if (phase !== 'workspace') return;
+    void refreshResolved().catch((e) => console.error('theme resolve failed', e));
+  }, [phase, activeWorldId, refreshResolved]);
 
   // Activity listener for auto-lock reset (Doc 13 §Auto-Lock).
   const scrollThrottle = useRef<ReturnType<typeof setTimeout> | null>(null);

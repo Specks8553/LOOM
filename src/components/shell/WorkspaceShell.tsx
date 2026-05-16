@@ -5,6 +5,7 @@ import { PaneDivider } from '@/components/layout/PaneDivider';
 import { RightPane } from '@/components/layout/RightPane';
 import { Theater } from '@/components/layout/Theater';
 import { Navigator } from '@/components/navigator/Navigator';
+import { Settings } from '@/components/settings/Settings';
 import { CacheSection } from '@/components/theater/CacheSection';
 import { ContextDocsSection } from '@/components/theater/ContextDocsSection';
 import { DocEditor } from '@/components/theater/DocEditor';
@@ -65,6 +66,9 @@ export function WorkspaceShell() {
   const rightCollapsed = useAppStore((s) => s.rightPaneCollapsed);
 
   const setAppPhase = useAppStore((s) => s.setAppPhase);
+  const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const openSettings = useAppStore((s) => s.openSettings);
+  const closeSettings = useAppStore((s) => s.closeSettings);
   const onLock = useAuthStore((s) => s.onLock);
   const activeWorldId = useVaultStore((s) => s.activeWorldId);
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
@@ -90,8 +94,9 @@ export function WorkspaceShell() {
       .finally(() => {
         workspaceClear();
         modeClear();
+        closeSettings();
       });
-  }, [activeWorldId, workspaceClear, modeClear]);
+  }, [activeWorldId, workspaceClear, modeClear, closeSettings]);
 
   // On story open: load this story's sessions and restore the persisted
   // `active_mode` / `active_session_id` from `story_state` (Doc 23
@@ -133,6 +138,7 @@ export function WorkspaceShell() {
     } finally {
       workspaceClear();
       modeClear();
+      closeSettings();
       onLock();
       setAppPhase('locked');
     }
@@ -156,9 +162,7 @@ export function WorkspaceShell() {
         <Navigator
           onLock={() => void handleLock()}
           onOpenWorldPicker={handleOpenWorldPicker}
-          onOpenSettings={() => {
-            // TODO(Phase 11): open Settings modal
-          }}
+          onOpenSettings={openSettings}
         />
       </LeftPane>
       <PaneDivider
@@ -169,11 +173,17 @@ export function WorkspaceShell() {
         onResize={setLeftWidth}
         onResizeEnd={(w) => writeWidth(LEFT_LS_KEY, w)}
       />
-      {activeDocId !== null ? (
+      {settingsOpen ? (
+        // Doc 10 §Theater Content Switching priority (CD-5):
+        // Settings > activeDocId > activeStoryId. Settings is a full-surface
+        // view — ModeSwitcher and right pane hidden, Navigator stays visible.
+        <Theater>
+          <Settings />
+        </Theater>
+      ) : activeDocId !== null ? (
         // Doc 18 §Mode-Switcher Interplay: DocEditor takes the main + right
         // region. ModeSwitcher and right pane are hidden; Navigator stays
-        // visible. Doc 10 §Theater Content Switching priority:
-        // Settings (Phase 11) > activeDocId > activeStoryId.
+        // visible.
         <Theater>
           <DocEditor docId={activeDocId} />
         </Theater>
