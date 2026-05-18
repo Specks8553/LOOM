@@ -1,4 +1,5 @@
 import { useModeStore, type AppMode } from '@/stores/modeStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 /**
  * Doc 23 §Switcher UI + Doc 10 §Mode Layout Variations + Doc 27 §Mode switcher.
@@ -10,9 +11,10 @@ import { useModeStore, type AppMode } from '@/stores/modeStore';
  *
  * Click behaviour (Doc 23 §Switcher behaviour):
  *   - Story tab: activates story, exits any active session.
- *   - Handover tab w/ no handover session active: starts a new handover.
- *   - Consulting tab w/ no consulting session active: starts a new consulting.
- *   - Same-kind active: no-op.
+ *   - Handover/Consulting tab w/ that kind already active: no-op.
+ *   - Handover/Consulting tab otherwise: if the newest session of that kind
+ *     sits at the current story tail (no story messages written since it was
+ *     created), re-enter it; otherwise start a new session.
  *
  * Mode switching is allowed mid-stream (Doc 23 §Switching during generation /
  * streaming) — Send is gated by `isGenerating`, the switcher itself is not.
@@ -26,10 +28,20 @@ export function ModeSwitcher({ storyId }: Props) {
   const activeSessionId = useModeStore((s) => s.activeSessionId);
   const sessions = useModeStore((s) => s.sessions);
   const activateStoryMode = useModeStore((s) => s.activateStoryMode);
-  const startNewSession = useModeStore((s) => s.startNewSession);
+  const openSessionForKind = useModeStore((s) => s.openSessionForKind);
+  const messages = useWorkspaceStore((s) => s.messages);
 
   const activeSession =
     activeSessionId === null ? null : (sessions.find((row) => row.id === activeSessionId) ?? null);
+
+  /** Id of the last story-kind message (the story tail), or null when the
+   *  story has none. `messages` is ordered by `created_at`. */
+  function latestStoryMessageId(): string | null {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].kind === 'story') return messages[i].id;
+    }
+    return null;
+  }
 
   async function handleStoryClick() {
     if (activeMode === 'story') return;
@@ -38,7 +50,7 @@ export function ModeSwitcher({ storyId }: Props) {
 
   async function handleSessionClick(kind: 'handover' | 'consulting') {
     if (activeMode === kind) return;
-    await startNewSession(storyId, kind);
+    await openSessionForKind(storyId, kind, latestStoryMessageId());
   }
 
   return (

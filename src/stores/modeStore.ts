@@ -51,6 +51,16 @@ interface ModeState {
    *  consulting requires the explicit banner click. */
   restoreForStory(storyId: string): Promise<void>;
   startNewSession(storyId: string, kind: SessionKind): Promise<ConversationSession>;
+  /** Doc 23 §Switcher behaviour. Open the given session kind from the mode
+   *  switcher: if the newest session of that kind sits at the current story
+   *  tail (its `entry_message_id` equals `tailStoryMessageId` — i.e. no story
+   *  messages have been written since it was created), re-enter that session;
+   *  otherwise create a new one. */
+  openSessionForKind(
+    storyId: string,
+    kind: SessionKind,
+    tailStoryMessageId: string | null,
+  ): Promise<void>;
   enterSession(session: ConversationSession): Promise<void>;
   exitSession(): Promise<void>;
   /** Doc 23 §Switcher behaviour: clicking Story tab → activates story,
@@ -137,6 +147,28 @@ export const useModeStore = create<ModeState>((set, get) => ({
     }));
     await persistActiveMode(storyId, kind, session.id);
     return session;
+  },
+
+  async openSessionForKind(storyId, kind, tailStoryMessageId) {
+    const newest = get()
+      .sessions.filter((s) => s.kind === kind)
+      .reduce<ConversationSession | null>(
+        (best, s) => (best === null || s.created_at > best.created_at ? s : best),
+        null,
+      );
+    if (newest !== null && newest.entry_message_id === tailStoryMessageId) {
+      // At the story tail — re-enter the existing session rather than spawn a
+      // duplicate (Doc 23 §Switcher behaviour). Expand its partition so the
+      // conversation is visible on re-entry.
+      if (newest.is_collapsed) {
+        await get().setSessionCollapsed(newest.id, false);
+      }
+      await get().enterSession(newest);
+    } else {
+      // No same-kind session, or the newest one is behind the current tail
+      // (new story material to hand over / consult about) — create fresh.
+      await get().startNewSession(storyId, kind);
+    }
   },
 
   async enterSession(session) {

@@ -9,10 +9,13 @@ interface BannerProps {
   /** Optional: emphasis bar on the left edge — used for the active session
    *  (Doc 27 §Active session emphasis). */
   active?: boolean;
-  /** Optional: opens the right-click context menu (rename, enter, delete).
-   *  Phase 4 uses native `contextmenu` on the row; the dots icon is
-   *  cosmetic for now. */
+  /** Optional: opens the right-click context menu (rename, enter, delete). */
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Slot for a hover-revealed action row in the header (rename / delete).
+   *  Rendered as a sibling of the toggle button so it can carry its own
+   *  interactive controls. The header row exposes a `group/banner` so the
+   *  slot can fade in on hover. */
+  headerActions?: ReactNode;
   /** Slot for the bottom action row (Enter/Exit). Only rendered when
    *  expanded. */
   bottomActions?: ReactNode;
@@ -33,6 +36,7 @@ export function Banner({
   onToggle,
   active = false,
   onContextMenu,
+  headerActions,
   bottomActions,
   children,
 }: BannerProps) {
@@ -42,21 +46,26 @@ export function Banner({
         active ? 'border-l-2 border-l-[var(--color-accent)]' : ''
       }`}
     >
-      <button
-        type="button"
-        onClick={onToggle}
+      <div
+        className="group/banner flex items-center hover:bg-[var(--color-bg-hover)]"
         onContextMenu={onContextMenu}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-bg-hover)]"
       >
-        <ChevronRight
-          size={14}
-          aria-hidden
-          className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
-        />
-        <span className="flex-1 truncate text-[12px] font-medium text-[var(--color-text-primary)]">
-          {label}
-        </span>
-      </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+        >
+          <ChevronRight
+            size={14}
+            aria-hidden
+            className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          />
+          <span className="flex-1 truncate text-[12px] font-medium text-[var(--color-text-primary)]">
+            {label}
+          </span>
+        </button>
+        {headerActions !== undefined && <div className="shrink-0 pr-2">{headerActions}</div>}
+      </div>
 
       {expanded && (
         <>

@@ -1,7 +1,8 @@
 # 23 — Modes
 
 > **Status:** Complete
-> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): the mode switcher is now positioned at the **bottom** of the Theater, directly above the input area (owner decision; visual treatment in Doc 27). §Mode UI Mapping row relabelled from "Top bar" to "Mode switcher". Switcher *behaviour* is unchanged.
+> **Last updated:** 2026-05-18 — Switcher re-entry (owner decision): clicking the Handover/Consulting tab now **re-enters the newest session of that kind when it sits at the current story tail** (no story messages written since it was created) instead of always creating a new one. A new session is created only when there is fresh story material since the last session. §Switcher behaviour table and the paragraph below it updated; §Handover / §Consulting Create lines amended. Session banners gained a hover action row + right-click popover for Rename / Delete (visual; Doc 27).
+> **Earlier:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): the mode switcher is now positioned at the **bottom** of the Theater, directly above the input area (owner decision; visual treatment in Doc 27). §Mode UI Mapping row relabelled from "Top bar" to "Mode switcher". Switcher *behaviour* is unchanged.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: `active_session_id` persistence committed — added to `story_state` known keys (Doc 03); re-opening a story in a session-mode restores the session if it still exists, else falls back silently to story mode (CD-9 / Q7).
 > **Earlier:** 2026-04-29 — first full design pass; cross-cutting switcher behaviour, story-mode parity, handover spec (multi-turn, manual seed-doc workflow), consulting spec (multi-session, per-session cache, snapshot-driven re-entry), unified banner pattern across handover / consulting / accordion
 > **Scope:** The Modes system — story / handover / consulting. Persona, conversation type, cache topology, session lifecycle, Theater partition rendering, and how the writer moves between them.
@@ -39,12 +40,14 @@ Visual values are owned by Doc 27.
 | Click target | When | Result |
 |---|---|---|
 | Story tab | Any time | Activates story mode. Input area shows the four story fields. Active session (if any) is exited (its cache is dropped). |
-| Handover tab | No handover session active | **Creates a new handover session at the current story position.** Banner appears in the Theater inline at the current scroll position, expanded by default. Input area shows the single handover field. |
 | Handover tab | Handover session already active | No-op (you're already there). |
-| Consulting tab | No consulting session active | **Creates a new consulting session at the current story position.** Banner appears, expanded. Input area shows the single consulting field. Cache creation begins (brief "Preparing session…" status if it takes more than ~250 ms). |
+| Handover tab | Not active; the newest handover session sits at the current story tail (no story messages written since it was created) | **Re-enters that session** — expands its partition and activates it. No new session is created. |
+| Handover tab | Not active; no handover session exists, or the newest one's entry point is behind the current story tail | **Creates a new handover session at the current story position.** Banner appears inline, expanded by default. Input area shows the single handover field. |
 | Consulting tab | Consulting session already active | No-op. |
+| Consulting tab | Not active; the newest consulting session sits at the current story tail (no story messages written since it was created) | **Re-enters that session** — expands its partition and activates it; its cache is rebuilt from `entry_snapshot` (Doc 22). No new session is created. |
+| Consulting tab | Not active; no consulting session exists, or the newest one's entry point is behind the current story tail | **Creates a new consulting session at the current story position.** Banner appears, expanded. Cache creation begins (brief "Preparing session…" status if it takes more than ~250 ms). |
 
-**The switcher never enters an existing session.** Re-entry is exclusively via banner click — see §Banners below. This separation keeps the switcher's behaviour simple and predictable: "click a tab → start something new at the cursor."
+**The switcher re-enters an existing session only when nothing new has been written.** The rule: a Handover/Consulting tab click compares the newest session of that kind against the story tail — if the session was created at the message that is *still* the last story message (`entry_message_id` equals the current tail), clicking the tab re-enters it rather than spawning a duplicate. Once story messages have been written since, the tab creates a new session — there is fresh material to hand over or consult about. Re-entry is also available any time via banner click (see §Banners below). This keeps the common case ("I just want to reopen what I was just doing") a single click, without accumulating empty duplicate sessions.
 
 ### What persists across a switch
 
@@ -118,7 +121,7 @@ Handover is multi-turn. After the initial report, the writer can iterate: `"Expa
 
 ### Session lifecycle
 
-- **Create:** clicking the Handover tab in the switcher (when no handover session is active) creates a new session at the current story position.
+- **Create:** clicking the Handover tab in the switcher creates a new session at the current story position — *unless* the newest handover session already sits at the story tail, in which case the tab re-enters that session instead (see §Switcher behaviour).
 - **Send:** each send is a multi-turn request — `handover_si` + currently-attached docs + story-kind history up to `entry_message_id` + this session's prior turns + the new user turn.
 - **Exit:** switching to story mode or starting a different session (consulting tab, or starting a different handover via deletion-then-recreate). The session row remains; the banner stays in the Theater forever.
 - **Re-entry:** click the banner → expand → "Enter" button (or right-click → "Enter…"). On re-entry, the session's input area appears and further turns are appended.
@@ -191,7 +194,7 @@ Yes. A consulting session is a sustained conversation. Prior turns within the se
 
 ### Session lifecycle
 
-- **Create:** clicking the Consulting tab creates a new session at the current story position. A consulting cache is immediately created (Doc 22 §Consulting-session cache).
+- **Create:** clicking the Consulting tab creates a new session at the current story position — *unless* the newest consulting session already sits at the story tail, in which case the tab re-enters that session instead (see §Switcher behaviour). On create, a consulting cache is immediately created (Doc 22 §Consulting-session cache).
 - **Send:** each turn = `consulting_si` (cached) + docs (cached) + story-up-to-entry (cached) + this session's prior turns (uncached, sent as `contents`) + new user turn (uncached).
 - **Exit:** switching to story or another mode. The cache is dropped (best-effort `DELETE` to Gemini, fields nulled on the session row). The session row and its messages remain.
 - **Re-entry:** banner click → expand → "Enter" button (or right-click → "Enter…"). Re-entry rebuilds the cache from `entry_snapshot` (Doc 22 §Session Snapshot). If the snapshot diverges from current state (deleted source docs, edited story messages), a non-blocking warning toast surfaces.
