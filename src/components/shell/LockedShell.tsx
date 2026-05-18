@@ -44,7 +44,7 @@ export function LockedShell() {
             type="password"
             autoFocus
             autoComplete="current-password"
-            className="rounded border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+            className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
             placeholder="Password"
             value={password}
             onChange={(e) => {

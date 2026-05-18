@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 0A: Color Palette</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #080808; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "warmth": "warm"
+}/*EDITMODE-END*/;
+
+// ─── Palette Definitions ───
+
+const palettes = {
+  neutral: {
+    label: "Current Spec (Neutral)",
+    subtitle: "Pure grays from Doc 08 — no warmth",
+    bg: {
+      base:     { hex: "#0d0d0d", label: "bg-base" },
+      pane:     { hex: "#111111", label: "bg-pane" },
+      theater:  { hex: "#0a0a0a", label: "bg-theater" },
+      elevated: { hex: "#1a1a1a", label: "bg-elevated" },
+      hover:    { hex: "#222222", label: "bg-hover" },
+      active:   { hex: "#2a2a2a", label: "bg-active" },
+    },
+    border: {
+      standard: { hex: "#2a2a2a", label: "border" },
+      subtle:   { hex: "#1f1f1f", label: "border-subtle" },
+    },
+    text: {
+      primary:   { hex: "#e8e8e8", label: "text-primary" },
+      secondary: { hex: "#888888", label: "text-secondary" },
+      muted:     { hex: "#555555", label: "text-muted" },
+      inverse:   { hex: "#0d0d0d", label: "text-inverse" },
+    },
+  },
+
+  subtle: {
+    label: "Subtle Warm",
+    subtitle: "Just enough warmth to feel non-technical",
+    bg: {
+      base:     { hex: "#0e0d0c", label: "bg-base" },
+      pane:     { hex: "#131210", label: "bg-pane" },
+      theater:  { hex: "#0b0a09", label: "bg-theater" },
+      elevated: { hex: "#1b1a18", label: "bg-elevated" },
+      hover:    { hex: "#232220", label: "bg-hover" },
+      active:   { hex: "#2b2a27", label: "bg-active" },
+    },
+    border: {
+      standard: { hex: "#2b2923", label: "border" },
+      subtle:   { hex: "#211f1a", label: "border-subtle" },
+    },
+    text: {
+      primary:   { hex: "#e8e6e1", label: "text-primary" },
+      secondary: { hex: "#8a8680", label: "text-secondary" },
+      muted:     { hex: "#57544d", label: "text-muted" },
+      inverse:   { hex: "#0e0d0c", label: "text-inverse" },
+    },
+  },
+
+  warm: {
+    label: "Warm",
+    subtitle: "Bear-like warmth — inviting, literary",
+    bg: {
+      base:     { hex: "#100f0c", label: "bg-base" },
+      pane:     { hex: "#15140f", label: "bg-pane" },
+      theater:  { hex: "#0c0b08", label: "bg-theater" },
+      elevated: { hex: "#1d1b16", label: "bg-elevated" },
+      hover:    { hex: "#262318", label: "bg-hover" },
+      active:   { hex: "#2e2b21", label: "bg-active" },
+    },
+    border: {
+      standard: { hex: "#2d291f", label: "border" },
+      subtle:   { hex: "#221f17", label: "border-subtle" },
+    },
+    text: {
+      primary:   { hex: "#e7e4dc", label: "text-primary" },
+      secondary: { hex: "#8c867a", label: "text-secondary" },
+      muted:     { hex: "#595349", label: "text-muted" },
+      inverse:   { hex: "#100f0c", label: "text-inverse" },
+    },
+  },
+
+  deep: {
+    label: "Deep Warm",
+    subtitle: "Richer, more tinted — amber/sepia undertones",
+    bg: {
+      base:     { hex: "#110f0a", label: "bg-base" },
+      pane:     { hex: "#17140d", label: "bg-pane" },
+      theater:  { hex: "#0d0b07", label: "bg-theater" },
+      elevated: { hex: "#1f1c14", label: "bg-elevated" },
+      hover:    { hex: "#282416", label: "bg-hover" },
+      active:   { hex: "#312c1e", label: "bg-active" },
+    },
+    border: {
+      standard: { hex: "#30291b", label: "border" },
+      subtle:   { hex: "#241f14", label: "border-subtle" },
+    },
+    text: {
+      primary:   { hex: "#e6e2d7", label: "text-primary" },
+      secondary: { hex: "#8e8672", label: "text-secondary" },
+      muted:     { hex: "#5c5443", label: "text-muted" },
+      inverse:   { hex: "#110f0a", label: "text-inverse" },
+    },
+  },
+};
+
+// ─── Swatch Component ───
+
+const swatchStyles = {
+  row: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "6px 0",
+  },
+  chip: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    flexShrink: 0,
+    border: "1px solid rgba(255,255,255,0.06)",
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: 500,
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    letterSpacing: "0.02em",
+  },
+  hex: {
+    fontSize: 11,
+    fontFamily: "'DM Mono', 'JetBrains Mono', monospace",
+    opacity: 0.5,
+    marginTop: 2,
+  },
+};
+
+function Swatch({ hex, label, textColor = "#c8c8c8" }) {
+  return (
+    <div style={swatchStyles.row}>
+      <div style={{ ...swatchStyles.chip, background: hex }}></div>
+      <div>
+        <div style={{ ...swatchStyles.label, color: textColor }}>{label}</div>
+        <div style={{ ...swatchStyles.hex, color: textColor }}>{hex}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pane Preview Component ───
+
+function PanePreview({ palette }) {
+  const p = palette;
+  return (
+    <div style={{
+      display: "flex",
+      borderRadius: 10,
+      overflow: "hidden",
+      height: 280,
+      border: `1px solid ${p.border.standard.hex}`,
+    }}>
+      {/* Left pane */}
+      <div style={{
+        width: 100,
+        background: p.bg.pane.hex,
+        padding: 12,
+        borderRight: `1px solid ${p.border.standard.hex}`,
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+          Navigator
+        </div>
+        {["Chapter 1", "Chapter 2", "Chapter 3", "Notes"].map((t, i) => (
+          <div key={i} style={{
+            padding: "5px 8px",
+            borderRadius: 4,
+            fontSize: 11,
+            color: i === 1 ? p.text.primary.hex : p.text.secondary.hex,
+            background: i === 1 ? p.bg.active.hex : "transparent",
+            cursor: "pointer",
+          }}>
+            {t}
+          </div>
+        ))}
+      </div>
+
+      {/* Center (Theater) */}
+      <div style={{
+        flex: 1,
+        background: p.bg.theater.hex,
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        overflow: "hidden",
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Theater
+        </div>
+        {/* User bubble */}
+        <div style={{
+          alignSelf: "flex-end",
+          maxWidth: "70%",
+          padding: "8px 12px",
+          borderRadius: 8,
+          background: "rgba(124, 58, 237, 0.08)",
+          border: "1px solid rgba(124, 58, 237, 0.15)",
+        }}>
+          <div style={{ fontSize: 10, color: p.text.primary.hex, lineHeight: 1.5 }}>
+            Write a tense dialogue between the two brothers…
+          </div>
+        </div>
+        {/* AI bubble */}
+        <div style={{
+          maxWidth: "80%",
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: p.bg.elevated.hex,
+          border: `1px solid ${p.border.subtle.hex}`,
+        }}>
+          <div style={{ fontSize: 10, color: p.text.primary.hex, lineHeight: 1.6, fontStyle: "italic" }}>
+            The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down carefully, as if the sound might shatter something…
+          </div>
+        </div>
+        {/* Feedback strip preview */}
+        <div style={{
+          maxWidth: "80%",
+          padding: "4px 8px",
+          borderLeft: "2px solid #f59e0b",
+          background: "rgba(245, 158, 11, 0.05)",
+          fontSize: 9,
+          color: p.text.secondary.hex,
+        }}>
+          Great pacing here — keep this tension
+        </div>
+      </div>
+
+      {/* Right pane */}
+      <div style={{
+        width: 90,
+        background: p.bg.pane.hex,
+        padding: 10,
+        borderLeft: `1px solid ${p.border.standard.hex}`,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Controls
+        </div>
+        <div style={{ fontSize: 9, color: p.text.secondary.hex }}>Context Docs</div>
+        <div style={{
+          padding: "4px 6px",
+          borderRadius: 4,
+          background: p.bg.elevated.hex,
+          fontSize: 9,
+          color: p.text.primary.hex,
+          border: `1px solid ${p.border.subtle.hex}`,
+        }}>
+          World Bible
+        </div>
+        <div style={{
+          padding: "4px 6px",
+          borderRadius: 4,
+          background: p.bg.elevated.hex,
+          fontSize: 9,
+          color: p.text.primary.hex,
+          border: `1px solid ${p.border.subtle.hex}`,
+        }}>
+          Characters
+        </div>
+        <div style={{ fontSize: 9, color: p.text.muted.hex, marginTop: 4 }}>● Idle</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Text Readability Preview ───
+
+function TextPreview({ palette }) {
+  const p = palette;
+  return (
+    <div style={{
+      background: p.bg.theater.hex,
+      borderRadius: 10,
+      padding: 20,
+      border: `1px solid ${p.border.subtle.hex}`,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+        Text Readability
+      </div>
+      <div style={{ color: p.text.primary.hex, fontSize: 14, lineHeight: 1.7, marginBottom: 10 }}>
+        The morning light caught the edge of the window frame, casting thin gold lines across the floor. She sat perfectly still, listening.
+      </div>
+      <div style={{ color: p.text.secondary.hex, fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}>
+        Secondary text — metadata, descriptions, supporting content that shouldn't compete with the prose but must remain readable.
+      </div>
+      <div style={{ color: p.text.muted.hex, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        Muted section header · timestamps · placeholder
+      </div>
+    </div>
+  );
+}
+
+// ─── Surface Hierarchy ───
+
+function SurfaceStack({ palette }) {
+  const p = palette;
+  return (
+    <div style={{
+      background: p.bg.base.hex,
+      borderRadius: 10,
+      padding: 16,
+      border: `1px solid ${p.border.subtle.hex}`,
+      display: "flex",
+      flexDirection: "column",
+      gap: 2,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+        Surface Hierarchy
+      </div>
+      {[
+        { bg: p.bg.theater.hex, label: "Theater (deepest)", border: false },
+        { bg: p.bg.base.hex, label: "Base", border: false },
+        { bg: p.bg.pane.hex, label: "Pane", border: false },
+        { bg: p.bg.elevated.hex, label: "Elevated (cards, dropdowns)", border: true },
+        { bg: p.bg.hover.hex, label: "Hover state", border: true },
+        { bg: p.bg.active.hex, label: "Active/selected", border: true },
+      ].map((s, i) => (
+        <div key={i} style={{
+          background: s.bg,
+          padding: "10px 14px",
+          borderRadius: 6,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          border: s.border ? `1px solid ${p.border.subtle.hex}` : "1px solid transparent",
+        }}>
+          <span style={{ fontSize: 11, color: p.text.secondary.hex }}>{s.label}</span>
+          <span style={{ fontSize: 10, fontFamily: "monospace", color: p.text.muted.hex }}>{s.bg}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Border Preview ───
+
+function BorderPreview({ palette }) {
+  const p = palette;
+  return (
+    <div style={{
+      background: p.bg.pane.hex,
+      borderRadius: 10,
+      padding: 16,
+      border: `1px solid ${p.border.standard.hex}`,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: p.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+        Borders &amp; Dividers
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ height: 1, background: p.border.standard.hex, marginBottom: 6 }}></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: p.text.secondary.hex }}>Standard border</span>
+            <span style={{ fontSize: 10, fontFamily: "monospace", color: p.text.muted.hex }}>{p.border.standard.hex}</span>
+          </div>
+        </div>
+        <div>
+          <div style={{ height: 1, background: p.border.subtle.hex, marginBottom: 6 }}></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: p.text.secondary.hex }}>Subtle border</span>
+            <span style={{ fontSize: 10, fontFamily: "monospace", color: p.text.muted.hex }}>{p.border.subtle.hex}</span>
+          </div>
+        </div>
+        {/* Input preview */}
+        <div style={{
+          padding: "8px 12px",
+          borderRadius: 4,
+          border: `1px solid ${p.border.standard.hex}`,
+          background: p.bg.elevated.hex,
+          fontSize: 11,
+          color: p.text.muted.hex,
+        }}>
+          Input field placeholder…
+        </div>
+        {/* Card preview */}
+        <div style={{
+          padding: 12,
+          borderRadius: 6,
+          border: `1px solid ${p.border.subtle.hex}`,
+          background: p.bg.elevated.hex,
+        }}>
+          <div style={{ fontSize: 11, color: p.text.primary.hex, marginBottom: 4 }}>Card Surface</div>
+          <div style={{ fontSize: 10, color: p.text.secondary.hex }}>Elevated content sits on this layer</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Palette Card ───
+
+function PaletteCard({ paletteKey, palette }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Swatch grid */}
+      <div style={{
+        background: palette.bg.base.hex,
+        borderRadius: 10,
+        padding: 20,
+        border: `1px solid ${palette.border.subtle.hex}`,
+      }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 500, color: palette.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+              Backgrounds
+            </div>
+            {Object.values(palette.bg).map((s, i) => (
+              <Swatch key={i} hex={s.hex} label={s.label} textColor={palette.text.secondary.hex} />
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 500, color: palette.text.muted.hex, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+              Text &amp; Borders
+            </div>
+            {Object.values(palette.text).map((s, i) => (
+              <Swatch key={i} hex={s.hex} label={s.label} textColor={palette.text.secondary.hex} />
+            ))}
+            <div style={{ height: 8 }}></div>
+            {Object.values(palette.border).map((s, i) => (
+              <Swatch key={i} hex={s.hex} label={s.label} textColor={palette.text.secondary.hex} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <SurfaceStack palette={palette} />
+      <TextPreview palette={palette} />
+      <PanePreview palette={palette} />
+      <BorderPreview palette={palette} />
+    </div>
+  );
+}
+
+// ─── App ───
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  return (
+    <DesignCanvas
+      title="LOOM — Phase 0A: Color Palette"
+      subtitle="Warm dark background hierarchy — pick a warmth level"
+      background="#080808"
+    >
+      <DCSection id="palettes" title="Warmth Comparison">
+        <DCArtboard id="neutral" label="Current Spec (Neutral)" subtitle="Pure grays from Doc 08 — reference only" width={440} height={1120}>
+          <PaletteCard paletteKey="neutral" palette={palettes.neutral} />
+        </DCArtboard>
+        <DCArtboard id="subtle" label="Subtle Warm" subtitle="Just barely warm — feels non-technical" width={440} height={1120}>
+          <PaletteCard paletteKey="subtle" palette={palettes.subtle} />
+        </DCArtboard>
+        <DCArtboard id="warm" label="Warm (Recommended)" subtitle="Bear-like warmth — inviting, literary feel" width={440} height={1120}>
+          <PaletteCard paletteKey="warm" palette={palettes.warm} />
+        </DCArtboard>
+        <DCArtboard id="deep" label="Deep Warm" subtitle="Richer — amber/sepia undertones, very editorial" width={440} height={1120}>
+          <PaletteCard paletteKey="deep" palette={palettes.deep} />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="semantic" title="Semantic Colors (Shared Across All Palettes)">
+        <DCArtboard id="semantic-colors" label="Fixed Semantic Tokens" subtitle="These don't change with warmth level" width={440} height={380}>
+          <div style={{
+            background: palettes[t.warmth]?.bg.base.hex || palettes.warm.bg.base.hex,
+            borderRadius: 10,
+            padding: 20,
+            border: `1px solid ${palettes[t.warmth]?.border.subtle.hex || palettes.warm.border.subtle.hex}`,
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 500, color: "#595349", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+              Semantic Colors
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[
+                { hex: "#10b981", label: "success", desc: "Positive confirmations" },
+                { hex: "#f59e0b", label: "warning", desc: "Warnings, rate limits" },
+                { hex: "#f43f5e", label: "error", desc: "Error states, destructive" },
+              ].map((c, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: c.hex, flexShrink: 0 }}></div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "#e7e4dc" }}>{c.label}</div>
+                    <div style={{ fontSize: 10, color: "#8c867a", marginTop: 1 }}>{c.hex} · {c.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="selection" label="Selection Color" subtitle="Accent at 40% alpha over warm backgrounds" width={440} height={200}>
+          <div style={{
+            background: palettes[t.warmth]?.bg.theater.hex || palettes.warm.bg.theater.hex,
+            borderRadius: 10,
+            padding: 20,
+            border: `1px solid ${palettes[t.warmth]?.border.subtle.hex || palettes.warm.border.subtle.hex}`,
+          }}>
+            <div style={{ fontSize: 14, color: "#e7e4dc", lineHeight: 1.7 }}>
+              The morning light caught the edge of the
+              <span style={{ background: "rgba(124, 58, 237, 0.4)", color: "#e7e4dc", padding: "1px 0" }}> window frame, casting thin gold lines </span>
+              across the floor.
+            </div>
+            <div style={{ fontSize: 10, color: "#595349", marginTop: 8 }}>
+              ::selection uses accent at 40% alpha
+            </div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="notes" title="Design Notes">
+        <DCArtboard id="rationale" label="Rationale" width={440} height={440}>
+          <div style={{
+            background: "#15140f",
+            borderRadius: 10,
+            padding: 24,
+            border: "1px solid #2d291f",
+            color: "#8c867a",
+            fontSize: 12,
+            lineHeight: 1.7,
+          }}>
+            <div style={{ color: "#e7e4dc", fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Why warm?</div>
+            <p style={{ marginBottom: 10 }}>
+              LOOM is a creative writing environment. Pure neutral grays (#0d0d0d → #2a2a2a) read as "code editor" — precise, clinical. Writers need an interface that feels inviting, like a well-lit study or a quality notebook.
+            </p>
+            <p style={{ marginBottom: 10 }}>
+              The warm shift is subtle — you feel it more than you see it. The undertone comes from pushing grays toward amber/brown in oklch color space, keeping the same lightness levels as the original spec.
+            </p>
+            <div style={{ color: "#e7e4dc", fontSize: 13, fontWeight: 500, marginBottom: 8, marginTop: 16 }}>Key choices</div>
+            <ul style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+              <li>Theater is the darkest surface — the prose reading area recedes, content floats</li>
+              <li>Panes are slightly lighter — spatial separation without harsh dividers</li>
+              <li>Text has matching warmth — #e7e4dc instead of #e8e8e8 prevents the text from feeling "cold on warm"</li>
+              <li>Borders pick up the warmth too — they blend rather than cut</li>
+            </ul>
+            <div style={{ color: "#e7e4dc", fontSize: 13, fontWeight: 500, marginBottom: 8, marginTop: 16 }}>Recommendation</div>
+            <p>
+              "Warm" hits the sweet spot — literary without being muddy, distinguishable from neutral but not tinted enough to clash with accent colors. "Deep Warm" is a bold option if you want a more distinctive identity.
+            </p>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="scrollbar" label="Scrollbar Spec" width={440} height={200}>
+          <div style={{
+            background: "#15140f",
+            borderRadius: 10,
+            padding: 20,
+            border: "1px solid #2d291f",
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 500, color: "#595349", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+              Scrollbar (per Doc 08)
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{
+                width: 6,
+                height: 80,
+                borderRadius: 3,
+                background: "#2d291f",
+                position: "relative",
+              }}>
+                <div style={{
+                  position: "absolute",
+                  top: 10,
+                  width: 6,
+                  height: 30,
+                  borderRadius: 3,
+                  background: "#595349",
+                }}></div>
+              </div>
+              <div style={{ fontSize: 11, color: "#8c867a", lineHeight: 1.6 }}>
+                <div>Track: transparent</div>
+                <div>Thumb: <span style={{ color: "#e7e4dc" }}>border token</span> (#2d291f)</div>
+                <div>Thumb hover: <span style={{ color: "#e7e4dc" }}>text-muted</span> (#595349)</div>
+                <div>Width: 6px</div>
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <TweaksPanel>
+        <TweakSection label="Active Preview">
+          <TweakRadio
+            label="Semantic colors render with"
+            value={t.warmth}
+            onChange={(v) => setTweak("warmth", v)}
+            options={[
+              { label: "Subtle", value: "subtle" },
+              { label: "Warm", value: "warm" },
+              { label: "Deep", value: "deep" },
+            ]}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

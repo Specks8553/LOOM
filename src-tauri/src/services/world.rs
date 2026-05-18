@@ -31,9 +31,9 @@ use crate::db::migrations::MigrationRoot;
 use crate::error::LoomError;
 use crate::services::config::{self, WorldEntry};
 
-/// Default accent color for new worlds (Doc 08 §Accent — orange #f97316).
+/// Default accent color for new worlds (Doc 08 §Accent — Sage #6b9f78).
 /// World creator can change it from Settings later.
-const DEFAULT_ACCENT_COLOR: &str = "#f97316";
+const DEFAULT_ACCENT_COLOR: &str = "#6b9f78";
 
 /// `world_meta.json` payload — matches Doc 03 §`world_meta.json`.
 ///

@@ -16,7 +16,6 @@ use loom_app_lib::db::conversation_sessions::ConversationSession;
 use loom_app_lib::db::messages::ChatMessage;
 use loom_app_lib::db::templates::Template;
 use loom_app_lib::db::vault::{ImageAssetMeta, VaultItemMeta};
-use loom_app_lib::services::settings::ResolvedSettings;
 use loom_app_lib::error::{LoomError, ValidationKind};
 use loom_app_lib::security::sentinel::Sentinel;
 use loom_app_lib::services::config::{AppConfig, WorldEntry};
@@ -25,6 +24,7 @@ use loom_app_lib::services::history::UserContent;
 use loom_app_lib::services::modes::{
     AccordionSnapshotEntry, AttachedDocEntry, SessionKind, SessionSnapshot,
 };
+use loom_app_lib::services::settings::ResolvedSettings;
 use loom_app_lib::services::world::{WorldMeta, WorldMetaPatch};
 use loom_app_lib::AppPhase;
 use ts_rs::TS;

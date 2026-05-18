@@ -1,13 +1,14 @@
 # 08 — Design Tokens
 
-> **Status:** Complete — values provisional, marked for visual design pass
-> **Last updated:** 2026-05-04 — Feedback design pass (D-17): `--color-feedback` promoted from a single Semantic token to a triad (`--color-feedback`, `-hover`, `-subtle`) under Feature Colors. Default hex `#f59e0b` (matches `--color-warning` but independent — see Doc 28 §Visual Tokens); world-overridable via `feedback_color` (Doc 03). `applyTheme(snapshot)` snapshot now carries `feedback`.
+> **Status:** Complete — values finalized per the Designfiles visual design pass
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): adopted the approved warm palette, Sage accent default, and Plus Jakarta Sans / Source Serif 4 / Source Code Pro font stacks from `docs-v2/design/Designfiles/` (`tokens.jsx` + the Phase 0A–0D mockups). All ⚠️ provisional markers cleared — values are now final. The accent-subtle overlay base changed from `#0d0d0d` to `#100f0c`; the shadcn RGB mirror was updated to the warm hexes.
+> **Earlier:** 2026-05-04 — Feedback design pass (D-17): `--color-feedback` promoted from a single Semantic token to a triad (`--color-feedback`, `-hover`, `-subtle`) under Feature Colors. Default hex `#f59e0b` (matches `--color-warning` but independent — see Doc 28 §Visual Tokens); world-overridable via `feedback_color` (Doc 03). `applyTheme(snapshot)` snapshot now carries `feedback`.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: Ghostwriter token names switched to triad pattern (`--color-ghostwriter`, `-hover`, `-subtle`, `-diff`), mirroring accent (CD-2); five-function Runtime Theme API replaced by single `applyTheme(snapshot)` (CD-1, owned by Doc 20); `--color-checkpoint` retention note removed (CD-3 — Doc 16 banners use it).
 > **Earlier:** 2026-04-26
 
-The single source of all design values. Any value not defined here does not exist as a design value. Components reference tokens only — no hex codes, no hardcoded pixel sizes, no raw Tailwind color utilities in component files.
+The single source of all design **values**. Any value not defined here does not exist as a design value. Components reference tokens only — no hex codes, no hardcoded pixel sizes, no raw Tailwind color utilities in component files.
 
-**Provisional values** are carried forward from v1.0 and marked ⚠️. They are correct enough to build with and will be refined in a visual design pass without touching component code.
+**Design decisions live in `docs-v2/design/Designfiles/`.** That directory holds the approved visual mockups (`tokens.jsx` + the Phase 0A–0D / Phase 1 / Phase 2 canvases) — the canonical source for *which* palette, accent, fonts, and component treatments LOOM uses, and the rationale behind them. Doc 08 codifies those decisions as the implementation token spec: the values below are kept in sync with `Designfiles/`. If the two disagree, `Designfiles/` is authoritative for the decision and Doc 08 must be reconciled.
 
 ---
 
@@ -37,28 +38,28 @@ className="text-[--color-text-primary] bg-[--color-bg-elevated]"
 
 | Token | Value | Use |
 |---|---|---|
-| `--color-bg-base` | `#0d0d0d` | App-level background; outermost layer |
-| `--color-bg-pane` | `#111111` | Left and right pane backgrounds |
-| `--color-bg-theater` | `#0a0a0a` | Theater (center pane) background — slightly darker than base |
-| `--color-bg-elevated` | `#1a1a1a` ⚠️ | Cards, dropdowns, AI bubbles — one step above pane |
-| `--color-bg-hover` | `#222222` ⚠️ | Hover state background for interactive items |
-| `--color-bg-active` | `#2a2a2a` ⚠️ | Active/selected state background |
+| `--color-bg-base` | `#100f0c` | App-level background; outermost layer |
+| `--color-bg-pane` | `#15140f` | Left and right pane backgrounds |
+| `--color-bg-theater` | `#0c0b08` | Theater (center pane) background — slightly darker than base |
+| `--color-bg-elevated` | `#1d1b16` | Cards, dropdowns, AI bubbles — one step above pane |
+| `--color-bg-hover` | `#262318` | Hover state background for interactive items |
+| `--color-bg-active` | `#2e2b21` | Active/selected state background |
 
 ### Border
 
 | Token | Value | Use |
 |---|---|---|
-| `--color-border` | `#2a2a2a` ⚠️ | Standard dividers, pane edges, input outlines |
-| `--color-border-subtle` | `#1f1f1f` ⚠️ | Low-emphasis dividers, code block borders |
+| `--color-border` | `#2d291f` | Standard dividers, pane edges, input outlines |
+| `--color-border-subtle` | `#221f17` | Low-emphasis dividers, code block borders |
 
 ### Text
 
 | Token | Value | Use |
 |---|---|---|
-| `--color-text-primary` | `#e8e8e8` | Main content text |
-| `--color-text-secondary` | `#888888` ⚠️ | Supporting text, metadata, descriptions |
-| `--color-text-muted` | `#555555` ⚠️ | Pane section headers (11px uppercase), placeholder text |
-| `--color-text-inverse` | `#0d0d0d` | Text on light/accent backgrounds |
+| `--color-text-primary` | `#e7e4dc` | Main content text |
+| `--color-text-secondary` | `#8c867a` | Supporting text, metadata, descriptions |
+| `--color-text-muted` | `#595349` | Pane section headers (11px uppercase), placeholder text |
+| `--color-text-inverse` | `#100f0c` | Text on light/accent backgrounds |
 | `--color-text-on-accent` | `#ffffff` | Text placed directly on `--color-accent` |
 
 ### Accent (User-Configurable — Runtime)
@@ -67,12 +68,14 @@ These are set at runtime by `applyAccentColor()`. The CSS file defines defaults;
 
 | Token | Default | Derived how |
 |---|---|---|
-| `--color-accent` | `#7c3aed` | Raw value from world settings |
+| `--color-accent` | `#6b9f78` (Sage) | Raw value from world settings |
 | `--color-accent-hover` | computed | Darkened 10% in HSL lightness |
-| `--color-accent-subtle` | computed | 8% alpha overlay on `#0d0d0d` background |
+| `--color-accent-subtle` | computed | 8% alpha overlay on `--color-bg-base` (`#100f0c`) |
 | `--color-accent-text` | computed | Lightened 35% in HSL lightness — for text on dark background |
 
 See **Accent Color System** section below for the derivation algorithm.
+
+**Accent presets.** The Settings accent picker offers six presets (one is the default); any hex is also valid. Per `Designfiles/Phase 0B`: Violet `#7c3aed`, Lavender `#8b6cc1`, Teal `#2aa198`, Ember `#c87941`, Sage `#6b9f78` (default), Dusty Rose `#c2667a`.
 
 ### Semantic (Fixed)
 
@@ -98,7 +101,7 @@ Each feature colour follows the same triad as accent (`<feature>`, `-hover`, `-s
 | `--color-accordion-hover` | derived (darken 10%) | Accordion banner hover |
 | `--color-accordion-subtle` | derived (8% alpha) | Accordion banner background tint |
 | `--color-checkpoint` | `var(--color-accent)` | Checkpoint banner accent in Theater (Doc 16 / Doc 27) |
-| `--color-feedback` | `#f59e0b` ⚠️ | Feedback annotation strip border + action-row icon when non-empty (Doc 28). Default does **not** track accent — feedback uses a stable amber by default, but the world override is independent and triad-derived like other features. |
+| `--color-feedback` | `#f59e0b` | Feedback annotation strip border + action-row icon when non-empty (Doc 28). Default does **not** track accent — feedback uses a stable amber by default, but the world override is independent and triad-derived like other features. |
 | `--color-feedback-hover` | derived (darken 10%) | Hover state on the feedback strip and the action-row entry |
 | `--color-feedback-subtle` | derived (~6% alpha) | Feedback strip background fill |
 
@@ -107,7 +110,7 @@ Each feature colour follows the same triad as accent (`<feature>`, `-hover`, `-s
 | Token | Default | Derived from |
 |---|---|---|
 | `--bubble-user-bg` | `var(--color-accent-subtle)` | Tracks accent unless overridden in world settings |
-| `--bubble-ai-bg` | `#1a1a1a` ⚠️ | Fixed default; overridable in world settings |
+| `--bubble-ai-bg` | `#1d1b16` | Fixed default; overridable in world settings |
 
 ---
 
@@ -119,15 +122,17 @@ Three font stacks, all bundled locally as woff2 — no CDN.
 
 | Token | Stack | Use |
 |---|---|---|
-| `--font-sans` | `"Inter", system-ui, -apple-system, sans-serif` | All UI text |
-| `--font-serif` | `"Lora", "Georgia", serif` | Theater prose body ⚠️ |
-| `--font-mono` | `"JetBrains Mono", "Fira Code", "Consolas", monospace` | Code blocks, technical content |
-| `--font-theater-body` | `var(--font-serif)` | Runtime-switchable; set by `applyBodyFont()` |
+| `--font-sans` | `"Plus Jakarta Sans", system-ui, -apple-system, sans-serif` | All UI text |
+| `--font-serif` | `"Source Serif 4", "Georgia", serif` | Theater prose body |
+| `--font-mono` | `"Source Code Pro", "Consolas", monospace` | Code blocks, technical content |
+| `--font-theater-body` | `var(--font-serif)` | Runtime-switchable per world; set by `applyTheme()` |
 
 **Bundled weights:**
-- Inter: 400, 500, 600
-- Lora: 400, 400 italic, 500
-- JetBrains Mono: 400, 500
+- Plus Jakarta Sans: 400, 500, 600 (+ 400 italic)
+- Source Serif 4: 400, 400 italic, 500, 600
+- Source Code Pro: 400, 500
+
+The default font pairing is *Quiet Editorial* (`Designfiles/Phase 0C`). The prose serif is runtime-switchable per world via `--font-theater-body`; UI sans and mono are fixed.
 
 ### Type Scale
 
@@ -139,7 +144,7 @@ All sizes are fixed — no fluid/responsive scaling. Desktop only.
 | UI body | `13px` | 400 | sans | Default body; set on `html` element |
 | UI label | `13px` | 500 | sans | Form labels, button text |
 | UI small | `12px` | 400 | sans | Timestamps, metadata, badges |
-| Prose body | `15px` ⚠️ | 400 | serif | Theater AI bubble text |
+| Prose body | `15px` | 400 | serif | Theater AI bubble text |
 | Prose heading h1 | `1.3em` | 600 | sans | In AI markdown output |
 | Prose heading h2 | `1.15em` | 600 | sans | In AI markdown output |
 | Prose heading h3 | `1em` | 600 | sans | In AI markdown output |
@@ -152,7 +157,7 @@ All sizes are fixed — no fluid/responsive scaling. Desktop only.
 | Context | Value |
 |---|---|
 | Default UI | `1.5` (set on `html`) |
-| Prose content | `1.7` ⚠️ — generous for long-form reading |
+| Prose content | `1.7` — generous for long-form reading |
 | Code blocks | `1.5` |
 
 ---
@@ -170,10 +175,10 @@ No custom spacing tokens defined — Tailwind's default spacing scale is used (`
 | Token | Value | Use |
 |---|---|---|
 | `--radius` (shadcn) | `0.375rem` (6px) | shadcn/ui base radius |
-| `--radius-bubble` | `10px` ⚠️ | Message bubble corners |
-| `--radius-card` | `6px` ⚠️ | Cards, elevated surfaces |
-| `--radius-input` | `4px` ⚠️ | Input fields |
-| `--radius-sm` | `3px` ⚠️ | Badges, code spans |
+| `--radius-bubble` | `10px` | Message bubble corners |
+| `--radius-card` | `6px` | Cards, elevated surfaces |
+| `--radius-input` | `4px` | Input fields |
+| `--radius-sm` | `3px` | Badges, code spans |
 
 ---
 
@@ -205,26 +210,26 @@ Text selection uses the accent color at 40% alpha:
 
 ## shadcn/ui Override Tokens
 
-shadcn/ui components expect CSS variables in space-separated RGB format. These are maintained in parallel with LOOM's hex tokens. `applyAccentColor()` keeps `--primary` and `--ring` in sync with `--color-accent`.
+shadcn/ui components expect CSS variables in space-separated RGB format. These are maintained in parallel with LOOM's hex tokens. `applyTheme()` keeps `--primary` and `--ring` in sync with `--color-accent`.
 
 | shadcn token | RGB value | Tracks |
 |---|---|---|
-| `--background` | `10 10 10` | `--color-bg-base` |
-| `--foreground` | `232 232 232` | `--color-text-primary` |
-| `--card` | `26 26 26` | `--color-bg-elevated` |
-| `--card-foreground` | `232 232 232` | `--color-text-primary` |
-| `--popover` | `26 26 26` | `--color-bg-elevated` |
-| `--popover-foreground` | `232 232 232` | `--color-text-primary` |
-| `--primary` | runtime | `--color-accent` (updated by `applyAccentColor`) |
-| `--primary-foreground` | `13 13 13` | `--color-text-inverse` |
-| `--secondary` | `34 34 34` | `--color-bg-hover` |
-| `--secondary-foreground` | `232 232 232` | `--color-text-primary` |
-| `--muted` | `34 34 34` | `--color-bg-hover` |
-| `--muted-foreground` | `136 136 136` | `--color-text-secondary` |
+| `--background` | `16 15 12` | `--color-bg-base` |
+| `--foreground` | `231 228 220` | `--color-text-primary` |
+| `--card` | `29 27 22` | `--color-bg-elevated` |
+| `--card-foreground` | `231 228 220` | `--color-text-primary` |
+| `--popover` | `29 27 22` | `--color-bg-elevated` |
+| `--popover-foreground` | `231 228 220` | `--color-text-primary` |
+| `--primary` | runtime | `--color-accent` (updated by `applyTheme`) |
+| `--primary-foreground` | `16 15 12` | `--color-text-inverse` |
+| `--secondary` | `38 35 24` | `--color-bg-hover` |
+| `--secondary-foreground` | `231 228 220` | `--color-text-primary` |
+| `--muted` | `38 35 24` | `--color-bg-hover` |
+| `--muted-foreground` | `140 134 122` | `--color-text-secondary` |
 | `--destructive` | `244 63 94` | `--color-error` |
-| `--border` | `42 42 42` | `--color-border` |
-| `--input` | `34 34 34` | `--color-bg-hover` |
-| `--ring` | runtime | `--color-accent` (updated by `applyAccentColor`) |
+| `--border` | `45 41 31` | `--color-border` |
+| `--input` | `38 35 24` | `--color-bg-hover` |
+| `--ring` | runtime | `--color-accent` (updated by `applyTheme`) |
 | `--radius` | `0.375rem` | `--radius` |
 
 ---
@@ -239,7 +244,7 @@ The accent color is the only user-configurable color. One hex value per world; a
 input hex (#rrggbb)
   ├── --color-accent         = hex (raw)
   ├── --color-accent-hover   = darken(hex, 10%)    — HSL lightness −10
-  ├── --color-accent-subtle  = overlay(hex, 8%)    — alpha blend on #0d0d0d at 8%
+  ├── --color-accent-subtle  = overlay(hex, 8%)    — alpha blend on #100f0c at 8%
   └── --color-accent-text    = lighten(hex, 35%)   — HSL lightness +35
 ```
 

@@ -242,7 +242,7 @@ pub fn validate_setting(key: AppSettingKey, value: &str) -> Result<(), LoomError
             } else if is_blank_or_hex(value) {
                 Ok(())
             } else {
-                Err(invalid(key, "must be a hex colour like #7c3aed"))
+                Err(invalid(key, "must be a hex colour like #6b9f78"))
             }
         }
         K::BubbleUserColor
@@ -387,7 +387,7 @@ mod tests {
         let r = resolve_all(&world, &app).unwrap();
         assert_eq!(r.text_model_name, "gemini-2.5-flash");
         assert_eq!(r.gen_temperature, 1.0);
-        assert_eq!(r.accent_color, "#7c3aed");
+        assert_eq!(r.accent_color, "#6b9f78");
         assert_eq!(r.feedback_color, "#f59e0b");
         assert!(r.ghostwriter_color.is_empty());
         assert!(!r.has_api_key);
@@ -400,7 +400,7 @@ mod tests {
         assert!(validate_setting(AppSettingKey::GenTopK, "40").is_ok());
         assert!(validate_setting(AppSettingKey::GenTopK, "0").is_err());
         assert!(validate_setting(AppSettingKey::AccentColor, "#abc").is_ok());
-        assert!(validate_setting(AppSettingKey::AccentColor, "#7c3aed").is_ok());
+        assert!(validate_setting(AppSettingKey::AccentColor, "#6b9f78").is_ok());
         assert!(validate_setting(AppSettingKey::AccentColor, "purple").is_err());
         assert!(validate_setting(AppSettingKey::AccentColor, "").is_err());
         // Feature colours may be empty (track-accent) or hex.

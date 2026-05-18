@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 2: Theater (Story Mode)</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d291f; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #595349; }
+  ::selection { background: rgba(107,159,120,0.4); color: #e7e4dc; }
+  @keyframes dot-pulse { 0%,80%,100%{ opacity:0.3 } 40%{ opacity:1 } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="components/tokens.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "view": "story",
+  "modeSwitcherPos": "input",
+  "inputExpanded": false,
+  "isStreaming": false
+}/*EDITMODE-END*/;
+
+// ═══════════════════════════════════════════════
+// USER BUBBLE
+// ═══════════════════════════════════════════════
+
+function UserBubble({ plotDirection, background, modificators, constraints }) {
+  const [hovered, setHovered] = React.useState(false);
+  const hasExtras = background || (modificators && modificators.length > 0) || constraints;
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ alignSelf: "flex-end", maxWidth: "65%" }}
+    >
+      <div style={{
+        padding: "12px 16px", borderRadius: T.radiusBubble,
+        background: T.accentSub, border: `1px solid rgba(107,159,120,0.12)`,
+      }}>
+      {/* Plot Direction — always shown */}
+      <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>Plot Direction</div>
+      <div style={{ fontSize: 13, color: T.txtPri, lineHeight: 1.5 }}>{plotDirection}</div>
+
+      {/* Background — dimmed */}
+      {background && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, opacity: 0.7 }}>Background</div>
+          <div style={{ fontSize: 12, color: T.txtSec, lineHeight: 1.5 }}>{background}</div>
+        </div>
+      )}
+
+      {/* Modificators — chip row */}
+      {modificators && modificators.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+          {modificators.map((tag, i) => (
+            <span key={i} style={{
+              padding: "2px 8px", borderRadius: T.radiusSm, fontSize: 10,
+              background: "rgba(107,159,120,0.1)", color: T.accentText,
+            }}>{tag}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Constraints — dimmed italic */}
+      {constraints && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, opacity: 0.7 }}>Constraints</div>
+          <div style={{ fontSize: 12, color: T.txtMut, lineHeight: 1.4, fontStyle: "italic" }}>{constraints}</div>
+        </div>
+      )}
+      </div>
+
+      {/* Action Row — below bubble, visible on hover */}
+      <div style={{
+        display: "flex", gap: 2, marginTop: 4, paddingRight: 4,
+        justifyContent: "flex-end",
+      }}>
+        {[
+          { icon: "✎", label: "Edit" },
+          { icon: "×", label: "Delete", isDestructive: true },
+        ].map((a, i) => (
+          <ActionButton key={i} icon={a.icon} label={a.label} isDestructive={a.isDestructive} visible={hovered} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// ACTION BUTTON (shared)
+// ═══════════════════════════════════════════════
+
+function FeedbackDeleteBtn({ visible }) {
+  const [h, setH] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        fontSize: 12, cursor: visible ? "pointer" : "default", padding: "0 2px",
+        color: h && visible ? T.error : T.txtMut,
+        opacity: visible ? 1 : 0,
+        transition: "opacity 150ms ease, color 150ms ease",
+        flexShrink: 0,
+      }} title="Clear feedback">×</div>
+  );
+}
+
+function ActionButton({ icon, label, isDestructive, visible, accentOnHover }) {
+  const [btnHovered, setBtnHovered] = React.useState(false);
+  const baseColor = visible ? T.txtMut : "transparent";
+  const hoverColor = isDestructive ? T.error : (accentOnHover !== false ? T.accentText : T.txtPri);
+  return (
+    <div
+      onMouseEnter={() => setBtnHovered(true)}
+      onMouseLeave={() => setBtnHovered(false)}
+      style={{
+        display: "flex", alignItems: "center", gap: 3, fontSize: 11,
+        color: btnHovered && visible ? hoverColor : baseColor,
+        cursor: visible ? "pointer" : "default",
+        padding: "3px 8px", borderRadius: 4,
+        transition: "color 150ms ease",
+      }}>
+      <span style={{ fontSize: icon === "×" ? 13 : 12 }}>{icon}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// AI BUBBLE
+// ═══════════════════════════════════════════════
+
+function AiBubble({ children, streaming, feedback, hoverable = true }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => hoverable && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ maxWidth: "80%", position: "relative" }}
+    >
+      {/* Main bubble */}
+      <div style={{
+        padding: "16px 22px", borderRadius: T.radiusBubble,
+        background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        position: "relative", zIndex: 2,
+      }}>
+        <div style={{
+          fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7,
+        }}>
+          {children}
+        </div>
+        {streaming && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 5, height: 5, borderRadius: 3, background: T.txtMut,
+                animation: `dot-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }}></div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Feedback card — tucked under the bubble */}
+      {feedback && (
+        <div style={{
+          marginTop: -6, paddingTop: 12, paddingBottom: 8, paddingLeft: 14, paddingRight: 10,
+          background: T.bgPane, border: `1px solid ${T.borderSub}`,
+          borderTop: "none",
+          borderRadius: `0 0 ${T.radiusBubble}px ${T.radiusBubble}px`,
+          position: "relative", zIndex: 1,
+          display: "flex", alignItems: "flex-start", gap: 8,
+        }}>
+          <div style={{
+            width: 2, flexShrink: 0, alignSelf: "stretch",
+            background: T.feedback, borderRadius: 1, marginTop: 1, marginBottom: 1,
+          }}></div>
+          <div style={{
+            flex: 1, fontSize: 11, color: T.txtSec, lineHeight: 1.4,
+            cursor: "text",
+          }}>
+            {feedback}
+          </div>
+          <FeedbackDeleteBtn visible={hovered} />
+        </div>
+      )}
+
+      {/* Action Row — below everything, visible on hover */}
+      {!streaming && (
+        <div style={{
+          display: "flex", gap: 2, marginTop: 4, paddingLeft: 4,
+        }}>
+          {[
+            { icon: "✦", label: "Ghostwriter" },
+            { icon: "◎", label: "Feedback" },
+            { icon: "⟳", label: "Regenerate" },
+            { icon: "×", label: "Delete", isDestructive: true },
+          ].map((a, i) => (
+            <ActionButton key={i} icon={a.icon} label={a.label} isDestructive={a.isDestructive} visible={hovered} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// INPUT AREA
+// ═══════════════════════════════════════════════
+
+function InputArea({ expanded, onToggleExpand, modeSwitcherPos, isStreaming }) {
+  const activeMode = "story";
+
+  return (
+    <div style={{
+      padding: "10px 20px 14px", borderTop: `1px solid ${T.borderSub}`,
+      background: T.bgTheater, flexShrink: 0,
+    }}>
+      {/* Mode switcher inside input area */}
+      {modeSwitcherPos === "input" && (
+        <div style={{
+          display: "flex", gap: 0, marginBottom: 8,
+        }}>
+          {["Story", "Handover", "Consulting"].map((m, i) => (
+            <div key={i} style={{
+              padding: "5px 12px", fontSize: 11, fontWeight: i === 0 ? 500 : 400,
+              color: i === 0 ? T.txtPri : T.txtMut,
+              borderRadius: 4,
+              background: i === 0 ? T.bgActive : "transparent",
+              cursor: "pointer",
+              transition: "all 150ms ease",
+            }}>{m}</div>
+          ))}
+        </div>
+      )}
+
+      <div style={{
+        background: T.bgPane, borderRadius: 8, padding: "10px 14px",
+        border: `1px solid ${T.borderSub}`,
+        display: "flex", flexDirection: "column", gap: 0,
+      }}>
+        {/* Plot Direction — always visible */}
+        <div>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 4,
+          }}>
+            <span style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em" }}>Plot Direction</span>
+            {!expanded && activeMode === "story" && (
+              <span onClick={onToggleExpand} style={{
+                fontSize: 10, color: T.txtMut, cursor: "pointer",
+                padding: "1px 6px", borderRadius: 3, border: `1px solid ${T.borderSub}`,
+              }}>+ Fields</span>
+            )}
+          </div>
+          <div style={{
+            minHeight: 24, fontSize: 13, color: isStreaming ? T.txtMut : T.txtPri,
+            lineHeight: 1.5, outline: "none",
+          }} contentEditable={!isStreaming} suppressContentEditableWarning>
+            {isStreaming ? "" : ""}
+          </div>
+        </div>
+
+        {/* Expandable fields */}
+        {expanded && activeMode === "story" && (
+          <>
+            <div style={{ height: 1, background: T.borderSub, margin: "8px 0" }}></div>
+
+            {/* Background */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Background Information</span>
+                <span onClick={onToggleExpand} style={{
+                  fontSize: 10, color: T.txtMut, cursor: "pointer",
+                  padding: "1px 6px", borderRadius: 3, border: `1px solid ${T.borderSub}`,
+                }}>− Fields</span>
+              </div>
+              <div style={{
+                minHeight: 20, fontSize: 12, color: T.txtMut, lineHeight: 1.5,
+              }}>Context the model should know but readers shouldn't see…</div>
+            </div>
+
+            <div style={{ height: 1, background: T.borderSub, margin: "8px 0" }}></div>
+
+            {/* Modificators */}
+            <div>
+              <span style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Modificators</span>
+              <div style={{
+                display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4,
+                minHeight: 24, alignItems: "center",
+              }}>
+                <span style={{ fontSize: 12, color: T.txtMut }}>Style tags…</span>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: T.borderSub, margin: "8px 0" }}></div>
+
+            {/* Constraints */}
+            <div>
+              <span style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Constraints</span>
+              <div style={{
+                minHeight: 20, fontSize: 12, color: T.txtMut, lineHeight: 1.5, marginTop: 4,
+              }}>Rules for this turn…</div>
+            </div>
+          </>
+        )}
+
+        <div style={{ height: 1, background: T.borderSub, margin: "8px 0" }}></div>
+
+        {/* Bottom bar: token count + send */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 10, color: T.txtMut, fontFamily: T.mono }}>~8,420 tok</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {isStreaming ? (
+              <div style={{
+                padding: "6px 16px", borderRadius: 6,
+                background: "transparent", border: `1px solid ${T.border}`,
+                color: T.txtSec, fontSize: 12, fontWeight: 500, cursor: "pointer",
+              }}>Cancel</div>
+            ) : (
+              <div style={{
+                padding: "6px 16px", borderRadius: 6, background: T.accent,
+                color: T.txtOnAccent, fontSize: 12, fontWeight: 500, cursor: "pointer",
+              }}>Send</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// EMPTY STATE
+// ═══════════════════════════════════════════════
+
+function TheaterEmpty({ modeSwitcherPos, onToggleExpand, expanded }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgTheater,
+    }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        <div style={{ fontSize: 15, fontWeight: 500, color: T.txtPri }}>Your story begins here.</div>
+        <div style={{ fontSize: 13, color: T.txtSec }}>Write a direction and press Send to start.</div>
+      </div>
+      <InputArea expanded={expanded} onToggleExpand={onToggleExpand} modeSwitcherPos={modeSwitcherPos} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// STORY THREAD
+// ═══════════════════════════════════════════════
+
+function StoryThread({ modeSwitcherPos, expanded, onToggleExpand, isStreaming }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgTheater,
+    }}>
+      {/* Top mode switcher */}
+      {modeSwitcherPos === "top" && (
+        <div style={{
+          display: "flex", padding: "0 20px",
+          borderBottom: `1px solid ${T.borderSub}`, flexShrink: 0,
+        }}>
+          {["Story", "Handover", "Consulting"].map((m, i) => (
+            <div key={i} style={{
+              padding: "9px 16px", fontSize: 12, fontWeight: i === 0 ? 500 : 400,
+              color: i === 0 ? T.txtPri : T.txtSec,
+              borderBottom: i === 0 ? `2px solid ${T.accent}` : "2px solid transparent",
+              cursor: "pointer",
+            }}>{m}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Scroll Surface */}
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Collapsed chapter */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 14px", borderRadius: T.radiusCard,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▸</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, flex: 1 }}>Chapter 1 — The Letter</span>
+          <span style={{ fontSize: 11, color: T.txtMut }}>· 2,340 tok saved</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+
+        {/* Current chapter */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 14px", borderRadius: T.radiusCard,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▾</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, flex: 1 }}>Chapter 2 — The Arrival</span>
+          <span style={{ fontSize: 11, color: T.txtMut }}>· 4 messages so far</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+
+        {/* Exchange 1 */}
+        <UserBubble
+          plotDirection="Marcus arrives at the farmhouse unannounced. His brother David is already there, sitting in the kitchen. The will is on the table between them."
+          background="Marcus hasn't spoken to David in three years. Their father died two weeks ago. The farmhouse belongs to neither of them yet."
+          modificators={["noir", "tight pacing"]}
+          constraints="Keep scene under 400 words."
+        />
+
+        <AiBubble feedback="Great pacing — keep this tension through the next scene">
+          The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with unnatural precision — not gently, but <em>placed</em>, as if the sound might shatter something that had already been held together too long.
+          <br /><br />
+          "You read it," he said. Not a question.
+          <br /><br />
+          His brother leaned against the counter, arms folded, staring at the linoleum. "I read it." A beat. "Did you expect me not to?"
+          <br /><br />
+          The envelope sat between them on the kitchen table, its broken seal facing up like an accusation. Marcus hadn't expected David to be here at all — hadn't expected the lights on, the coffee made, the quiet domesticity of a man who'd driven four hours in the dark to sit in a dead man's kitchen.
+          <br /><br />
+          "I expected you to wait," Marcus said.
+          <br /><br />
+          David pushed off the counter and pulled out a chair. The legs scraped the floor. "I've been waiting three years. I figured that was long enough."
+        </AiBubble>
+
+        {/* Exchange 2 */}
+        <UserBubble
+          plotDirection="Continue the scene. Marcus picks up the envelope. He reads a clause that changes everything — the farmhouse goes to whichever brother lives in it for a full year."
+          modificators={["slow reveal", "tension"]}
+        />
+
+        <AiBubble>
+          Marcus reached for the envelope. It was heavier than he expected — not the weight of paper, but the weight of decisions made in rooms he'd never been invited into. He slid his thumb under the seal, careful not to tear the letterhead, as though the paper itself might matter to someone later.
+          <br /><br />
+          The language was dense. Legal. Built to obscure rather than illuminate. He scanned past the boilerplate — <em>hereby and hereinafter, the estate of Robert James Calloway</em> — until his eyes caught on a paragraph near the bottom of the second page.
+          <br /><br />
+          He read it once. Then again.
+          <br /><br />
+          "A year," he said, his voice flattening to something not quite a whisper.
+          <br /><br />
+          David didn't move. "A year," he confirmed.
+          <br /><br />
+          The clause was simple in its cruelty: the farmhouse, the orchard, the forty acres of declining land — all of it would pass to whichever son occupied the property continuously for twelve months following the date of probate. Vacate for more than seventy-two consecutive hours, and your claim dissolves. The other inherits by default. If neither completes the term, the estate liquidates and the proceeds go to the county land trust.
+          {isStreaming && (
+            <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14 }}>
+              {[0, 1, 2].map(i => (
+                <span key={i} style={{
+                  display: "inline-block", width: 5, height: 5, borderRadius: 3, background: T.txtMut,
+                  animation: `dot-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                }}></span>
+              ))}
+            </span>
+          )}
+        </AiBubble>
+      </div>
+
+      {/* Input */}
+      <InputArea
+        expanded={expanded}
+        onToggleExpand={onToggleExpand}
+        modeSwitcherPos={modeSwitcherPos}
+        isStreaming={isStreaming}
+      />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const toggleExpand = () => setTweak("inputExpanded", !t.inputExpanded);
+
+  return (
+    <div style={{ width: "100%", height: "100%", background: T.bgBase, display: "flex", justifyContent: "center" }}>
+      {/* Simulated Theater pane width */}
+      <div style={{ width: "100%", maxWidth: 900, height: "100%", borderLeft: `1px solid ${T.borderSub}`, borderRight: `1px solid ${T.borderSub}` }}>
+        {t.view === "empty" ? (
+          <TheaterEmpty
+            modeSwitcherPos={t.modeSwitcherPos}
+            expanded={t.inputExpanded}
+            onToggleExpand={toggleExpand}
+          />
+        ) : (
+          <StoryThread
+            modeSwitcherPos={t.modeSwitcherPos}
+            expanded={t.inputExpanded}
+            onToggleExpand={toggleExpand}
+            isStreaming={t.isStreaming}
+          />
+        )}
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="View">
+          <TweakRadio
+            label="Theater state"
+            value={t.view}
+            onChange={(v) => setTweak("view", v)}
+            options={[
+              { label: "Story", value: "story" },
+              { label: "Empty", value: "empty" },
+            ]}
+          />
+        </TweakSection>
+        <TweakSection label="Mode Switcher">
+          <TweakRadio
+            label="Position"
+            value={t.modeSwitcherPos}
+            onChange={(v) => setTweak("modeSwitcherPos", v)}
+            options={[
+              { label: "Top bar", value: "top" },
+              { label: "In input", value: "input" },
+            ]}
+          />
+        </TweakSection>
+        <TweakSection label="Input Area">
+          <TweakToggle
+            label="Fields expanded"
+            value={t.inputExpanded}
+            onChange={(v) => setTweak("inputExpanded", v)}
+          />
+        </TweakSection>
+        <TweakSection label="Generation">
+          <TweakToggle
+            label="Streaming"
+            value={t.isStreaming}
+            onChange={(v) => setTweak("isStreaming", v)}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 0D: Component Primitives</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; background: #080808; }
+  @keyframes gw-pulse { 0%,100%{ opacity:1 } 50%{ opacity:0.4 } }
+  @keyframes dot-pulse { 0%,80%,100%{ opacity:0.3 } 40%{ opacity:1 } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="components/tokens.jsx"></script>
+<script type="text/babel">
+
+// ─── Helpers ───
+const f = T.sans;
+const sec = (label) => ({ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: f, marginBottom: 10 });
+
+function SectionLabel({ children }) {
+  return <div style={sec()}>{children}</div>;
+}
+
+function Spacer({ h = 16 }) {
+  return <div style={{ height: h }}></div>;
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: T.borderSub, margin: "12px 0" }}></div>;
+}
+
+// ═══════════════════════════════════════════════
+// BUTTONS
+// ═══════════════════════════════════════════════
+
+function ButtonsCard() {
+  const btn = (bg, color, border, label, extra = {}) => (
+    <div style={{
+      padding: "7px 18px", borderRadius: 6, background: bg, color,
+      fontSize: 13, fontWeight: 500, fontFamily: f, cursor: "pointer",
+      border: border || "1px solid transparent",
+      display: "inline-flex", alignItems: "center", gap: 6,
+      transition: "background 150ms ease",
+      ...extra,
+    }}>{label}</div>
+  );
+
+  return (
+    <div style={{ background: T.bgBase, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 16 }}>
+      <SectionLabel>Primary (Accent)</SectionLabel>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {btn(T.accent, T.txtOnAccent, null, "Send")}
+        {btn(T.accentHov, T.txtOnAccent, null, "Hover")}
+        {btn(T.accent, T.txtOnAccent, null, "Disabled", { opacity: 0.4, cursor: "not-allowed" })}
+      </div>
+
+      <SectionLabel>Secondary (Outline)</SectionLabel>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {btn("transparent", T.accentText, `1px solid ${T.border}`, "Cancel")}
+        {btn(T.bgHover, T.accentText, `1px solid ${T.border}`, "Hover")}
+      </div>
+
+      <SectionLabel>Ghost (Text Only)</SectionLabel>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {btn("transparent", T.txtSec, null, "← Back")}
+        {btn(T.bgHover, T.txtPri, null, "Hover")}
+      </div>
+
+      <SectionLabel>Destructive</SectionLabel>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {btn(T.error, "#fff", null, "Delete")}
+        {btn("transparent", T.error, `1px solid ${T.error}`, "Delete (outline)")}
+      </div>
+
+      <SectionLabel>Small / Icon Buttons</SectionLabel>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {btn(T.accent, T.txtOnAccent, null, "Generate ✦", { fontSize: 11, padding: "5px 12px" })}
+        {btn("transparent", T.txtMut, null, "✦", { fontSize: 14, padding: "4px 8px" })}
+        {btn("transparent", T.txtMut, null, "⟳", { fontSize: 14, padding: "4px 8px" })}
+        {btn("transparent", T.txtMut, null, "×", { fontSize: 16, padding: "4px 8px" })}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// FORM CONTROLS
+// ═══════════════════════════════════════════════
+
+function FormControlsCard() {
+  return (
+    <div style={{ background: T.bgBase, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Text Input */}
+      <SectionLabel>Text Input</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{
+          padding: "8px 12px", borderRadius: T.radiusInput, background: T.bgElevated,
+          border: `1px solid ${T.border}`, fontSize: 13, color: T.txtPri, fontFamily: f,
+        }}>World name</div>
+        <div style={{
+          padding: "8px 12px", borderRadius: T.radiusInput, background: T.bgElevated,
+          border: `1px solid ${T.accent}`, fontSize: 13, color: T.txtPri, fontFamily: f,
+          outline: `2px solid rgba(107,159,120,0.2)`, outlineOffset: -1,
+        }}>Focused state</div>
+        <div style={{
+          padding: "8px 12px", borderRadius: T.radiusInput, background: T.bgElevated,
+          border: `1px solid ${T.border}`, fontSize: 13, color: T.txtMut, fontFamily: f,
+        }}>Placeholder text…</div>
+        <div>
+          <div style={{
+            padding: "8px 12px", borderRadius: T.radiusInput, background: T.bgElevated,
+            border: `1px solid ${T.error}`, fontSize: 13, color: T.txtPri, fontFamily: f,
+          }}>Invalid value</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 12, color: T.error, fontFamily: f }}>
+            <span>⚠</span> World name is required.
+          </div>
+        </div>
+      </div>
+
+      {/* Textarea */}
+      <Divider />
+      <SectionLabel>Textarea</SectionLabel>
+      <div style={{
+        padding: "10px 14px", borderRadius: T.radiusCard, background: T.bgElevated,
+        border: `1px solid ${T.border}`, fontSize: 13, color: T.txtPri, fontFamily: f,
+        lineHeight: 1.5, minHeight: 72,
+      }}>
+        Write a tense dialogue between Marcus and his brother about their father's will. The envelope sits on the table between them.
+      </div>
+
+      {/* Select */}
+      <Divider />
+      <SectionLabel>Select (Dropdown)</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{
+          padding: "8px 12px", borderRadius: T.radiusInput, background: T.bgElevated,
+          border: `1px solid ${T.border}`, fontSize: 13, color: T.txtPri, fontFamily: f,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span>Gemini 2.5 Flash</span>
+          <span style={{ color: T.txtMut, fontSize: 10 }}>▾</span>
+        </div>
+        {/* Dropdown open */}
+        <div style={{
+          borderRadius: T.radiusCard, background: T.bgElevated,
+          border: `1px solid ${T.border}`, overflow: "hidden",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        }}>
+          {["Gemini 2.5 Flash", "Gemini 2.5 Pro", "Gemini 2.0 Flash"].map((m, i) => (
+            <div key={i} style={{
+              padding: "8px 12px", fontSize: 13, fontFamily: f, cursor: "pointer",
+              color: i === 0 ? T.accentText : T.txtPri,
+              background: i === 0 ? T.accentSub : (i === 1 ? T.bgHover : "transparent"),
+            }}>{m}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Slider */}
+      <Divider />
+      <SectionLabel>Slider</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontFamily: f }}>
+          <span style={{ color: T.txtSec }}>Temperature</span>
+          <span style={{ color: T.txtPri, fontFamily: T.mono }}>0.8</span>
+        </div>
+        <div style={{ height: 4, borderRadius: 2, background: T.bgActive, position: "relative" }}>
+          <div style={{ width: "80%", height: 4, borderRadius: 2, background: T.accent }}></div>
+          <div style={{
+            position: "absolute", left: "80%", top: -5, width: 14, height: 14, borderRadius: 7,
+            background: T.accent, border: `2px solid ${T.bgBase}`, transform: "translateX(-50%)",
+            boxShadow: `0 0 0 3px rgba(107,159,120,0.2)`,
+          }}></div>
+        </div>
+      </div>
+
+      {/* Switch */}
+      <Divider />
+      <SectionLabel>Switch / Toggle</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {[
+          { on: true, label: "Use summary" },
+          { on: false, label: "Markdown preview" },
+        ].map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 36, height: 20, borderRadius: 10, cursor: "pointer", position: "relative",
+              background: s.on ? T.accent : T.bgActive, transition: "background 150ms ease",
+            }}>
+              <div style={{
+                position: "absolute", top: 3, width: 14, height: 14, borderRadius: 7,
+                background: s.on ? "#fff" : T.txtSec,
+                left: s.on ? 19 : 3, transition: "left 150ms ease",
+              }}></div>
+            </div>
+            <span style={{ fontSize: 13, color: s.on ? T.txtPri : T.txtSec, fontFamily: f }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Checkbox */}
+      <Divider />
+      <SectionLabel>Checkbox</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {[
+          { checked: true, label: "Include in export" },
+          { checked: false, label: "Show token counts" },
+        ].map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: 3, cursor: "pointer",
+              background: c.checked ? T.accent : T.bgElevated,
+              border: c.checked ? "none" : `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10, color: "#fff",
+            }}>{c.checked ? "✓" : ""}</div>
+            <span style={{ fontSize: 13, color: T.txtPri, fontFamily: f }}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Tag Input */}
+      <Divider />
+      <SectionLabel>Tag Input (Modificators)</SectionLabel>
+      <div style={{
+        display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 10px",
+        background: T.bgPane, borderRadius: T.radiusCard,
+        border: `1px solid rgba(107,159,120,0.15)`,
+      }}>
+        {["noir", "tight pacing", "present tense"].map((tag, i) => (
+          <span key={i} style={{
+            padding: "3px 10px", borderRadius: T.radiusSm, fontSize: 12,
+            background: T.accentSub, color: T.accentText, fontWeight: 500, fontFamily: f,
+            display: "flex", alignItems: "center", gap: 5,
+          }}>
+            {tag}
+            <span style={{ fontSize: 9, opacity: 0.6, cursor: "pointer" }}>✕</span>
+          </span>
+        ))}
+        <span style={{ fontSize: 12, color: T.txtMut, fontFamily: f, padding: "3px 0" }}>add tag…</span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// OVERLAYS — Dialogs, Tooltips, Context Menu, Toast
+// ═══════════════════════════════════════════════
+
+function OverlaysCard() {
+  return (
+    <div style={{ background: T.bgBase, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Confirmation Dialog */}
+      <SectionLabel>Confirmation Dialog</SectionLabel>
+      <div style={{
+        background: T.bgElevated, borderRadius: T.radiusCard, padding: 24,
+        border: `1px solid ${T.border}`, maxWidth: 360,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 500, color: T.txtPri, fontFamily: f, marginBottom: 8 }}>
+          Delete permanently?
+        </div>
+        <div style={{ fontSize: 13, color: T.txtSec, fontFamily: f, lineHeight: 1.5, marginBottom: 20 }}>
+          This will remove 3 items from Trash. This cannot be undone.
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <div style={{
+            padding: "7px 18px", borderRadius: 6, background: "transparent",
+            border: `1px solid ${T.border}`, color: T.txtSec, fontSize: 13, fontWeight: 500,
+            fontFamily: f, cursor: "pointer",
+          }}>Cancel</div>
+          <div style={{
+            padding: "7px 18px", borderRadius: 6, background: T.error,
+            color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: f, cursor: "pointer",
+          }}>Delete</div>
+        </div>
+      </div>
+
+      {/* Context Menu */}
+      <Divider />
+      <SectionLabel>Context Menu</SectionLabel>
+      <div style={{
+        background: T.bgElevated, borderRadius: T.radiusCard,
+        border: `1px solid ${T.border}`, width: 200, overflow: "hidden",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+      }}>
+        {[
+          { icon: "✦", label: "Ghostwriter", sep: false },
+          { icon: "✎", label: "Edit", sep: false },
+          { icon: "⟳", label: "Regenerate", sep: false },
+          { icon: null, label: null, sep: true },
+          { icon: "⧉", label: "Copy text", sep: false },
+          { icon: "◇", label: "Insert checkpoint here", sep: false },
+          { icon: null, label: null, sep: true },
+          { icon: "×", label: "Delete exchange", sep: false, destructive: true },
+        ].map((item, i) => item.sep ? (
+          <div key={i} style={{ height: 1, background: T.borderSub, margin: "4px 0" }}></div>
+        ) : (
+          <div key={i} style={{
+            padding: "7px 12px", fontSize: 13, fontFamily: f, cursor: "pointer",
+            color: item.destructive ? T.error : T.txtPri,
+            background: i === 2 ? T.bgHover : "transparent",
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ fontSize: 12, width: 16, textAlign: "center" }}>{item.icon}</span>
+            {item.label}
+          </div>
+        ))}
+      </div>
+
+      {/* Tooltip */}
+      <Divider />
+      <SectionLabel>Tooltip</SectionLabel>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{
+          padding: "4px 10px", borderRadius: T.radiusSm, background: T.bgElevated,
+          border: `1px solid ${T.border}`, fontSize: 12, color: T.txtPri, fontFamily: f,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+        }}>
+          Generation already in progress
+        </div>
+        <span style={{ fontSize: 10, color: T.txtMut, fontFamily: f }}>500ms delay</span>
+      </div>
+
+      {/* Toasts */}
+      <Divider />
+      <SectionLabel>Toast Notifications</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {[
+          { variant: "default", text: "Document saved.", icon: null },
+          { variant: "error", text: "Cannot reach the AI service.", icon: "⚠", color: T.error },
+          { variant: "undo", text: "Moved to Trash.", action: "Undo" },
+        ].map((t2, i) => (
+          <div key={i} style={{
+            padding: "10px 14px", borderRadius: T.radiusCard, background: T.bgElevated,
+            border: `1px solid ${T.border}`, maxWidth: 320,
+            display: "flex", alignItems: "center", gap: 10,
+            borderLeft: t2.color ? `3px solid ${t2.color}` : "3px solid transparent",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+          }}>
+            {t2.icon && <span style={{ color: t2.color, fontSize: 14 }}>{t2.icon}</span>}
+            <span style={{ fontSize: 13, color: T.txtPri, fontFamily: f, flex: 1 }}>{t2.text}</span>
+            {t2.action && <span style={{ fontSize: 12, color: T.accentText, fontFamily: f, cursor: "pointer", fontWeight: 500 }}>{t2.action}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// BUBBLES
+// ═══════════════════════════════════════════════
+
+function BubblesCard() {
+  return (
+    <div style={{ background: T.bgTheater, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* User Bubble */}
+      <SectionLabel>User Bubble (Story Mode — 4 Fields)</SectionLabel>
+      <div style={{
+        alignSelf: "flex-end", maxWidth: 360,
+        padding: "12px 16px", borderRadius: T.radiusBubble,
+        background: T.accentSub, border: `1px solid rgba(107,159,120,0.12)`,
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: f }}>Plot Direction</div>
+        <div style={{ fontSize: 13, color: T.txtPri, lineHeight: 1.5, fontFamily: f, marginBottom: 10 }}>
+          Write a tense dialogue between Marcus and his brother about their father's will.
+        </div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, fontFamily: f, opacity: 0.7 }}>Background</div>
+        <div style={{ fontSize: 12, color: T.txtSec, lineHeight: 1.5, fontFamily: f, marginBottom: 10 }}>
+          Marcus hasn't spoken to David in three years. Their father died two weeks ago.
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+          {["noir", "tight pacing"].map((tag, i) => (
+            <span key={i} style={{
+              padding: "2px 8px", borderRadius: T.radiusSm, fontSize: 11,
+              background: "rgba(107,159,120,0.1)", color: T.accentText, fontFamily: f,
+            }}>{tag}</span>
+          ))}
+        </div>
+        <div style={{ fontSize: 12, color: T.txtMut, lineHeight: 1.4, fontFamily: f, fontStyle: "italic" }}>
+          Keep scene under 400 words.
+        </div>
+      </div>
+
+      {/* AI Bubble */}
+      <Divider />
+      <SectionLabel>AI Bubble (Prose)</SectionLabel>
+      <div style={{
+        maxWidth: "85%", padding: "14px 20px", borderRadius: T.radiusBubble,
+        background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+      }}>
+        <div style={{
+          fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7,
+        }}>
+          The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with unnatural precision — not gently, but <em>placed</em>, as if the sound might shatter something that had already been held together too long.
+        </div>
+        <div style={{
+          fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7, marginTop: 12,
+        }}>
+          "You read it," he said. Not a question.
+        </div>
+      </div>
+
+      {/* Action Row */}
+      <div style={{ display: "flex", gap: 12, paddingLeft: 8 }}>
+        {[
+          { icon: "✦", label: "Ghostwriter" },
+          { icon: "◎", label: "Feedback" },
+          { icon: "⟳", label: "Revert" },
+          { icon: "×", label: "Delete", destructive: true },
+        ].map((a, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 4, fontSize: 11,
+            color: a.destructive ? T.error : T.txtMut, fontFamily: f,
+            cursor: "pointer", padding: "3px 6px", borderRadius: 4,
+          }}>
+            <span style={{ fontSize: 12 }}>{a.icon}</span>
+            {a.label}
+          </div>
+        ))}
+      </div>
+
+      {/* Feedback Strip */}
+      <div style={{
+        maxWidth: "85%",
+        padding: "6px 10px", borderLeft: `2px solid ${T.feedback}`,
+        background: T.feedbackSub, borderRadius: "0 4px 4px 0",
+      }}>
+        <div style={{ fontSize: 12, color: T.txtSec, fontFamily: f }}>
+          Great pacing — keep this tension through the next scene
+        </div>
+      </div>
+
+      {/* Ghostwriter Active */}
+      <Divider />
+      <SectionLabel>AI Bubble — Ghostwriter Active</SectionLabel>
+      <div style={{
+        maxWidth: "85%", padding: "14px 20px", borderRadius: T.radiusBubble,
+        background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        outline: `2px solid ${T.accent}`, outlineOffset: 3,
+        animation: "gw-pulse 1.5s ease-in-out infinite",
+      }}>
+        <div style={{ fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7 }}>
+          The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with <span style={{ background: T.ghostwriterSub, borderBottom: `1px solid ${T.accent}`, padding: "1px 0" }}>unnatural precision — not gently, but placed, as if the sound might shatter something</span> that had already been held together too long.
+        </div>
+      </div>
+
+      {/* Diff Display */}
+      <Divider />
+      <SectionLabel>Ghostwriter Diff (Changed Highlighted)</SectionLabel>
+      <div style={{
+        maxWidth: "85%", padding: "14px 20px", borderRadius: T.radiusBubble,
+        background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+      }}>
+        <div style={{ fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7 }}>
+          The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with <span style={{ background: "rgba(107,159,120,0.18)", borderBottom: `1px solid ${T.accent}`, padding: "1px 0" }}>deliberate, almost surgical care — not gently, but positioned, as though any carelessness might fracture the silence</span> that had already been held together too long.
+        </div>
+      </div>
+
+      {/* Loading/Streaming */}
+      <Divider />
+      <SectionLabel>Streaming State (Loading Dots)</SectionLabel>
+      <div style={{
+        maxWidth: "85%", padding: "14px 20px", borderRadius: T.radiusBubble,
+        background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        display: "flex", alignItems: "center", gap: 6,
+      }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: 3, background: T.txtMut,
+            animation: `dot-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}></div>
+        ))}
+      </div>
+
+      {/* Session Bubble */}
+      <Divider />
+      <SectionLabel>Session Bubble (Handover / Consulting)</SectionLabel>
+      <div style={{
+        alignSelf: "flex-end", maxWidth: 360,
+        padding: "10px 14px", borderRadius: T.radiusBubble,
+        background: T.accentSub, border: `1px solid rgba(107,159,120,0.12)`,
+      }}>
+        <div style={{ fontSize: 13, color: T.txtPri, lineHeight: 1.5, fontFamily: f }}>
+          Focus on the political tensions in the second act. How does the brother's arrival change the power dynamic?
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// BANNERS
+// ═══════════════════════════════════════════════
+
+function BannersCard() {
+  return (
+    <div style={{ background: T.bgTheater, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Collapsed Banners */}
+      <SectionLabel>Collapsed Banners</SectionLabel>
+      {[
+        { kind: "accordion", name: "Chapter 2 — The Arrival", meta: "1,247 tok saved", stale: false },
+        { kind: "accordion", name: "Chapter 1", meta: "~12 messages", stale: true },
+        { kind: "consulting", name: "Consulting 2", meta: "14 messages" },
+        { kind: "handover", name: "Handover 1", meta: "6 messages" },
+      ].map((b, i) => (
+        <div key={i} style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 14px", borderRadius: T.radiusCard,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+          cursor: "pointer",
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▸</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, fontFamily: f, flex: 1 }}>
+            {b.name}
+          </span>
+          {b.stale && <span style={{ fontSize: 10 }} title="Content changed since last summary">⚠</span>}
+          <span style={{ fontSize: 11, color: T.txtMut, fontFamily: f }}>· {b.meta}</span>
+          <span style={{ fontSize: 12, color: T.txtMut, cursor: "pointer" }}>⋯</span>
+        </div>
+      ))}
+
+      {/* Expanded Session Banner */}
+      <Divider />
+      <SectionLabel>Expanded Session Banner (Active)</SectionLabel>
+      <div style={{
+        borderRadius: T.radiusCard, overflow: "hidden",
+        border: `1px solid ${T.borderSub}`,
+        borderLeft: `3px solid ${T.accent}`,
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 14px", background: T.bgElevated,
+          borderBottom: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▾</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, fontFamily: f, flex: 1 }}>
+            Consulting 2
+          </span>
+          <span style={{ fontSize: 11, color: T.txtMut, fontFamily: f }}>· 3 messages</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+        {/* Body */}
+        <div style={{ padding: 14, background: "rgba(107,159,120,0.03)", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{
+            alignSelf: "flex-end", maxWidth: 260,
+            padding: "8px 12px", borderRadius: 8,
+            background: T.accentSub, fontSize: 12, color: T.txtPri, fontFamily: f, lineHeight: 1.5,
+          }}>
+            What's working in the dialogue style?
+          </div>
+          <div style={{
+            maxWidth: 280, padding: "8px 12px", borderRadius: 8,
+            background: T.bgElevated, fontSize: 12, color: T.txtPri, fontFamily: f, lineHeight: 1.5,
+            border: `1px solid ${T.borderSub}`,
+          }}>
+            The subtext is effective — Marcus's precision with the coffee communicates control…
+          </div>
+        </div>
+        {/* Bottom actions */}
+        <div style={{
+          padding: "8px 14px", borderTop: `1px solid ${T.borderSub}`,
+          background: T.bgElevated, display: "flex", justifyContent: "flex-end", gap: 8,
+        }}>
+          <div style={{
+            padding: "5px 14px", borderRadius: 6, background: T.error, 
+            color: "#fff", fontSize: 11, fontWeight: 500, fontFamily: f, cursor: "pointer", opacity: 0.9,
+          }}>Exit</div>
+        </div>
+      </div>
+
+      {/* Accordion Banner Expanded */}
+      <Divider />
+      <SectionLabel>Accordion Banner — Expanded with Summary Toggle</SectionLabel>
+      <div style={{
+        borderRadius: T.radiusCard, overflow: "hidden",
+        border: `1px solid ${T.borderSub}`,
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "8px 14px", background: T.bgElevated,
+          borderBottom: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▾</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, fontFamily: f, flex: 1 }}>
+            Chapter 2 — The Arrival
+          </span>
+          {/* Use summary toggle */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 10, color: T.txtSec, fontFamily: f }}>Use summary</span>
+            <div style={{
+              width: 28, height: 16, borderRadius: 8, background: T.accent,
+              position: "relative", cursor: "pointer",
+            }}>
+              <div style={{
+                position: "absolute", top: 2, right: 2, width: 12, height: 12,
+                borderRadius: 6, background: "#fff",
+              }}></div>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: T.txtMut, fontFamily: f }}>· 1,247 tok saved</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+        <div style={{ padding: 14, background: T.bgTheater, fontSize: 12, color: T.txtSec, fontFamily: f, lineHeight: 1.5, fontStyle: "italic" }}>
+          Bubbles would render here when expanded…
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// EMPTY STATES & STATUS
+// ═══════════════════════════════════════════════
+
+function EmptyStatesCard() {
+  return (
+    <div style={{ background: T.bgBase, borderRadius: 10, padding: 24, border: `1px solid ${T.borderSub}`, display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Empty State Template */}
+      <SectionLabel>Empty State Template</SectionLabel>
+      <div style={{
+        padding: 40, display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 10, background: T.bgTheater,
+        borderRadius: 10, border: `1px solid ${T.borderSub}`,
+      }}>
+        <div style={{ color: T.txtMut, opacity: 0.5 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: T.txtPri, fontFamily: f }}>Your story begins here.</div>
+        <div style={{ fontSize: 13, color: T.txtSec, fontFamily: f }}>Write a direction and press Send to start.</div>
+      </div>
+
+      <div style={{
+        padding: 40, display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 10, background: T.bgPane,
+        borderRadius: 10, border: `1px solid ${T.borderSub}`,
+      }}>
+        <div style={{ color: T.txtMut, opacity: 0.5 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: T.txtPri, fontFamily: f }}>No worlds yet.</div>
+        <div style={{ fontSize: 13, color: T.txtSec, fontFamily: f, textAlign: "center" }}>A world holds your stories, documents, and settings.</div>
+        <div style={{
+          marginTop: 4, padding: "7px 18px", borderRadius: 6,
+          background: T.accent, color: "#fff", fontSize: 13,
+          fontWeight: 500, fontFamily: f, cursor: "pointer",
+        }}>Create your first world</div>
+      </div>
+
+      {/* Status States */}
+      <Divider />
+      <SectionLabel>Status Section (Right Pane)</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {[
+          { glyph: "●", label: "Idle", detail: "Last turn: 1,247 tok · 23s ago", color: T.txtMut },
+          { glyph: "●", label: "Idle — typing", detail: "8,420 tok ready", color: T.accentText },
+          { glyph: "◐", label: "Preparing", detail: "10,872 tok ready", color: T.warning },
+          { glyph: "◔", label: "Thinking", detail: "1.8s", color: T.warning },
+          { glyph: "◓", label: "Streaming", detail: "412 tok · 4.3s · ~85 tok/s", color: T.accent },
+          { glyph: "✓", label: "Complete", detail: "412 tok · 6.1s", color: T.success },
+          { glyph: "⚠", label: "Stopped", detail: "MAX_TOKENS · Show details", color: T.error },
+        ].map((s, i) => (
+          <div key={i} style={{
+            padding: "6px 10px", borderRadius: 4,
+            background: i === 5 ? "rgba(16,185,129,0.06)" : (i === 6 ? "rgba(244,63,94,0.06)" : "transparent"),
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ color: s.color, fontSize: 12 }}>{s.glyph}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, fontFamily: f }}>{s.label}</span>
+            <span style={{ fontSize: 11, color: T.txtSec, fontFamily: f }}>{s.detail}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════
+
+function App() {
+  return (
+    <DesignCanvas
+      title="LOOM — Phase 0D: Component Primitives"
+      subtitle="All shared UI components built from approved tokens"
+      background="#080808"
+    >
+      <DCSection id="buttons" title="Buttons">
+        <DCArtboard id="buttons" label="Button States" subtitle="Primary, secondary, ghost, destructive" width={460} height={440}>
+          <ButtonsCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="forms" title="Form Controls">
+        <DCArtboard id="forms" label="Inputs, Selects, Sliders, Toggles, Tags" subtitle="All interactive form components" width={460} height={1180}>
+          <FormControlsCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="overlays" title="Overlays & Notifications">
+        <DCArtboard id="overlays" label="Dialogs, Menus, Tooltips, Toasts" subtitle="All overlay components" width={460} height={900}>
+          <OverlaysCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="bubbles" title="Message Bubbles">
+        <DCArtboard id="bubbles" label="Bubbles & Bubble States" subtitle="User, AI, session, ghostwriter, streaming" width={500} height={1650}>
+          <BubblesCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="banners" title="Banners & Partitions">
+        <DCArtboard id="banners" label="Banner Variants" subtitle="Accordion, session, collapsed, expanded, active" width={500} height={940}>
+          <BannersCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="states" title="Empty States & Status">
+        <DCArtboard id="states" label="Empty States, Status Section" subtitle="Zero-data surfaces and generation status" width={460} height={900}>
+          <EmptyStatesCard />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

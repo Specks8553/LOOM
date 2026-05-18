@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 0C: Typography</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Source+Code+Pro:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Literata:ital,wght@0,400;0,500;1,400&family=DM+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #080808; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+
+// ─── Approved Warm Palette + Sage Accent ───
+const W = {
+  bgBase: "#100f0c", bgPane: "#15140f", bgTheater: "#0c0b08",
+  bgElevated: "#1d1b16", bgHover: "#262318", bgActive: "#2e2b21",
+  border: "#2d291f", borderSub: "#221f17",
+  txtPri: "#e7e4dc", txtSec: "#8c867a", txtMut: "#595349",
+  accent: "#6b9f78", accentText: "#a8d4b3",
+  accentRgba8: "rgba(107,159,120,0.08)", accentRgba15: "rgba(107,159,120,0.15)",
+};
+
+const PROSE_SAMPLE = `The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with unnatural precision — not gently, but placed, as if the sound might shatter something that had already been held together too long.
+
+"You read it," he said. Not a question.
+
+His brother leaned against the counter, arms folded, staring at the linoleum. "I read it." A beat. "Did you expect me not to?"
+
+The clock ticked. Outside, a cardinal threw itself against the morning.`;
+
+const PROSE_ITALIC_LINE = `She sat perfectly still, listening to the sound of the house breathing around her — the creak of old wood, the whisper of drafts finding their way through cracks.`;
+
+// ─── Pairings ───
+const pairings = [
+  {
+    key: "a",
+    label: "Quiet Editorial",
+    subtitle: "Plus Jakarta Sans · Source Serif 4 · Source Code Pro",
+    sans: "'Plus Jakarta Sans', system-ui, sans-serif",
+    serif: "'Source Serif 4', Georgia, serif",
+    mono: "'Source Code Pro', 'Consolas', monospace",
+    sansName: "Plus Jakarta Sans",
+    serifName: "Source Serif 4",
+    monoName: "Source Code Pro",
+    vibe: "Modern warmth meets classical reading. Jakarta is geometric but soft; Source Serif is refined and optimized for screens. The family cohesion (Source Serif + Source Code) is a bonus.",
+  },
+  {
+    key: "b",
+    label: "Literary Warmth",
+    subtitle: "DM Sans · Literata · DM Mono",
+    sans: "'DM Sans', system-ui, sans-serif",
+    serif: "'Literata', Georgia, serif",
+    mono: "'DM Mono', 'Consolas', monospace",
+    sansName: "DM Sans",
+    serifName: "Literata",
+    monoName: "DM Mono",
+    vibe: "DM Sans is clean and friendly at UI sizes. Literata was designed for Google Books — it's purpose-built for long-form reading on screens, with exceptional legibility. DM Mono completes the family.",
+  },
+  {
+    key: "c",
+    label: "Classic Study",
+    subtitle: "IBM Plex Sans · Newsreader · IBM Plex Mono",
+    sans: "'IBM Plex Sans', system-ui, sans-serif",
+    serif: "'Newsreader', Georgia, serif",
+    mono: "'IBM Plex Mono', 'Consolas', monospace",
+    sansName: "IBM Plex Sans",
+    serifName: "Newsreader",
+    monoName: "IBM Plex Mono",
+    vibe: "Plex Sans has a distinctive, professional voice — more character than Inter, but still excellent at 11–13px. Newsreader brings a broadsheet editorial feel. This pairing says 'serious writing tool.'",
+  },
+  {
+    key: "d",
+    label: "Modern Craft",
+    subtitle: "Outfit · Crimson Pro · JetBrains Mono",
+    sans: "'Outfit', system-ui, sans-serif",
+    serif: "'Crimson Pro', Georgia, serif",
+    mono: "'JetBrains Mono', 'Consolas', monospace",
+    sansName: "Outfit",
+    serifName: "Crimson Pro",
+    monoName: "JetBrains Mono",
+    vibe: "Outfit is clean and slightly geometric. Crimson Pro is a beautiful old-style serif with elegant italics — it feels hand-crafted. JetBrains Mono is the proven workhorse.",
+  },
+];
+
+// ─── Type Scale Preview ───
+function TypeScale({ p }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0, background: W.bgBase, borderRadius: 10, padding: 20, border: `1px solid ${W.borderSub}` }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, fontFamily: p.sans }}>
+        Type Scale (Doc 08)
+      </div>
+      {[
+        { label: "Section header", size: 11, weight: 500, family: p.sans, text: "CONTEXT DOCUMENTS", transform: "uppercase", spacing: "0.08em", color: W.txtMut },
+        { label: "UI small", size: 12, weight: 400, family: p.sans, text: "2 hours ago · 1,247 tokens", color: W.txtSec },
+        { label: "UI body", size: 13, weight: 400, family: p.sans, text: "Chapter 2 — The brother arrives at the farmhouse unannounced", color: W.txtPri },
+        { label: "UI label", size: 13, weight: 500, family: p.sans, text: "Plot Direction", color: W.txtPri },
+        { label: "Prose body", size: 15, weight: 400, family: p.serif, text: "Marcus set his coffee down with unnatural precision, as if the sound might shatter something.", color: W.txtPri, lh: 1.7 },
+        { label: "Prose italic", size: 15, weight: 400, family: p.serif, text: "She sat perfectly still, listening to the sound of the house breathing around her.", color: W.txtPri, lh: 1.7, italic: true },
+        { label: "Prose h3", size: 15, weight: 600, family: p.sans, text: "Chapter Three", color: W.txtPri },
+        { label: "Prose h2", size: 17, weight: 600, family: p.sans, text: "Part Two: The Inheritance", color: W.txtPri },
+        { label: "Prose h1", size: 20, weight: 600, family: p.sans, text: "The Sound of Silence", color: W.txtPri },
+        { label: "Monospace", size: 13, weight: 400, family: p.mono, text: "{{backstory}} — placeholder token", color: W.txtSec },
+      ].map((row, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "8px 0", borderTop: i > 0 ? `1px solid ${W.borderSub}` : "none" }}>
+          <div style={{ width: 90, flexShrink: 0, fontSize: 9, color: W.txtMut, fontFamily: "'DM Sans', sans-serif", textAlign: "right", paddingTop: 2 }}>
+            {row.label}<br />{row.size}px / {row.weight}
+          </div>
+          <div style={{
+            fontFamily: row.family, fontSize: row.size, fontWeight: row.weight,
+            color: row.color, lineHeight: row.lh || 1.5,
+            textTransform: row.transform || "none",
+            letterSpacing: row.spacing || "normal",
+            fontStyle: row.italic ? "italic" : "normal",
+          }}>
+            {row.text}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Prose Reading Preview ───
+function ProsePreview({ p }) {
+  return (
+    <div style={{
+      background: W.bgTheater, borderRadius: 10, padding: 24,
+      border: `1px solid ${W.borderSub}`,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, fontFamily: p.sans }}>
+        Prose Reading (AI Bubble)
+      </div>
+      {/* AI bubble */}
+      <div style={{
+        background: W.bgElevated, borderRadius: 10, padding: "16px 20px",
+        border: `1px solid ${W.borderSub}`, maxWidth: 420,
+      }}>
+        <div style={{
+          fontFamily: p.serif, fontSize: 15, fontWeight: 400,
+          color: W.txtPri, lineHeight: 1.7, whiteSpace: "pre-wrap",
+        }}>
+          {PROSE_SAMPLE}
+        </div>
+      </div>
+      {/* Italic passage */}
+      <div style={{
+        background: W.bgElevated, borderRadius: 10, padding: "14px 20px",
+        border: `1px solid ${W.borderSub}`, maxWidth: 420, marginTop: 10,
+      }}>
+        <div style={{
+          fontFamily: p.serif, fontSize: 15, fontWeight: 400,
+          color: W.txtPri, lineHeight: 1.7, fontStyle: "italic",
+        }}>
+          {PROSE_ITALIC_LINE}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Theater Mini Preview ───
+function TheaterMini({ p }) {
+  return (
+    <div style={{
+      background: W.bgTheater, borderRadius: 10, overflow: "hidden",
+      border: `1px solid ${W.borderSub}`,
+    }}>
+      {/* Mode switcher */}
+      <div style={{
+        display: "flex", gap: 0, borderBottom: `1px solid ${W.borderSub}`,
+        padding: "0 16px",
+      }}>
+        {["Story", "Handover", "Consulting"].map((m, i) => (
+          <div key={i} style={{
+            padding: "8px 14px", fontSize: 11, fontFamily: p.sans,
+            fontWeight: i === 0 ? 500 : 400,
+            color: i === 0 ? W.txtPri : W.txtSec,
+            borderBottom: i === 0 ? `2px solid ${W.accent}` : "2px solid transparent",
+          }}>{m}</div>
+        ))}
+      </div>
+
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* User bubble */}
+        <div style={{
+          alignSelf: "flex-end", maxWidth: "75%",
+          padding: "10px 14px", borderRadius: 10,
+          background: W.accentRgba8, border: `1px solid ${W.accentRgba15}`,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, fontFamily: p.sans }}>Plot Direction</div>
+          <div style={{ fontSize: 13, color: W.txtPri, lineHeight: 1.5, fontFamily: p.sans }}>
+            Write a tense dialogue between Marcus and his brother. The will sits between them on the table.
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+            {["noir", "tight pacing"].map((t, i) => (
+              <span key={i} style={{
+                padding: "2px 8px", borderRadius: 3, fontSize: 10,
+                background: W.accentRgba8, color: W.accentText, fontFamily: p.sans,
+              }}>{t}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* AI bubble */}
+        <div style={{
+          maxWidth: "80%", padding: "14px 18px", borderRadius: 10,
+          background: W.bgElevated, border: `1px solid ${W.borderSub}`,
+        }}>
+          <div style={{
+            fontFamily: p.serif, fontSize: 15, color: W.txtPri, lineHeight: 1.7,
+          }}>
+            The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with unnatural precision — not gently, but <em>placed</em>, as if the sound might shatter something.
+          </div>
+          <div style={{
+            fontSize: 10, color: W.txtMut, marginTop: 8, fontFamily: p.sans,
+          }}>
+            412 tokens · 4.3s
+          </div>
+        </div>
+
+        {/* Feedback strip */}
+        <div style={{
+          maxWidth: "80%",
+          padding: "5px 10px", borderLeft: "2px solid #f59e0b",
+          background: "rgba(245,158,11,0.06)", borderRadius: "0 4px 4px 0",
+        }}>
+          <div style={{ fontSize: 11, color: W.txtSec, fontFamily: p.sans }}>
+            Great pacing — keep this tension
+          </div>
+        </div>
+
+        {/* Input area */}
+        <div style={{
+          background: W.bgPane, borderRadius: 8, padding: 12, marginTop: 4,
+          border: `1px solid ${W.borderSub}`,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: p.sans }}>Plot Direction</div>
+          <div style={{ fontSize: 13, color: W.txtMut, fontFamily: p.sans, marginBottom: 10 }}>
+            What happens next…
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{
+              padding: "5px 14px", borderRadius: 6, background: W.accent,
+              color: "#fff", fontSize: 11, fontWeight: 500, fontFamily: p.sans,
+            }}>Send</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DocEditor Mini Preview ───
+function DocEditorMini({ p }) {
+  return (
+    <div style={{
+      background: W.bgBase, borderRadius: 10,
+      border: `1px solid ${W.borderSub}`, overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "8px 16px", borderBottom: `1px solid ${W.borderSub}`,
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <span style={{ fontSize: 11, color: W.accentText, fontFamily: p.sans }}>← Back</span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: W.txtPri, fontFamily: p.sans }}>Character Profile — Elara Voss</span>
+      </div>
+      <div style={{ padding: 20 }}>
+        <div style={{
+          fontFamily: p.mono, fontSize: 13, color: W.txtPri,
+          lineHeight: 1.5, whiteSpace: "pre-wrap",
+        }}>
+{`## Elara Voss
+**Age:** {{age}}
+**Occupation:** {{occupation}}
+
+### Backstory
+{{backstory}}
+
+### Relationships
+Close to her brother Marcus. Estranged
+from their father since the incident at
+the lake house.`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Pairing Card ───
+function PairingCard({ p }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Font names */}
+      <div style={{
+        background: W.bgBase, borderRadius: 10, padding: 20,
+        border: `1px solid ${W.borderSub}`,
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 9, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Sans', sans-serif" }}>UI Sans</div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: W.txtPri, fontFamily: p.sans, marginTop: 4 }}>{p.sansName}</div>
+            <div style={{ fontSize: 13, color: W.txtSec, fontFamily: p.sans }}>The quick brown fox jumps over the lazy dog — 0123456789</div>
+          </div>
+          <div style={{ height: 1, background: W.borderSub }}></div>
+          <div>
+            <div style={{ fontSize: 9, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Sans', sans-serif" }}>Prose Serif</div>
+            <div style={{ fontSize: 22, fontWeight: 400, color: W.txtPri, fontFamily: p.serif, marginTop: 4 }}>{p.serifName}</div>
+            <div style={{ fontSize: 15, color: W.txtSec, fontFamily: p.serif, lineHeight: 1.7 }}>The quick brown fox jumps over the lazy dog — 0123456789</div>
+            <div style={{ fontSize: 15, color: W.txtSec, fontFamily: p.serif, lineHeight: 1.7, fontStyle: "italic" }}>The quick brown fox jumps over the lazy dog — italic</div>
+          </div>
+          <div style={{ height: 1, background: W.borderSub }}></div>
+          <div>
+            <div style={{ fontSize: 9, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Sans', sans-serif" }}>Monospace</div>
+            <div style={{ fontSize: 18, fontWeight: 400, color: W.txtPri, fontFamily: p.mono, marginTop: 4 }}>{p.monoName}</div>
+            <div style={{ fontSize: 13, color: W.txtSec, fontFamily: p.mono }}>{'{{placeholder}}'} const x = 42; // comment</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Vibe note */}
+      <div style={{
+        background: W.bgPane, borderRadius: 8, padding: 14,
+        border: `1px solid ${W.borderSub}`,
+        fontSize: 11, color: W.txtSec, lineHeight: 1.6,
+        fontFamily: "'DM Sans', sans-serif",
+      }}>
+        {p.vibe}
+      </div>
+
+      <TypeScale p={p} />
+      <ProsePreview p={p} />
+      <TheaterMini p={p} />
+      <DocEditorMini p={p} />
+    </div>
+  );
+}
+
+// ─── App ───
+function App() {
+  return (
+    <DesignCanvas
+      title="LOOM — Phase 0C: Typography"
+      subtitle="Four font pairings — UI sans + prose serif + monospace"
+      background="#080808"
+    >
+      <DCSection id="pairings" title="Font Pairings">
+        {pairings.map(p => (
+          <DCArtboard
+            key={p.key}
+            id={p.key}
+            label={p.label}
+            subtitle={p.subtitle}
+            width={500}
+            height={2200}
+          >
+            <PairingCard p={p} />
+          </DCArtboard>
+        ))}
+      </DCSection>
+
+      <DCSection id="notes" title="Design Notes">
+        <DCArtboard id="rationale" label="Rationale" width={460} height={440}>
+          <div style={{
+            background: W.bgBase, borderRadius: 12, padding: 24,
+            border: `1px solid ${W.borderSub}`,
+            color: W.txtSec, fontSize: 12, lineHeight: 1.7,
+            fontFamily: "'DM Sans', sans-serif",
+          }}>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 12 }}>What matters in LOOM's typography</div>
+            <p style={{ marginBottom: 10 }}>
+              <strong style={{ color: W.txtPri }}>Prose readability is paramount.</strong> Writers stare at the serif font for hours. It needs a beautiful italic, comfortable line-height at 15px, and enough character to feel like a real book — not a browser default.
+            </p>
+            <p style={{ marginBottom: 10 }}>
+              <strong style={{ color: W.txtPri }}>UI text is a tool, not a voice.</strong> The sans font must be legible at 11–13px, with clear weight distinction between 400/500/600. It should stay out of the way.
+            </p>
+            <p style={{ marginBottom: 10 }}>
+              <strong style={{ color: W.txtPri }}>Mono is for the DocEditor.</strong> Writers spend real time here filling out character sheets and world bibles. It needs to be pleasant, not just functional.
+            </p>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 8, marginTop: 16 }}>Recommendation</div>
+            <p>
+              <strong style={{ color: W.txtPri }}>B (Literary Warmth)</strong> or <strong style={{ color: W.txtPri }}>A (Quiet Editorial)</strong>. Literata was literally designed for long-form screen reading. Source Serif 4 is the more traditional choice with broader weight support. Both pair well with the warm dark palette.
+            </p>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="mixing" label="Mix & Match" width={460} height={260}>
+          <div style={{
+            background: W.bgBase, borderRadius: 12, padding: 24,
+            border: `1px solid ${W.borderSub}`,
+            color: W.txtSec, fontSize: 12, lineHeight: 1.7,
+            fontFamily: "'DM Sans', sans-serif",
+          }}>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 12 }}>You can mix across pairings</div>
+            <p style={{ marginBottom: 10 }}>
+              The pairings are suggestions, not constraints. If you like IBM Plex Sans for UI but prefer Literata for prose, that works. The three stacks are independent.
+            </p>
+            <p>
+              Remember: the prose font is <strong style={{ color: W.txtPri }}>runtime-switchable per World</strong> via <code style={{ background: W.bgElevated, padding: "1px 4px", borderRadius: 3, fontSize: 11 }}>--font-theater-body</code>. We're picking the default here; writers can override.
+            </p>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

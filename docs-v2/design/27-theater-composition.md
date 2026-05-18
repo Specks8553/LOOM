@@ -1,7 +1,8 @@
 # 27 — Theater Composition
 
-> **Status:** Complete (skeleton + structural rules; visual values ⚠️ provisional, owned by the visual design phase)
-> **Last updated:** 2026-05-04 — Feedback design pass (D-17): AI bubble feedback rendering replaced — locked as a compact single-line preview strip below the bubble with `--color-feedback` left border, click-to-edit; cross-reference table now points at Doc 28; "Edit / regenerate / delete / feedback / cancel" entry under Doc 15 narrowed to remove `feedback` (now owned by Doc 28).
+> **Status:** Complete — structural rules + visual values reconciled against the Designfiles visual design pass
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): bubble and banner visual values resolved against `docs-v2/design/Designfiles/Phase 2 - Theater.html` and `Phase 0D - Components.html`. Bubble background / alignment / padding inlined; banner row padding resolved; empty-state copy updated to the mockup wording. **Mode switcher relocated to the bottom of the Theater** (a segmented pill row directly above the input area — owner decision), replacing the former top-bar tab strip; Theater is now a two-region stack. Residual ⚠️ markers are limited to items the Designfiles do not yet cover (Ghostwriter panel width, greying opacity, per-kind partition tinting, input-area height cap).
+> **Earlier:** 2026-05-04 — Feedback design pass (D-17): AI bubble feedback rendering replaced — locked as a compact single-line preview strip below the bubble with `--color-feedback` left border, click-to-edit; cross-reference table now points at Doc 28; "Edit / regenerate / delete / feedback / cancel" entry under Doc 15 narrowed to remove `feedback` (now owned by Doc 28).
 > **Earlier:** 2026-04-29 — Doc 17 design pass: Ghostwriter floating-panel placement documented (right gutter, viewport-clamped to bubble extent); plain-text rendering swap noted on the AI bubble section
 > **Earlier:** 2026-04-29 — Doc 16 design pass: accordion banner detail filled in (button-slot state machine, chevron, name pattern, token-impact display, stale badge, "previous chapter" right-click affordance)
 > **Earlier:** 2026-04-29 — initial pass alongside Doc 23 (Modes); structural rules for bubbles, partitions, banners; cross-mode unification of the banner pattern
@@ -15,31 +16,30 @@ This doc consolidates Theater rendering rules so that Doc 15 (story bubbles), Do
 
 ## Theater Regions
 
-The Theater pane is a vertical stack of three regions:
+The Theater pane is a vertical stack of two regions — a scroll surface, and a bottom input region that contains the mode switcher and the input area:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  Top bar — Mode switcher                             │  ~40px
-├──────────────────────────────────────────────────────┤
 │                                                      │
 │  Scroll surface — bubbles, banners, partitions       │  flex-1
 │                                                      │
 ├──────────────────────────────────────────────────────┤
+│  Mode switcher — segmented pill row                  │  ~28px
 │  Input area — mode-specific shape                    │  auto-height, capped
 └──────────────────────────────────────────────────────┘
 ```
 
-The Status section (Doc 15) lives in the right pane, not in the Theater. The Theater never owns generation status display — it owns content.
+There is no Theater top bar — the mode switcher sits at the **bottom**, directly above the input area. The Status section (Doc 15) lives in the right pane, not in the Theater. The Theater never owns generation status display — it owns content.
 
-### Top bar — mode switcher
+### Mode switcher (bottom)
 
-A horizontal tab strip immediately above the scroll surface. Three tabs: **Story · Handover · Consulting**.
+A segmented pill row at the bottom of the Theater, directly above the input area (the two together form the bottom input region). Three segments: **Story · Handover · Consulting**.
 
-- Active tab is highlighted with the accent colour underline (token: `--color-accent`).
-- When a session is active in handover or consulting, the active tab additionally shows the session name: `Consulting · Consulting 2`. The label is single-line, truncated with ellipsis if it overflows.
-- Click behaviour: per Doc 23 §Switcher behaviour. Story tab activates story; Handover/Consulting tabs **always create a new session** at the current scroll-surface tail.
+- The active segment is filled with `--color-bg-active` and `--color-text-primary` (500 weight); inactive segments are `--color-text-muted` (400) on a transparent fill.
+- When a session is active in handover or consulting, the active segment additionally shows the session name: `Consulting · Consulting 2`. The label is single-line, truncated with ellipsis if it overflows.
+- Click behaviour: per Doc 23 §Switcher behaviour. Story segment activates story; Handover/Consulting segments **always create a new session** at the current scroll-surface tail.
 
-Visual values (height, font, spacing, divider treatment) are ⚠️ provisional.
+Visual treatment (per `Designfiles/Phase 2 - Theater`): segments at `11px / --font-sans`, `--radius-input`, padding `5px 12px`; the row sits with a small gap above the input box.
 
 ### Scroll surface
 
@@ -82,11 +82,13 @@ Renders a `messages` row with `role = 'user'` and `kind = 'story'`. The content 
 
 Empty fields are omitted from the rendered bubble (no empty section headers). Only `plot_direction` is required to send, so the other three may be absent.
 
-Bubble background, alignment, and padding are ⚠️ provisional.
+**Visual** (per `Designfiles/Phase 2` / `Phase 0D`): background `--bubble-user-bg` (tracks `--color-accent-subtle`); `1px solid` accent at ~12% alpha; `--radius-bubble`; padding `12px 16px`; right-aligned (`align-self: flex-end`), max-width ~65% of the scroll-surface content width. Field labels render at `9px / 500` uppercase, `letter-spacing 0.08em`, `--color-text-muted`. Plot Direction body `13px --color-text-primary`; Background `12px --color-text-secondary`; Constraints `12px --color-text-muted` italic; Modificators as accent-tinted chips (`--color-accent-subtle` fill, `--color-accent-text` text, `--radius-sm`). The hover action row (Edit / Delete) sits below the bubble, right-aligned.
 
 ### Story AI bubble
 
 Renders a `messages` row with `role = 'model'` and `kind = 'story'`. Content is plain text rendered as Markdown (subset owned by Doc 09).
+
+**Visual** (per `Designfiles/Phase 2` / `Phase 0D`): background `--bubble-ai-bg` (tracks `--color-bg-elevated`); `1px solid --color-border-subtle`; `--radius-bubble`; padding `16px 20px`; left-aligned, max-width ~80% of the scroll-surface content width. Prose renders at `15px --font-theater-body` (serif), line-height `1.7`, `--color-text-primary`. The hover action row (Ghostwriter / Feedback / Regenerate / Delete) sits below the bubble, left-aligned. Streaming state appends the `dot-pulse` indicator (Doc 09 §LoadingDots).
 
 Feedback (`user_feedback`), when present, is rendered as a compact single-line preview strip attached directly below the bubble (above the action row), with a 2px `--color-feedback` left border and `--color-feedback-subtle` background fill. The strip is click-to-edit — clicking replaces it with an inline textarea + Cancel / Apply buttons. When `user_feedback` is empty, no strip is rendered; the writer enters edit mode via the bubble's hover action row "Feedback" entry. Doc 28 owns the affordance fully — this section only states the visual placement contract.
 
@@ -158,7 +160,7 @@ Accordion banners differ from session banners in two ways:
 | `[ Exit ]` button (expanded view, when active) | Deactivate session, return to story mode |
 | Right-click (or `⋯`) | Context menu: `Enter session` (handover / consulting; one-step entry — expands AND activates), `Rename`, `Delete session` |
 
-The banner row's left and right edges align with the scroll-surface content area's left and right edges. Vertical padding ⚠️ provisional.
+The banner row's left and right edges align with the scroll-surface content area's left and right edges. Banner row: `--color-bg-elevated` background, `1px solid --color-border-subtle`, `--radius-card`, padding `~7px 14px` (per `Designfiles/Phase 0D` / `Phase 2`).
 
 ### Visual frame (expanded partition body)
 
@@ -280,7 +282,7 @@ These scroll rules apply to handover and consulting partitions identically. Acco
 The Theater renders an empty state when there are no messages in the active story:
 
 - **No story selected.** Shell-level empty state — `<NoStorySelected />` per Doc 10. Owned by Doc 12.
-- **Story selected, no messages.** A centred prompt: `Begin your story.` ⚠️ Provisional copy. Owned by Doc 12.
+- **Story selected, no messages.** A centred prompt — headline `Your story begins here.`, subtext `Write a direction and press Send to start.` (per `Designfiles/Phase 2` / `Phase 0D`). Copy is owned by Doc 12 — that doc carries the canonical string.
 - **Story selected, messages exist, all greyed by an active consulting re-entry.** Active session's partition is visible at its entry position; nothing else is in focus. No additional empty state.
 
 ---

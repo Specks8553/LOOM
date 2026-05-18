@@ -1,11 +1,12 @@
 import { useModeStore, type AppMode } from '@/stores/modeStore';
 
 /**
- * Doc 23 §Switcher UI + Doc 10 §Mode Layout Variations.
+ * Doc 23 §Switcher UI + Doc 10 §Mode Layout Variations + Doc 27 §Mode switcher.
  *
- * Horizontal tab strip at the top of the Theater. Three tabs:
- * `Story · Handover · Consulting`. The active tab is highlighted; when a
- * session is being driven, its name appears as a sub-label on the active tab.
+ * Segmented pill row at the *bottom* of the Theater, directly above the input
+ * area (the switcher + input form the bottom input region). Three segments:
+ * `Story · Handover · Consulting`. The active segment is filled; when a
+ * session is being driven, its name is appended (`Consulting · Consulting 2`).
  *
  * Click behaviour (Doc 23 §Switcher behaviour):
  *   - Story tab: activates story, exits any active session.
@@ -44,7 +45,7 @@ export function ModeSwitcher({ storyId }: Props) {
     <div
       role="tablist"
       aria-label="Mode switcher"
-      className="flex items-stretch gap-0 border-b border-[--color-border] bg-[--color-bg-soft] px-3 py-1.5 text-[12px]"
+      className="flex shrink-0 gap-1 border-t border-[--color-border] bg-[--color-bg-elevated] px-3 pt-2.5 pb-0.5"
     >
       <Tab
         label="Story"
@@ -75,6 +76,7 @@ interface TabProps {
 }
 
 function Tab({ label, sublabel, isActive, onClick }: TabProps) {
+  const text = sublabel !== undefined && sublabel.length > 0 ? `${label} · ${sublabel}` : label;
   return (
     <button
       type="button"
@@ -82,16 +84,13 @@ function Tab({ label, sublabel, isActive, onClick }: TabProps) {
       aria-selected={isActive}
       onClick={onClick}
       className={[
-        'flex flex-col items-center justify-center rounded-sm px-3 py-1 text-[12px] outline-none transition-colors',
+        'max-w-[200px] truncate rounded-sm px-3 py-1 text-[11px] outline-none transition-colors',
         isActive
-          ? 'bg-[--color-bg] font-medium text-[--color-text-primary] shadow-[inset_0_-2px_0_var(--color-accent)]'
-          : 'text-[--color-text-muted] hover:bg-[--color-bg] hover:text-[--color-text-primary]',
+          ? 'bg-[--color-bg-active] font-medium text-[--color-text-primary]'
+          : 'text-[--color-text-muted] hover:bg-[--color-bg-hover] hover:text-[--color-text-primary]',
       ].join(' ')}
     >
-      <span>{label}</span>
-      {sublabel !== undefined && sublabel.length > 0 && (
-        <span className="mt-0.5 text-[10px] text-[--color-text-muted]">{sublabel}</span>
-      )}
+      {text}
     </button>
   );
 }

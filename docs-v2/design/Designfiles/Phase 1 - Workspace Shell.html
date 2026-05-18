@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 1: Workspace Shell</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d291f; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #595349; }
+  ::selection { background: rgba(107,159,120,0.4); color: #e7e4dc; }
+  @keyframes dot-pulse { 0%,80%,100%{ opacity:0.3 } 40%{ opacity:1 } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="components/tokens.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "rightPaneCollapsed": false,
+  "theaterContent": "story",
+  "activeStory": "chapter-2"
+}/*EDITMODE-END*/;
+
+// ═══════════════════════════════════════════════
+// NAVIGATOR (Left Pane)
+// ═══════════════════════════════════════════════
+
+function Navigator({ activeStory, onSelectStory, theaterContent }) {
+  const items = [
+    { id: "folder-act1", type: "folder", name: "Act I", depth: 0, expanded: true },
+    { id: "chapter-1", type: "story", name: "Chapter 1 — The Letter", depth: 1 },
+    { id: "chapter-2", type: "story", name: "Chapter 2 — The Arrival", depth: 1 },
+    { id: "chapter-3", type: "story", name: "Chapter 3 — The Will", depth: 1 },
+    { id: "folder-act2", type: "folder", name: "Act II", depth: 0, expanded: false },
+    { id: "sep1", type: "sep" },
+    { id: "doc-world", type: "doc", name: "World Bible", depth: 0 },
+    { id: "doc-chars", type: "doc", name: "Character Profiles", depth: 0 },
+    { id: "doc-notes", type: "doc", name: "Scene Notes", depth: 0 },
+  ];
+
+  const icons = {
+    folder: "▸",
+    folderOpen: "▾",
+    story: "◇",
+    doc: "≡",
+  };
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgPane, overflow: "hidden",
+    }}>
+      {/* Header — World name + actions */}
+      <div style={{
+        padding: "10px 12px 8px", borderBottom: `1px solid ${T.borderSub}`,
+        display: "flex", flexDirection: "column", gap: 8,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600, color: T.txtPri,
+            letterSpacing: "0.02em", flex: 1,
+          }}>The Inheritance</div>
+          <span style={{ fontSize: 11, color: T.txtMut, cursor: "pointer" }} title="Open World Picker">⊞</span>
+          <span style={{ fontSize: 11, color: T.txtMut, cursor: "pointer" }} title="Settings">⚙</span>
+          <span style={{ fontSize: 11, color: T.txtMut, cursor: "pointer" }} title="Lock vault">⏻</span>
+        </div>
+        <div style={{
+          padding: "5px 8px", borderRadius: T.radiusInput, background: T.bgElevated,
+          border: `1px solid ${T.borderSub}`, fontSize: 12, color: T.txtMut,
+        }}>Search…</div>
+      </div>
+
+      {/* Vault Tree */}
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 0" }}>
+        {items.map(item => {
+          if (item.type === "sep") return <div key={item.id} style={{ height: 1, background: T.borderSub, margin: "6px 12px" }}></div>;
+          const isActive = item.id === activeStory && theaterContent === "story";
+          const isDocActive = (item.id === "doc-world" || item.id === "doc-chars" || item.id === "doc-notes") && theaterContent === "doc-editor";
+          const selected = isActive || (isDocActive && item.id === "doc-world");
+          return (
+            <div key={item.id}
+              onClick={() => item.type === "story" ? onSelectStory(item.id) : null}
+              style={{
+                padding: "5px 12px 5px " + (16 + item.depth * 16) + "px",
+                display: "flex", alignItems: "center", gap: 6,
+                cursor: item.type !== "sep" ? "pointer" : "default",
+                background: selected ? T.accentSub : "transparent",
+                borderLeft: selected ? `2px solid ${T.accent}` : "2px solid transparent",
+                transition: "background 150ms ease",
+              }}>
+              <span style={{
+                fontSize: item.type === "folder" ? 10 : 11,
+                color: T.txtMut, width: 14, textAlign: "center",
+              }}>
+                {item.type === "folder" ? (item.expanded ? icons.folderOpen : icons.folder) : icons[item.type]}
+              </span>
+              <span style={{
+                fontSize: 13, fontWeight: selected ? 500 : 400,
+                color: selected ? T.txtPri : T.txtSec,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>{item.name}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer — Trash */}
+      <div style={{
+        padding: "8px 12px", borderTop: `1px solid ${T.borderSub}`,
+        display: "flex", gap: 8, alignItems: "center",
+      }}>
+        <span style={{ fontSize: 11, color: T.txtMut, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Trash
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// THEATER (Center Pane)
+// ═══════════════════════════════════════════════
+
+function Theater({ theaterContent }) {
+  if (theaterContent === "empty") return <TheaterEmpty />;
+  if (theaterContent === "doc-editor") return <DocEditorView />;
+  return <TheaterStory />;
+}
+
+function TheaterEmpty() {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgTheater,
+    }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <div style={{ color: T.txtMut, opacity: 0.5 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: T.txtPri }}>Select a story from the Navigator, or create one to begin.</div>
+      </div>
+    </div>
+  );
+}
+
+function DocEditorView() {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgBase,
+    }}>
+      <div style={{
+        padding: "10px 20px", borderBottom: `1px solid ${T.borderSub}`,
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        <span style={{ fontSize: 12, color: T.accentText, cursor: "pointer" }}>← Back</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: T.txtPri }}>≡ World Bible</span>
+        <span style={{ flex: 1 }}></span>
+        <span style={{
+          padding: "4px 10px", borderRadius: T.radiusSm, fontSize: 11,
+          color: T.txtSec, border: `1px solid ${T.border}`, cursor: "pointer",
+        }}>Preview</span>
+      </div>
+      <div style={{ flex: 1, padding: "24px 32px", overflow: "auto" }}>
+        <div style={{
+          fontFamily: T.mono, fontSize: 13, color: T.txtPri,
+          lineHeight: 1.5, whiteSpace: "pre-wrap", maxWidth: 680,
+        }}>
+{`## The Inheritance — World Bible
+
+### Setting
+A small town in upstate New York, late autumn.
+The family farmhouse sits on forty acres of
+declining orchard land.
+
+### Key Locations
+- **The Farmhouse** — Victorian-era, needs repair
+- **The Orchard** — mostly dead apple trees
+- **The Lake House** — where the incident happened
+- **Marcus's apartment** — Brooklyn, sparse
+
+### Timeline
+{{timeline}}
+
+### Family History
+{{family_history}}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TheaterStory() {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgTheater,
+    }}>
+      {/* Mode Switcher */}
+      <div style={{
+        display: "flex", padding: "0 20px",
+        borderBottom: `1px solid ${T.borderSub}`, flexShrink: 0,
+      }}>
+        {["Story", "Handover", "Consulting"].map((m, i) => (
+          <div key={i} style={{
+            padding: "9px 16px", fontSize: 12, fontWeight: i === 0 ? 500 : 400,
+            color: i === 0 ? T.txtPri : T.txtSec,
+            borderBottom: i === 0 ? `2px solid ${T.accent}` : "2px solid transparent",
+            cursor: "pointer",
+            transition: "color 150ms ease",
+          }}>{m}</div>
+        ))}
+      </div>
+
+      {/* Scroll Surface */}
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Accordion banner */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 14px", borderRadius: T.radiusCard,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▸</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, flex: 1 }}>Chapter 1 — The Letter</span>
+          <span style={{ fontSize: 11, color: T.txtMut }}>· 2,340 tok saved</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+
+        {/* Checkpoint banner */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 14px", borderRadius: T.radiusCard,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <span style={{ fontSize: 10, color: T.txtMut }}>▾</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri, flex: 1 }}>Chapter 2 — The Arrival</span>
+          <span style={{ fontSize: 11, color: T.txtMut }}>· 4 messages so far</span>
+          <span style={{ fontSize: 12, color: T.txtMut }}>⋯</span>
+        </div>
+
+        {/* User bubble */}
+        <div style={{
+          alignSelf: "flex-end", maxWidth: "65%",
+          padding: "10px 16px", borderRadius: T.radiusBubble,
+          background: T.accentSub, border: `1px solid rgba(107,159,120,0.12)`,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>Plot Direction</div>
+          <div style={{ fontSize: 13, color: T.txtPri, lineHeight: 1.5 }}>
+            Marcus arrives at the farmhouse unannounced. His brother David is already there, sitting in the kitchen. The will is on the table.
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+            {["noir", "tight pacing"].map((tag, i) => (
+              <span key={i} style={{
+                padding: "2px 8px", borderRadius: T.radiusSm, fontSize: 10,
+                background: "rgba(107,159,120,0.1)", color: T.accentText,
+              }}>{tag}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* AI bubble */}
+        <div style={{
+          maxWidth: "80%", padding: "16px 20px", borderRadius: T.radiusBubble,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <div style={{
+            fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7,
+          }}>
+            The kitchen was quiet save for the ticking clock above the stove. Marcus set his coffee down with unnatural precision — not gently, but <em>placed</em>, as if the sound might shatter something that had already been held together too long.
+          </div>
+          <div style={{
+            fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7, marginTop: 14,
+          }}>
+            "You read it," he said. Not a question.
+          </div>
+          <div style={{
+            fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7, marginTop: 14,
+          }}>
+            His brother leaned against the counter, arms folded, staring at the linoleum. "I read it." A beat. "Did you expect me not to?"
+          </div>
+        </div>
+
+        {/* Feedback strip */}
+        <div style={{
+          maxWidth: "80%",
+          padding: "5px 10px", borderLeft: `2px solid ${T.feedback}`,
+          background: T.feedbackSub, borderRadius: "0 4px 4px 0",
+        }}>
+          <div style={{ fontSize: 11, color: T.txtSec }}>
+            Great pacing — keep this tension through the next scene
+          </div>
+        </div>
+
+        {/* Second exchange */}
+        <div style={{
+          alignSelf: "flex-end", maxWidth: "65%",
+          padding: "10px 16px", borderRadius: T.radiusBubble,
+          background: T.accentSub, border: `1px solid rgba(107,159,120,0.12)`,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>Plot Direction</div>
+          <div style={{ fontSize: 13, color: T.txtPri, lineHeight: 1.5 }}>
+            Continue the scene. Marcus picks up the envelope. He reads a clause that changes everything.
+          </div>
+        </div>
+
+        {/* Streaming AI bubble */}
+        <div style={{
+          maxWidth: "80%", padding: "16px 20px", borderRadius: T.radiusBubble,
+          background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+        }}>
+          <div style={{ fontFamily: T.serif, fontSize: 15, color: T.txtPri, lineHeight: 1.7 }}>
+            Marcus reached for the envelope. It was heavier than he expected — not the weight of paper, but the weight of decisions made in rooms he'd never been invited into. He slid his thumb under the seal.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 5, height: 5, borderRadius: 3, background: T.txtMut,
+                animation: `dot-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }}></div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Input Area */}
+      <div style={{
+        padding: "12px 20px 16px", borderTop: `1px solid ${T.borderSub}`,
+        background: T.bgTheater, flexShrink: 0,
+      }}>
+        <div style={{
+          background: T.bgPane, borderRadius: 8, padding: "12px 16px",
+          border: `1px solid ${T.borderSub}`,
+          display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 500, color: T.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Plot Direction</div>
+            <div style={{ fontSize: 13, color: T.txtMut, minHeight: 20 }}>What happens next…</div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 10, color: T.txtMut, fontFamily: T.mono }}>~8,420 tok</div>
+            <div style={{
+              padding: "6px 16px", borderRadius: 6, background: T.accent,
+              color: T.txtOnAccent, fontSize: 12, fontWeight: 500, cursor: "pointer",
+              opacity: 0.4,
+            }}>Cancel</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// RIGHT PANE (Control Pane)
+// ═══════════════════════════════════════════════
+
+function ControlPane() {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: T.bgPane, overflow: "hidden",
+    }}>
+      {/* Scrollable sections */}
+      <div style={{ flex: 1, overflow: "auto", padding: "12px 0" }}>
+        {/* Context Documents */}
+        <ControlSection title="Context Documents">
+          {["World Bible", "Character Profiles"].map((d, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "5px 8px", borderRadius: 4,
+              background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+              marginBottom: 4,
+            }}>
+              <span style={{ fontSize: 11, color: T.txtMut }}>≡</span>
+              <span style={{ fontSize: 12, color: T.txtPri, flex: 1 }}>{d}</span>
+              <span style={{ fontSize: 10, color: T.txtMut, cursor: "pointer" }}>×</span>
+            </div>
+          ))}
+        </ControlSection>
+
+        {/* Cache */}
+        <ControlSection title="Cache">
+          <div style={{
+            padding: "6px 8px", borderRadius: 4,
+            background: T.bgElevated, border: `1px solid ${T.borderSub}`,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: T.txtPri }}>Story cache</span>
+              <span style={{ fontSize: 10, color: T.success }}>✓ Active</span>
+            </div>
+            <div style={{ fontSize: 10, color: T.txtMut, marginTop: 3 }}>TTL: 12m 34s · 6,420 tok</div>
+          </div>
+        </ControlSection>
+      </div>
+
+      {/* Status — pinned to bottom */}
+      <div style={{
+        padding: "10px 14px", borderTop: `1px solid ${T.borderSub}`,
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: 9, fontWeight: 500, color: T.txtMut,
+          textTransform: "uppercase", letterSpacing: "0.08em",
+          marginBottom: 6,
+        }}>Status</div>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+        }}>
+          <span style={{ fontSize: 11, color: T.accent }}>◓</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: T.txtPri }}>Streaming</span>
+        </div>
+        <div style={{ fontSize: 11, color: T.txtSec, marginTop: 2 }}>
+          412 tok · 4.3s · ~85 tok/s
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ControlSection({ title, children }) {
+  return (
+    <div style={{ padding: "0 14px", marginBottom: 16 }}>
+      <div style={{
+        fontSize: 9, fontWeight: 500, color: T.txtMut,
+        textTransform: "uppercase", letterSpacing: "0.08em",
+        marginBottom: 8,
+      }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function CollapsedRightPane({ onExpand }) {
+  return (
+    <div style={{
+      width: 32, height: "100%", background: T.bgPane,
+      borderLeft: `1px solid ${T.border}`,
+      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      paddingTop: 12,
+    }}>
+      <div onClick={onExpand} style={{
+        cursor: "pointer", color: T.txtMut, fontSize: 14,
+        padding: "4px", borderRadius: 4,
+        transition: "color 150ms ease",
+      }} title="Expand panel">◂</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// PANE DIVIDER
+// ═══════════════════════════════════════════════
+
+function PaneDivider({ side, onDrag }) {
+  const [dragging, setDragging] = React.useState(false);
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    setDragging(true);
+    const startX = e.clientX;
+
+    const handleMove = (ev) => {
+      const delta = side === "left" ? ev.clientX - startX : startX - ev.clientX;
+      onDrag && onDrag(delta);
+    };
+    const handleUp = () => {
+      setDragging(false);
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      style={{
+        width: 7, cursor: "col-resize", position: "relative",
+        flexShrink: 0, zIndex: 10,
+      }}>
+      <div style={{
+        position: "absolute", left: 3, top: 0, bottom: 0,
+        width: 1, background: T.border,
+      }}></div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// WORKSPACE SHELL
+// ═══════════════════════════════════════════════
+
+function WorkspaceShell() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const [leftWidth, setLeftWidth] = React.useState(260);
+  const [rightWidth, setRightWidth] = React.useState(280);
+  const leftRef = React.useRef(260);
+  const rightRef = React.useRef(280);
+
+  const handleLeftDrag = React.useCallback((delta) => {
+    setLeftWidth(w => {
+      const nw = Math.max(200, Math.min(360, leftRef.current + delta));
+      return nw;
+    });
+  }, []);
+
+  const handleRightDrag = React.useCallback((delta) => {
+    setRightWidth(w => {
+      const nw = Math.max(240, Math.min(400, rightRef.current + delta));
+      return nw;
+    });
+  }, []);
+
+  // Sync refs on state change
+  React.useEffect(() => { leftRef.current = leftWidth; }, [leftWidth]);
+  React.useEffect(() => { rightRef.current = rightWidth; }, [rightWidth]);
+
+  const collapsed = t.rightPaneCollapsed;
+  const theaterContent = t.theaterContent;
+
+  const showRightPane = theaterContent === "story" && !collapsed;
+  const showRightCollapsed = theaterContent === "story" && collapsed;
+  const showModeSwitcher = theaterContent === "story";
+
+  return (
+    <div style={{
+      display: "flex", width: "100%", height: "100%",
+      background: T.bgBase, overflow: "hidden",
+    }}>
+      {/* Left Pane */}
+      <div style={{ width: leftWidth, flexShrink: 0, overflow: "hidden" }}>
+        <Navigator
+          activeStory={t.activeStory}
+          onSelectStory={(id) => setTweak("activeStory", id)}
+          theaterContent={theaterContent}
+        />
+      </div>
+
+      {/* Left Divider */}
+      <PaneDivider side="left" onDrag={handleLeftDrag} />
+
+      {/* Center (Theater) */}
+      <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
+        <Theater theaterContent={theaterContent} />
+      </div>
+
+      {/* Right Divider + Pane */}
+      {showRightPane && (
+        <>
+          <PaneDivider side="right" onDrag={handleRightDrag} />
+          <div style={{ width: rightWidth, flexShrink: 0, overflow: "hidden", position: "relative" }}>
+            {/* Collapse button */}
+            <div onClick={() => setTweak("rightPaneCollapsed", true)} style={{
+              position: "absolute", top: 10, right: 10, zIndex: 20,
+              cursor: "pointer", color: T.txtMut, fontSize: 12,
+              padding: "2px 4px", borderRadius: 3,
+            }} title="Collapse panel">▸</div>
+            <ControlPane />
+          </div>
+        </>
+      )}
+
+      {showRightCollapsed && (
+        <CollapsedRightPane onExpand={() => setTweak("rightPaneCollapsed", false)} />
+      )}
+
+      {/* Tweaks */}
+      <TweaksPanel>
+        <TweakSection label="Theater Content">
+          <TweakRadio
+            label="View"
+            value={t.theaterContent}
+            onChange={(v) => setTweak("theaterContent", v)}
+            options={[
+              { label: "Story", value: "story" },
+              { label: "Empty", value: "empty" },
+              { label: "DocEditor", value: "doc-editor" },
+            ]}
+          />
+        </TweakSection>
+        <TweakSection label="Right Pane">
+          <TweakToggle
+            label="Collapsed"
+            value={t.rightPaneCollapsed}
+            onChange={(v) => setTweak("rightPaneCollapsed", v)}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<WorkspaceShell />);
+</script>
+</body>
+</html>

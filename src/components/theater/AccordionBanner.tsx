@@ -166,7 +166,7 @@ export function AccordionBanner({
 
   return (
     <div
-      className="my-2 overflow-hidden rounded-md border border-[--color-border] bg-[--color-bg-soft]"
+      className="my-2 overflow-hidden rounded-md border border-[--color-border] bg-[--color-bg-elevated]"
       onContextMenu={handleContextMenu}
     >
       <div className="flex w-full items-center gap-2 px-3 py-2">
@@ -195,7 +195,7 @@ export function AccordionBanner({
                 if (e.key === 'Escape') setRenameValue(null);
               }}
               onBlur={() => void handleRenameSubmit()}
-              className="w-full rounded-sm border border-[--color-border] bg-[--color-bg] px-1 py-0.5 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="w-full rounded-sm border border-[--color-border] bg-[--color-bg-base] px-1 py-0.5 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
             />
           )}
         </div>
@@ -213,18 +213,18 @@ export function AccordionBanner({
        *  summary card. When expanded, the parent renders the bubbles between
        *  the chevron and the next banner (we render the inline editor only). */}
       {segment !== null && isCollapsed && hasSummary && (
-        <div className="border-t border-[--color-border] bg-[--color-bg] px-3 py-2 text-[14px] text-[--color-text-primary]">
+        <div className="border-t border-[--color-border] bg-[--color-bg-base] px-3 py-2 text-[14px] text-[--color-text-primary]">
           <div className="whitespace-pre-wrap">{segment.summary}</div>
         </div>
       )}
 
       {/* Inline summary editor — shown after `Edit summary` in the menu. */}
       {segment !== null && editingSummary !== null && (
-        <div className="border-t border-[--color-border] bg-[--color-bg] px-3 py-2">
+        <div className="border-t border-[--color-border] bg-[--color-bg-base] px-3 py-2">
           <textarea
             value={editingSummary}
             onChange={(e) => setEditingSummary(e.target.value)}
-            className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-soft] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+            className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
           />
           <div className="mt-2 flex justify-end gap-2">
             <button
@@ -251,7 +251,7 @@ export function AccordionBanner({
           ref={menuRef}
           role="menu"
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
-          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
+          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg-base] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
         >
           {segment !== null && !hasSummary && (
             <MenuItem onClick={() => void handleSummariseSegment(segment)} disabled={isGenerating}>
@@ -320,7 +320,7 @@ function MenuItem({
       role="menuitem"
       onClick={onClick}
       disabled={disabled}
-      className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-soft] disabled:cursor-not-allowed disabled:opacity-50"
+      className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -362,7 +362,7 @@ function BannerButtonSlot({
         onClick={onGenerate}
         disabled={isGenerating}
         title={isGenerating ? 'Generation already in progress' : undefined}
-        className="shrink-0 rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
+        className="shrink-0 rounded-sm border border-[--color-border] bg-[--color-bg-base] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
       >
         Generate summary
       </button>
@@ -380,7 +380,7 @@ function BannerButtonSlot({
       className={`shrink-0 rounded-sm border border-[--color-border] px-2 py-0.5 text-[11px] ${
         segment.use_summary
           ? 'bg-[--color-accent] text-white'
-          : 'bg-[--color-bg] text-[--color-text-muted] hover:text-[--color-text-primary]'
+          : 'bg-[--color-bg-base] text-[--color-text-muted] hover:text-[--color-text-primary]'
       }`}
       aria-pressed={segment.use_summary}
       title="Toggle summary substitution in API history"

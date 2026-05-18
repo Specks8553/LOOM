@@ -1,28 +1,111 @@
 @import 'tailwindcss';
 
-/* Doc 08 (Design Tokens) is the single source of truth for all values below.
- * Tokens land in their own commits during the visual-polish phase. The seed
- * here is the minimum needed to render the three-phase shell. */
+/* Fonts — bundled locally as woff2 (no CDN; CLAUDE.md architecture rule #10,
+ * Doc 02 CSP). All three families are variable fonts: one file per style
+ * covers the full weight axis. Latin subset only. */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('./assets/fonts/source-serif-4-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('./assets/fonts/source-serif-4-latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('./assets/fonts/source-code-pro-latin.woff2') format('woff2');
+}
+
+/* Design tokens — single source of truth is Doc 08 (design/08-design-tokens.md),
+ * reconciled 2026-05-17 to the approved Designfiles visual design pass
+ * (docs-v2/design/Designfiles/: warm palette, Sage accent, Plus Jakarta Sans
+ * stacks). Feature triads, accent-derived variants, and bubble colours carry
+ * defaults here; applyTheme() (src/lib/theme.ts) overrides them at runtime. */
 @theme {
-  --color-bg: #0a0a0a;
-  --color-bg-soft: #141414;
-  --color-text-primary: #e5e5e5;
-  --color-text-muted: #888888;
-  --color-border: #262626;
-  --color-accent: #7c3aed;
+  /* Backgrounds — warm dark hierarchy */
+  --color-bg-base: #100f0c;
+  --color-bg-pane: #15140f;
+  --color-bg-theater: #0c0b08;
+  --color-bg-elevated: #1d1b16;
+  --color-bg-hover: #262318;
+  --color-bg-active: #2e2b21;
 
-  /* Ghostwriter feature triad (Doc 17 / CD-2). ⚠️ Provisional values —
-   * NB-1 marks these for tuning in the visual-polish phase. */
-  --color-ghostwriter: #2dd4bf;
-  --color-ghostwriter-hover: #14b8a6;
-  --color-ghostwriter-subtle: #134e4a;
-  --color-ghostwriter-diff: #2dd4bf;
+  /* Borders */
+  --color-border: #2d291f;
+  --color-border-subtle: #221f17;
 
-  /* Feedback feature triad (Doc 28). ⚠️ Provisional values — independent of
-   * --color-warning so writers can theme feedback distinctly (Doc 20). */
+  /* Text */
+  --color-text-primary: #e7e4dc;
+  --color-text-secondary: #8c867a;
+  --color-text-muted: #595349;
+  --color-text-inverse: #100f0c;
+  --color-text-on-accent: #ffffff;
+
+  /* Accent (Sage default) — hover/subtle/text re-derived at runtime by applyTheme */
+  --color-accent: #6b9f78;
+  --color-accent-hover: #5a8a67;
+  --color-accent-subtle: #161f18;
+  --color-accent-text: #a8d4b3;
+
+  /* Semantic — fixed */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #f43f5e;
+
+  /* Feature triads — default to tracking the accent; runtime-overridable */
+  --color-ghostwriter: #6b9f78;
+  --color-ghostwriter-hover: #5a8a67;
+  --color-ghostwriter-subtle: #161f18;
+  --color-ghostwriter-diff: #6b9f78;
+  --color-accordion: #6b9f78;
+  --color-accordion-hover: #5a8a67;
+  --color-accordion-subtle: #161f18;
+  --color-checkpoint: #6b9f78;
+
+  /* Feedback triad (Doc 28) — stable amber default, does NOT track accent */
   --color-feedback: #f59e0b;
-  --color-feedback-hover: #fbbf24;
+  --color-feedback-hover: #d98c0a;
   --color-feedback-subtle: rgba(245, 158, 11, 0.06);
+
+  /* Message bubble backgrounds — runtime-overridable */
+  --bubble-user-bg: #161f18;
+  --bubble-ai-bg: #1d1b16;
+
+  /* Border radii */
+  --radius-bubble: 10px;
+  --radius-card: 6px;
+  --radius-input: 4px;
+  --radius-sm: 3px;
+
+  /* Typography — fonts bundled locally as woff2 in src/assets/fonts/ (no CDN;
+   * CSP-enforced). @font-face declarations are at the top of this file. */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-mono: 'Source Code Pro', 'Consolas', monospace;
+  --font-theater-body: 'Source Serif 4', Georgia, serif;
 }
 
 :root {
@@ -37,10 +120,46 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  background: var(--color-bg-base);
   color: var(--color-text-primary);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* --- Scrollbar (Doc 08 §Scrollbar) --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* --- Selection (Doc 08 §Selection) — accent at 40% alpha --- */
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  color: var(--color-text-primary);
+}
+
+/* --- Streaming indicator (Doc 09 §LoadingDots, Doc 27 §AI bubble) --- */
+@keyframes dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
 /* --- Ghostwriter (Doc 17) --- */

@@ -1,7 +1,8 @@
 # 23 — Modes
 
 > **Status:** Complete
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: `active_session_id` persistence committed — added to `story_state` known keys (Doc 03); re-opening a story in a session-mode restores the session if it still exists, else falls back silently to story mode (CD-9 / Q7).
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): the mode switcher is now positioned at the **bottom** of the Theater, directly above the input area (owner decision; visual treatment in Doc 27). §Mode UI Mapping row relabelled from "Top bar" to "Mode switcher". Switcher *behaviour* is unchanged.
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: `active_session_id` persistence committed — added to `story_state` known keys (Doc 03); re-opening a story in a session-mode restores the session if it still exists, else falls back silently to story mode (CD-9 / Q7).
 > **Earlier:** 2026-04-29 — first full design pass; cross-cutting switcher behaviour, story-mode parity, handover spec (multi-turn, manual seed-doc workflow), consulting spec (multi-session, per-session cache, snapshot-driven re-entry), unified banner pattern across handover / consulting / accordion
 > **Scope:** The Modes system — story / handover / consulting. Persona, conversation type, cache topology, session lifecycle, Theater partition rendering, and how the writer moves between them.
 
@@ -281,7 +282,7 @@ Banners and partitions live in the Theater at the position they were created —
 
 | Surface | Story | Handover | Consulting |
 |---|---|---|---|
-| Top bar | Mode switcher (3 tabs); active session name shown when applicable | same | same |
+| Mode switcher (bottom, above input area) | Segmented pill row (3 segments); active session name shown when applicable | same | same |
 | Theater (scroll surface) | Story messages, banners for sessions and accordion | same — scroll surface is unified | same |
 | Input area | Four fields | One field | One field |
 | Aux slot UI | Visible | Hidden | Hidden |

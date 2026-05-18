@@ -60,8 +60,8 @@ export function SessionBubble({ message, streaming = false }: SessionBubbleProps
       <div
         className={`rounded-md border border-[--color-border] p-3 text-[14px] leading-relaxed ${
           isUser
-            ? 'bg-[--color-bg-soft] text-[--color-text-primary]'
-            : 'bg-[--color-bg] text-[--color-text-primary]'
+            ? 'bg-[--color-bg-elevated] text-[--color-text-primary]'
+            : 'bg-[--color-bg-base] text-[--color-text-primary]'
         }`}
       >
         {showThinkingHint ? (
@@ -109,7 +109,7 @@ function SessionActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>

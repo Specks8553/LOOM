@@ -1,7 +1,8 @@
 # 12 — Empty States and Errors
 
-> **Status:** Complete — copy and icon choices provisional ⚠️
-> **Last updated:** 2026-04-26
+> **Status:** Complete — copy verified against the Designfiles where covered; uncovered copy still provisional ⚠️
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): empty-state copy verified against `docs-v2/design/Designfiles/Phase 0D - Components.html` and `Phase 1 / Phase 2`. ⚠️ cleared on the three states the mockups confirm verbatim — No Worlds subtext, No Story Selected (without recents) headline, No Messages headline + subtext. States the Designfiles do not yet cover (No Stories, No Source Documents, No Attached Documents, No Search Results, Handover/Consulting empty) and the §Error Copy Reference remain ⚠️ provisional. Toast tier unchanged (see `docs-v2/future/toast-free-notifications.md` for the future direction).
+> **Earlier:** 2026-04-26
 
 Empty states and error surfaces are first-class UI. Blank screens are bugs. Every zero-data condition and every error class has a specified presentation here.
 
@@ -48,7 +49,7 @@ Shown in the WorldPicker when no worlds exist. The first step of onboarding cove
 ```
 Icon:       Globe (40px)
 Headline:   "No worlds yet."
-Subtext:    "A world holds your stories, documents, and settings."  ⚠️
+Subtext:    "A world holds your stories, documents, and settings."
 Action:     [Create your first world]  → opens CreateWorldModal
 ```
 
@@ -84,7 +85,7 @@ Headline:   "Select a story to continue."  ⚠️
 **Without recents:**
 ```
 Icon:       BookOpen (40px)
-Headline:   "Select a story from the Navigator, or create one to begin."  ⚠️
+Headline:   "Select a story from the Navigator, or create one to begin."
 ```
 
 Recent story entries use `--color-text-primary` for the title and `--color-text-muted` for the timestamp. Clicking a row opens the story.
@@ -97,8 +98,8 @@ Shown in the Theater when a story is selected but has no messages.
 
 ```
 Icon:       (none — the InputArea itself invites action)
-Headline:   "Your story begins here."  ⚠️
-Subtext:    "Write a direction and press Send to start."  ⚠️
+Headline:   "Your story begins here."
+Subtext:    "Write a direction and press Send to start."
 ```
 
 No action button — the InputArea below is the action.

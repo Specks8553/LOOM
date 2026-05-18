@@ -1,6 +1,6 @@
 # LOOM 2.0 — Implementation Plan
 
-> **Status:** Not started — drafted 2026-05-05.
+> **Status:** In progress — drafted 2026-05-05; Phases 0–11 implemented; Phase 12 (Visual Design Pass) re-scoped and started 2026-05-17.
 > **Audience:** The implementing agent (and any human reviewing). This is the canonical phase ledger. Read this *after* `00-INDEX.md`; read it *before* opening any feature spec.
 > **How to use:** Each phase below has a `Status:` line, a Goal, Inputs, Scope, Testable Checkpoints (`- [ ]` boxes), Out of Scope, and a `Resumption notes:` subsection. Tick checkpoints as you complete them. **Update `Resumption notes:` live, not at session end** — sessions end abruptly. Do not start phase N+1 until phase N is `/phase-verify`-clean.
 > **Authority:** `00-INDEX.md` D-NN entries are canonical for architectural decisions. `PRE-IMPLEMENTATION-AUDIT.md` is canonical for known drift. This file owns the **order and gating** of implementation work, nothing else. Cross-references point at the spec doc that owns the surface — never duplicate spec content here.
@@ -768,37 +768,103 @@
 
 ---
 
-## Phase 12 — Visual polish & copy pass
+## Phase 12 — Visual Design Pass
 
-**Status:** Not started
+**Status:** In progress (last touched 2026-05-17)
 
-**Goal:** Resolve every NB-1..NB-4 audit item — either tune to a final value or intentionally defer (with a follow-up note). The aesthetic bar Doc 01 sets is hit.
+> **Re-scoped 2026-05-17.** Phase 12 was originally a thin "visual polish & copy pass". It is re-scoped into a full **Visual Design Pass**: the design team produces approved design canvases (`docs-v2/design/Designfiles/`), and this phase applies each canvas to the real codebase. The original polish scope (NB-1..NB-4 resolution, ⚠️-token tuning, copy pass, keyboard shortcuts, animation pass) is folded in — distributed to the relevant design steps plus a final consolidation step (12-Z).
+
+**Goal:** Bring the real app up to the aesthetic bar Doc 01 sets, by applying every approved `Designfiles/` canvas to the actual React/CSS codebase. By phase end: warm palette + Sage accent + the approved font stacks are live; every workspace surface matches its canvas; no `⚠️` provisional marker remains in a v2.0-scope spec doc.
+
+**Design-team plan & numbering.** The design team works to a step plan (`0A`–`7D`) whose numbering is **independent** of the implementation plan's Phase 0–13. To avoid collision, design steps are written here as `12-0A`, `12-1A`, etc. Each step name and its source canvas match a file in `Designfiles/`.
+
+**Per-step deliverable contract (Q2(b)).** Each step has two parts:
+1. **Design decision** — finalized in the step's `Designfiles/` canvas and reconciled into the owning spec doc(s). For steps `12-0A`–`12-2D` this is **already done** (canvases exist; Docs 08/09/10/12/23/27 reconciled 2026-05-17).
+2. **Application** — the canvas is applied to the real codebase (`src/globals.css`, `src/components/**`, theme code). This is pending for **all** steps.
+
+**Canvas dependency.** Design canvases are produced **externally** for now. A step's Application part is gated on its canvas existing in `Designfiles/`. Steps `12-0A`–`12-2D` are unblocked today; `12-3A`–`12-7D` wait for their canvas to land.
 
 **Inputs:**
+- `docs-v2/design/Designfiles/` — approved design canvases (source of truth for visual decisions).
+- `design/08-design-tokens.md`, `design/09-component-library.md`, `design/10-layout-and-navigation.md`, `design/12-empty-states-and-errors.md`, `design/27-theater-composition.md` — reconciled 2026-05-17.
 - `PRE-IMPLEMENTATION-AUDIT.md` NB-1..NB-4.
-- All ⚠️-marked values across Doc 08, 17, 22, 27.
-- `TODO.md` §VERIFY in the visual / UI design phase.
-- `design/12-empty-states-and-errors.md` — copy provisional.
+- All remaining `⚠️`-marked values across Docs 12, 15, 16, 17, 18, 22, 27.
+- `design/11-interaction-patterns.md` §Keyboard Shortcuts (NB-4 — to populate).
 
-**Scope / Deliverables:**
+**Design steps:**
 
-1. Tune every ⚠️ design token (Doc 08, Doc 27).
-2. Tune every ⚠️ copy string (Doc 12, Doc 16, Doc 17, Doc 18, Doc 15 deletion modal).
-3. Resolve open visual questions (NB-3): short-bubble Ghostwriter layout, per-bubble cache marker, truncated-summary treatment, image upload progress, Ctrl+S acknowledgement, token meter placement, status section glyphs.
-4. Populate Doc 11 §Keyboard Shortcuts table (NB-4).
-5. Empty-state pass: every Doc 12 state has its specified content, styling, and actions.
-6. Animation pass: 150–300 ms transitions across all interactions.
+| Step | Surface | Canvas | Status |
+|---|---|---|---|
+| 12-0A | Color palette — warm darks, background hierarchy, border, text | `Phase 0A - Color Palette.html` | Canvas ✓ · Doc 08 reconciled · application pending |
+| 12-0B | Accent color — Sage default + derived triads; feature-color defaults | `Phase 0B - Accent Color.html` | Canvas ✓ · Doc 08 reconciled · application pending |
+| 12-0C | Typography — Plus Jakarta Sans / Source Serif 4 / Source Code Pro at the real type scale | `Phase 0C - Typography.html` | Canvas ✓ · Doc 08 reconciled · application pending |
+| 12-0D | Component primitives — buttons, inputs, badges, bubbles, banners, toast | `Phase 0D - Components.html` | Canvas ✓ · Doc 09 reconciled · application pending |
+| 12-1A | Three-pane layout — proportions, dividers, collapse, background hierarchy | `Phase 1 - Workspace Shell.html` | Canvas ✓ · Doc 10 reconciled · application pending |
+| 12-1B | Empty state — no story selected | `Phase 1 - Workspace Shell.html` | Canvas ✓ · Doc 10/12 reconciled · application pending |
+| 12-2A | Story thread — user bubbles (4-field), AI bubbles (prose), action rows, feedback strip | `Phase 2 - Theater.html` | Canvas ✓ · Doc 27 reconciled · application pending |
+| 12-2B | Input area — 4-field composer, send/cancel, token meter | `Phase 2 - Theater.html` | Canvas ✓ · Doc 27 reconciled · application pending |
+| 12-2C | Mode switcher — **bottom** of Theater, above the input area (relocated from top per 2026-05-17 owner decision) | `Phase 2 - Theater.html` | Canvas ✓ · Doc 10/23/27 reconciled · application pending |
+| 12-2D | Streaming state + empty state ("Your story begins here") | `Phase 2 - Theater.html` | Canvas ✓ · Doc 27/12 reconciled · application pending |
+| 12-3A | Navigator — vault tree (folders, stories, source docs, selection, expand/collapse) | *pending external* | Canvas pending |
+| 12-3B | Navigator — search, create menu, footer actions | *pending external* | Canvas pending |
+| 12-3C | Navigator — Trash view | *pending external* | Canvas pending |
+| 12-4A | Control Pane — context documents, cache, status sections | *pending external* | Canvas pending |
+| 12-4B | Control Pane — collapsed state (32px toggle bar) | *pending external* | Canvas pending |
+| 12-5A | Accordion banners — all button-slot state-machine states | *pending external* | Canvas pending |
+| 12-5B | Session banners (handover/consulting) — collapsed/expanded, active emphasis | *pending external* | Canvas pending |
+| 12-6A | Ghostwriter — selection mode, word-level diff, accept/reject | *pending external* | Canvas pending |
+| 12-6B | Ghostwriter — floating panel placement in the right gutter | *pending external* | Canvas pending |
+| 12-7A | Lock screen + onboarding | *pending external* | Canvas pending |
+| 12-7B | World Picker | *pending external* | Canvas pending |
+| 12-7C | Settings | *pending external* | Canvas pending |
+| 12-7D | DocEditor | *pending external* | Canvas pending |
+| 12-Z | Consolidation — NB-1..NB-4 resolution, residual ⚠️ tuning, Doc 11 keyboard-shortcuts table, full copy pass, 150–300 ms animation pass | — | Pending (after all steps) |
+
+**Cross-cutting deliverables (folded from the original polish scope):**
+- **Copy** — every `⚠️` copy string (Docs 12, 16, 17, 18, Doc 15 deletion modal) is finalized; resolved within the owning surface's step where one exists, otherwise in `12-Z`.
+- **Animation** — 150–300 ms transitions applied consistently; verified per surface, consolidated in `12-Z`.
+- **Tokens** — any residual `⚠️` token is tuned to a final value as its surface is implemented.
+- **Keyboard shortcuts** — Doc 11 §Keyboard Shortcuts table populated and the document-level listener wired (`12-Z`, NB-4).
+- **Toasts** — applied as currently spec'd (Doc 12 §1). The owner's "steer away from toasts" preference is a *future* direction only — see `docs-v2/future/toast-free-notifications.md`. No toast removal in this phase.
 
 **Testable Checkpoints:**
-- [ ] Every NB-1..NB-4 item is either ticked-resolved or ticked-deferred (with a `(YYYY-MM-DD — deferred to <where>)` note).
-- [ ] No `⚠️` marker remains in any spec doc that is in v2.0 scope.
-- [ ] Doc 11 §Keyboard Shortcuts table populated; document-level listener wired.
-- [ ] Manual visual pass against Doc 02 / Doc 27 — screenshot-compare equivalents look correct.
+- [x] `12-0A`–`12-0D` applied (2026-05-17): `globals.css` carries the warm palette, Sage accent + derivation, the approved (bundled) font stacks, radii, scrollbar + selection; `cargo`/`tsc`/lint/`vite build` clean. Visual pass still pending (manual `pnpm tauri dev`).
+- [ ] `12-1A`–`12-1B` applied: the workspace shell and the no-story empty state match `Phase 1`.
+- [x] `12-2A`–`12-2D` applied (2026-05-18): the Theater (bubbles, input area, bottom mode switcher, streaming + empty states) matches `Phase 2`; `tsc`/eslint (0 warnings)/37 vitest/`vite build` clean. Visual pass still pending (manual `pnpm tauri dev`).
+- [ ] `12-3A`–`12-7D` applied: each surface matches its `Designfiles/` canvas once that canvas lands.
+- [ ] `12-Z`: every NB-1..NB-4 item is ticked-resolved or ticked-deferred (`(YYYY-MM-DD — deferred to <where>)`); no `⚠️` marker remains in a v2.0-scope spec doc; Doc 11 §Keyboard Shortcuts populated + listener wired.
+- [ ] Manual visual pass — each implemented surface verified against its canvas in a running `pnpm tauri dev` build.
 
-**Out of scope:** Light mode (v2.1); any feature behaviour changes — this phase is visual + copy only.
+**Out of scope:** Light mode (v2.1); authoring new design canvases (external for now — Q3); any feature *behaviour* change — this phase is visual + copy only.
 
 **Resumption notes:**
-*(empty — phase not started)*
+
+- **2026-05-17: Phase 12 started — Designfiles reconciliation.** Doc 08 (warm palette, Sage accent, Plus Jakarta Sans / Source Serif 4 / Source Code Pro font stacks; shadcn RGB mirror; ⚠️ cleared), Doc 09 (component values verified, `LoadingDots` timing corrected, ⚠️ cleared), Doc 10 (layout verified vs `Phase 1`), Doc 12 (empty-state copy partly verified — 3 states confirmed), Doc 23 + Doc 27 (mode switcher relocated to the bottom; bubble/banner visual values inlined) all reconciled against the `Designfiles/` canvases. `00-INDEX.md` status rows updated.
+- **2026-05-17: Phase 12 re-scoped** from "visual polish & copy pass" to a full Visual Design Pass (this block). Owner decisions: design-step numbering prefixed `12-` (Q1); each step finalizes the canvas decision *and* applies it to real code (Q2(b)); canvases produced externally for now (Q3); original polish scope folded in (Q4).
+- **2026-05-17: Owner decision — mode switcher at the bottom** of the Theater (above the input area), replacing the former top-bar tab strip. Docs 10/23/27 amended.
+- **2026-05-17: Owner preference — steer away from toasts** (future direction only; no v2.0 change). Captured in `docs-v2/future/toast-free-notifications.md` + `TODO.md` §Notification Model.
+- **2026-05-17: `12-0A`/`12-0B`/`12-0D` applied to the real codebase.**
+  - `src/globals.css` rewritten: full Doc 08 `@theme` token set — warm backgrounds, borders, text, semantic, accent + derived defaults, feature triads, bubble bg, radii (`--radius-bubble/card/input/sm`), font stacks; global `::-webkit-scrollbar` + `::selection` rules; `body` now uses `var(--font-sans)`, 13px/1.5.
+  - **Legacy token migration:** components referenced two non-Doc-08 aliases — `--color-bg` (29 uses) and `--color-bg-soft` (21 files), plus a stray `--color-danger`. Migrated via `sed` to `--color-bg-base` / `--color-bg-elevated` / `--color-error`. globals.css never previously defined the full Doc 08 set — components referenced names that resolved to nothing; they now resolve.
+  - `src/lib/theme.ts`: `triad()` derivation rewritten from RGB-shade (which *lightened* for hover — a bug) to the Doc 08 HSL algorithm (hover = L−10; text = S×0.8, L+35; subtle = 8% blend on `--color-bg-base`). Accent fallbacks `#7c3aed` → Sage `#6b9f78` (`DEFAULT_ACCENT`); `bubbleAi` fallback `#141414` → `#1d1b16`; `bodyFontStack` serif/sans/mono → the approved stacks.
+  - **Accent default consolidated:** three different hardcoded defaults existed — `settings_keys.rs` `#7c3aed`, `world.rs` `DEFAULT_ACCENT_COLOR` `#f97316` (orange), frontend placeholder/validator copy. All set to Sage `#6b9f78`; `settings.rs` test assertion updated.
+  - **Gates green:** tsc, eslint (`--max-warnings 0`), 37 vitest, 227 Rust tests all pass.
+- **2026-05-17: `12-0C` typography — done.** Owner authorized fetching the fonts. 5 woff2 files vendored in `src/assets/fonts/` (latin subset; all three families are variable fonts so one file per style covers the full weight axis): `plus-jakarta-sans-latin{,-italic}`, `source-serif-4-latin{,-italic}`, `source-code-pro-latin`. `@font-face` declarations (variable `font-weight` ranges, `font-display: swap`) added at the top of `globals.css`; no CDN — `vite build` fingerprints and bundles them into `dist/assets/`. Build green.
+- **Note:** shadcn/ui is not installed (`src/components/ui/` does not exist) — Doc 08 §shadcn override block is a forward contract only; nothing to apply in Phase 12.
+- **2026-05-17: `12-0A`–`12-0D` complete.** Gates: tsc, eslint (0 warnings), 37 vitest, 227 Rust tests, `vite build` all green. Pending: visual pass in a running `pnpm tauri dev` build (manual — `/phase-verify`).
+- **2026-05-17: `12-1A` / `12-1B` / `12-2C` applied.**
+  - `12-1A` (three-pane layout): the shell components (`WorkspaceShell`, `LeftPane`, `RightPane`, `PaneDivider`, `Theater`) already matched the `Phase 1` canvas — proportions, divider, 32px collapsed bar, pane background tokens. The `12-0` token migration completed it; no further code changes needed.
+  - `12-1B` (no-story empty state): `TheaterBody.NoStorySelected` rebuilt to the Doc 12 template — `BookOpen` icon (40px, muted, 50% opacity) + 15px/500 headline.
+  - `12-2C` (mode switcher → bottom): `ModeSwitcher` moved from a top tab strip to a segmented pill row at the bottom of the Theater, directly above the input area. Restyled per `Phase 2` (11px pills, `--color-bg-active` fill on active, session name appended inline). It now carries the bottom region's `border-t`; `InputArea` + `SessionInputArea` had their own `border-t` removed so the region reads as one contiguous `--color-bg-elevated` block.
+  - `12-2D` partial: `BeginYourStory` (no-messages state) copy corrected to "Your story begins here." / "Write a direction and press Send to start." per Doc 12.
+  - Gates: tsc, eslint (0 warnings), 37 vitest all green.
+- **2026-05-18: `12-2A` / `12-2B` applied — `12-2A`–`12-2D` now complete.**
+  - New shared `src/components/theater/BubbleActions.tsx`: `BubbleActionRow` (borderless icon+label hover row, fades in on parent-`group` hover, left/right align) + `StreamingDots` (3-dot `dot-pulse` indicator). `dot-pulse` keyframe added to `globals.css`.
+  - `12-2A` `StoryUserBubble`: bubble border → accent at 12% alpha (`color-mix`); field labels 11px→9px, `tracking-[0.08em]`; Plot Direction body 14px→13px; Background 12px secondary; Constraints 12px muted italic; modificator chips 11px→10px. Action row moved from absolute `-top-1` bordered chips to the below-bubble `BubbleActionRow`.
+  - `12-2A` `StoryAIBubble`: box → `rounded-bubble`, `--color-border-subtle`, `--bubble-ai-bg`, `px-5 py-4`, `font-theater-body` serif 15px/1.7; alignment fixed (`mx-auto` dropped — Doc 27 left-aligned); streaming caret replaced with `StreamingDots`; local bordered-chip action row replaced with `BubbleActionRow` (Ghostwriter/Feedback/Revert/Edit/Regenerate/Delete preserved). `FeedbackStrip` already matched Doc 27 — untouched.
+  - `12-2B` `InputArea`: rebuilt as a single `--color-bg-pane` rounded card — Plot Direction always visible, `+ Fields` / `− Fields` toggle reveals Background/Modificators/Constraints with hairline dividers; borderless transparent textareas; 9px field labels. Bottom bar carries a mono token meter (left) + Send/Cancel (right). NB-3: the 500 ms-debounced `get_token_count` pre-flight is now wired (default mode only) → `workspaceStore.tokenEstimate`, which also feeds the existing `StatusSection` readout.
+  - Gates: tsc, eslint (0 warnings), 37 vitest, `vite build` all green.
+- **Next:** `12-3A`+ once external canvases land. Manual visual pass (`/phase-verify`) still pending for all applied steps.
 
 ---
 

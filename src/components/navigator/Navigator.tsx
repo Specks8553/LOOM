@@ -205,7 +205,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
             placeholder="Filter items…"
             value={filterQuery}
             onChange={(e) => setFilter(e.target.value)}
-            className="h-6 flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-2 text-[12px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted] focus:border-[--color-accent]"
+            className="h-6 flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 text-[12px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted] focus:border-[--color-accent]"
           />
           <CreateMenu
             open={createMenuOpen}

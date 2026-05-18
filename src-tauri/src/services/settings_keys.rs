@@ -129,7 +129,7 @@ impl AppSettingKey {
             Self::GenSummariseTopP => "0.95",
             Self::GenSummariseTopK => "40",
             Self::GenSummariseMaxOutputTokens => "2048",
-            Self::AccentColor => "#7c3aed",
+            Self::AccentColor => "#6b9f78",
             Self::BodyFont => "serif",
             // Feedback uses a stable amber by default — it does not track
             // accent (Doc 28 / Doc 20 §Features).

@@ -1,7 +1,8 @@
 # 09 — Component Library
 
-> **Status:** Complete — visual values provisional ⚠️
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: Slider use case updated (`gen_*` parameter sliders in Settings → Gemini); stale "output length" reference removed from Select use case (CD-4).
+> **Status:** Complete — visual values finalized per the Designfiles visual design pass
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): visual values verified against `docs-v2/design/Designfiles/Phase 0D - Components.html`. ⚠️ markers cleared (popover shadow confirmed); `LoadingDots` animation timing corrected to the Phase 0D spec (1.2s pulse cycle, 0.2s stagger). Token references inherit Doc 08's warm palette automatically — no per-component value changes needed. Stale `applyAccentColor()` → `applyTheme()`.
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: Slider use case updated (`gen_*` parameter sliders in Settings → Gemini); stale "output length" reference removed from Select use case (CD-4).
 > **Earlier:** 2026-04-26
 
 Documents two things: the shadcn/ui components used in v2.0 (their behavioral role and LOOM visual override contract), and the custom shared components in `src/components/shared/`. Feature-specific components are documented in their feature docs. Layout components are in Doc 10.
@@ -16,7 +17,7 @@ shadcn/ui is used **for behavior only**: focus management, ARIA roles, keyboard 
 
 ### Override pattern
 
-shadcn components read from their own CSS variable set (`--background`, `--foreground`, `--primary`, etc.). These are kept in sync with LOOM's tokens in `globals.css` and updated at runtime by `applyAccentColor()`. The shadcn visual layer is effectively invisible — it emits markup, LOOM styles it.
+shadcn components read from their own CSS variable set (`--background`, `--foreground`, `--primary`, etc.). These are kept in sync with LOOM's tokens in `globals.css` and updated at runtime by `applyTheme()`. The shadcn visual layer is effectively invisible — it emits markup, LOOM styles it.
 
 ```tsx
 // ✅ correct — token-driven, no visual defaults from shadcn slip through
@@ -140,7 +141,7 @@ shadcn components read from their own CSS variable set (`--background`, `--foreg
 | Element | Tokens |
 |---|---|
 | Content | `--color-bg-elevated`, `--color-border`, `--radius-card` |
-| Shadow | `0 8px 24px rgba(0,0,0,0.5)` ⚠️ |
+| Shadow | `0 8px 24px rgba(0,0,0,0.5)` |
 
 **States:** closed, open (150ms fade + slight translate).
 
@@ -264,7 +265,7 @@ LoadingDots (span)
 
 **States:** single animated state — three dots pulsing in sequence.
 **Token references:** `--color-text-muted`.
-**Animation:** Sequential opacity pulse, 600ms stagger between dots.
+**Animation:** `dot-pulse` — opacity pulse, 1.2s ease-in-out cycle, 0.2s stagger between dots (per `Designfiles/Phase 0D`). Dot size 5–6px, `--radius-sm` (3px).
 
 ---
 

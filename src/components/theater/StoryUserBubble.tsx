@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { BubbleActionRow } from '@/components/theater/BubbleActions';
 import { InputArea } from '@/components/theater/InputArea';
 import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -14,9 +15,9 @@ interface StoryUserBubbleProps {
  * Doc 27 §Story user bubble + Doc 15 §Editing a Message.
  *
  * Renders a `json_user` row as a labelled four-field stack. Empty fields are
- * omitted. Right-side hover affordances: Edit / Delete exchange / Delete
- * from here. Edit pops the InputArea in place; commit triggers
- * `edit_user_message` (truncate-and-replace + regenerate).
+ * omitted. Below-bubble hover action row: Edit / Delete / Delete from here.
+ * Edit pops the InputArea in place; commit triggers `edit_user_message`
+ * (truncate-and-replace + regenerate).
  */
 export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   const [editing, setEditing] = useState(false);
@@ -65,42 +66,66 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   }
 
   return (
-    <div className="group relative mx-auto w-full max-w-[80%] py-2">
-      <div className="rounded-md border border-[--color-border] bg-[--color-bg-soft] p-3 text-[14px] text-[--color-text-primary]">
+    <div className="group ml-auto flex w-fit max-w-[65%] flex-col items-end py-2">
+      <div className="rounded-bubble border bg-[--bubble-user-bg] px-4 py-3 [border-color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]">
         {parsed.plot_direction.trim().length > 0 && (
-          <Section label="PLOT DIRECTION">{parsed.plot_direction}</Section>
+          <Field label="Plot Direction">
+            <p className="whitespace-pre-wrap text-[13px] leading-normal text-[--color-text-primary]">
+              {parsed.plot_direction}
+            </p>
+          </Field>
         )}
         {parsed.background_information.trim().length > 0 && (
-          <Section label="BACKGROUND INFORMATION — NOT FOR THE READER" dim>
-            {parsed.background_information}
-          </Section>
+          <Field label="Background" dim>
+            <p className="whitespace-pre-wrap text-[12px] leading-normal text-[--color-text-secondary]">
+              {parsed.background_information}
+            </p>
+          </Field>
         )}
         {parsed.modificators.length > 0 && (
-          <div className="mt-2">
-            <Label>MODIFICATORS</Label>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {parsed.modificators.map((m, i) => (
-                <span
-                  key={`${m}-${i}`}
-                  className="rounded-sm border border-[--color-border] bg-[--color-bg] px-1.5 py-0.5 text-[12px] text-[--color-text-secondary]"
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {parsed.modificators.map((m, i) => (
+              <span
+                key={`${m}-${i}`}
+                className="rounded-sm bg-[--color-accent-subtle] px-2 py-0.5 text-[10px] text-[--color-accent-text]"
+              >
+                {m}
+              </span>
+            ))}
           </div>
         )}
         {parsed.constraints.trim().length > 0 && (
-          <Section label="CONSTRAINTS — DO NOT INCLUDE IN OUTPUT" dim>
-            {parsed.constraints}
-          </Section>
+          <Field label="Constraints" dim>
+            <p className="whitespace-pre-wrap text-[12px] italic leading-snug text-[--color-text-muted]">
+              {parsed.constraints}
+            </p>
+          </Field>
         )}
       </div>
-      <ActionRow
-        disabled={isGenerating}
-        onEdit={() => void handleEditClick()}
-        onDeleteExchange={() => void handleDelete('exchange')}
-        onDeleteFrom={() => void handleDelete('from')}
+      <BubbleActionRow
+        align="right"
+        actions={[
+          {
+            icon: '✎',
+            label: 'Edit',
+            disabled: isGenerating,
+            onClick: () => void handleEditClick(),
+          },
+          {
+            icon: '×',
+            label: 'Delete',
+            destructive: true,
+            disabled: isGenerating,
+            onClick: () => void handleDelete('exchange'),
+          },
+          {
+            icon: '×',
+            label: 'Delete from here',
+            destructive: true,
+            disabled: isGenerating,
+            onClick: () => void handleDelete('from'),
+          },
+        ]}
       />
       {cachedGuardModal}
     </div>
@@ -124,69 +149,26 @@ function safeParse(json: string): UserContent {
   }
 }
 
-function Section({ label, dim, children }: { label: string; dim?: boolean; children: string }) {
-  return (
-    <div className="mt-2 first:mt-0">
-      <Label>{label}</Label>
-      <p
-        className={`mt-1 whitespace-pre-wrap text-[14px] ${
-          dim ? 'text-[--color-text-muted]' : 'text-[--color-text-primary]'
-        }`}
-      >
-        {children}
-      </p>
-    </div>
-  );
-}
-
-function Label({ children }: { children: string }) {
-  return (
-    <span className="text-[11px] font-medium uppercase tracking-wider text-[--color-text-muted]">
-      {children}
-    </span>
-  );
-}
-
-interface ActionRowProps {
-  disabled: boolean;
-  onEdit: () => void;
-  onDeleteExchange: () => void;
-  onDeleteFrom: () => void;
-}
-
-function ActionRow({ disabled, onEdit, onDeleteExchange, onDeleteFrom }: ActionRowProps) {
-  return (
-    <div className="pointer-events-none absolute -top-1 right-0 flex gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-      <ActionButton onClick={onEdit} disabled={disabled}>
-        Edit
-      </ActionButton>
-      <ActionButton onClick={onDeleteExchange} disabled={disabled}>
-        Delete
-      </ActionButton>
-      <ActionButton onClick={onDeleteFrom} disabled={disabled}>
-        Delete from here
-      </ActionButton>
-    </div>
-  );
-}
-
-function ActionButton({
-  onClick,
-  disabled,
+/** A labelled section inside the bubble. `dim` fades the label (Doc 27). */
+function Field({
+  label,
+  dim,
   children,
 }: {
-  onClick: () => void;
-  disabled: boolean;
-  children: string;
+  label: string;
+  dim?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
+    <div className="mt-2.5 first:mt-0">
+      <span
+        className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted] ${
+          dim ? 'opacity-70' : ''
+        }`}
+      >
+        {label}
+      </span>
+      <div className="mt-1">{children}</div>
+    </div>
   );
 }

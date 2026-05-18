@@ -1,6 +1,7 @@
 # LOOM 2.0 — Open Questions and Deferred Decisions
 
-> **Last updated:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted (14 phases, 0 → 13 with 0.5 for Doc 25). Doc 25 (Testing Strategy) and Doc 26 (Build & Release) now have explicit phase homes (0.5 and 13 respectively); ST-3 / ST-4 will close in those phases. NB-1..NB-4 visual / copy items will close in Phase 12. SB-4 (cancellation lifecycle) folded into Phase 0 deliverables. `_new_claude.md` §The phase model amended to require live-update of `Resumption notes:`.
+> **Last updated:** 2026-05-17 — Phase 12 Designfiles reconciliation: Doc 08 + Doc 09 reconciled to the approved warm palette / Sage accent / Plus Jakarta Sans stacks (`docs-v2/design/Designfiles/`). New "OPEN — Notification Model" entry: owner prefers to steer away from toasts; direction captured in `docs-v2/future/toast-free-notifications.md` (no v2.0 change).
+> **Earlier:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted (14 phases, 0 → 13 with 0.5 for Doc 25). Doc 25 (Testing Strategy) and Doc 26 (Build & Release) now have explicit phase homes (0.5 and 13 respectively); ST-3 / ST-4 will close in those phases. NB-1..NB-4 visual / copy items will close in Phase 12. SB-4 (cancellation lifecycle) folded into Phase 0 deliverables. `_new_claude.md` §The phase model amended to require live-update of `Resumption notes:`.
 > **Earlier:** 2026-05-04 — Feedback design pass (D-17): Doc 28 (Feedback) complete; per-bubble inline strip is the sole affordance, v1.0 right-pane Feedback Overlay dropped (reversible — held in reserve as a v2.1 toggle if usage warrants); explicit Apply / Cancel (no auto-save on blur); `--color-feedback` triad introduced with stable amber default; Doc 11 §Escape Chain fully rewritten (CD-6 + CD-13 closed in PRE-IMPLEMENTATION-AUDIT).
 > **Earlier:** 2026-05-03 — Doc 20 (Settings & Themes) design pass: D-16 added; full-surface settings; two scopes only (App + World); cascade UX (auto-create override on edit, `↺` revert, per-tab "Reset all overrides"); modificators have no Settings home (free-text per-turn — Doc 15 amended); dark-only in v2.0; O16 partially closed (exposure spec'd in Doc 20; default still empirical).
 > **Earlier:** 2026-04-29 — Doc 19 (Media) design pass (slim): D-15 added; v2.0 ships image-as-source-doc only (upload, asset storage, File API URI cache, rendering primitives); image generation, TTS, per-turn user-message images, AI-generated `'blocks'` model messages all deferred to v2.1 (`docs-v2/future/media-generation.md`); world backup (`.loom-backup` zip) lives in Doc 14 §World Backup; narrative export (Doc 21) deferred to v2.1; O6 (File API expiry) closed.
@@ -23,6 +24,12 @@ Operation-log entries should mark cache stale. Doc 22 already lists this in Out 
 
 **O10 (residual) — Right-pane multi-cache display visuals.**
 Doc 22 spec'd the row format and click action; the exact visual treatment (token colours, density, scrolling threshold) is deferred to the visual design phase, alongside the rest of the right pane.
+
+---
+
+## OPEN — Notification Model (future)
+
+**Steer away from toasts.** The owner has stated a preference to move away from toast notifications in a future release. **No v2.0 change** — toasts ship as specified (Doc 12 §Error Display Hierarchy). Direction, rationale, and blast radius captured in `docs-v2/future/toast-free-notifications.md`. Revisit when a future release reopens the notification model.
 
 ---
 

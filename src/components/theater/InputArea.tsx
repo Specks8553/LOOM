@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { createStoryCache } from '@/lib/tauriApi/cache';
+import { getTokenCount } from '@/lib/tauriApi/conversation';
 import { useCacheStore } from '@/stores/cacheStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -16,11 +17,22 @@ interface InputAreaProps {
   submitLabel?: string;
 }
 
+function hasExtraFields(d: UserContent): boolean {
+  return (
+    d.background_information.trim().length > 0 ||
+    d.modificators.length > 0 ||
+    d.constraints.trim().length > 0
+  );
+}
+
 /**
- * Doc 15 §User Input Fields + Doc 27 §Input area.
+ * Doc 15 §User Input Fields + Doc 27 §Input area + `Designfiles/Phase 2`.
  *
- * Four fields: Plot Direction (required), Background Information,
- * Modificators (chip row with comma-as-delimiter), Constraints.
+ * A single `--color-bg-pane` card. Plot Direction (required) is always
+ * visible; a `+ Fields` toggle reveals Background Information, Modificators
+ * (chip row, comma-delimited), and Constraints, each separated by a hairline
+ * divider. The bottom bar carries the token meter (left) and Send / Cancel
+ * (right).
  *
  * Default mode (no `initial`): bound to `workspaceStore.draft`; Send fires
  * `send()`. Edit mode (with `initial`): local state, commits via `onCommit`.
@@ -33,13 +45,30 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
   const send = useWorkspaceStore((s) => s.send);
   const cancel = useWorkspaceStore((s) => s.cancel);
   const activeStoryId = useWorkspaceStore((s) => s.activeStoryId);
+  const tokenEstimate = useWorkspaceStore((s) => s.tokenEstimate);
+  const setTokenEstimate = useWorkspaceStore((s) => s.setTokenEstimate);
 
   const [localDraft, setLocalDraft] = useState<InputDraft>(initial ?? storeDraft);
+  const [expanded, setExpanded] = useState(initial !== undefined ? hasExtraFields(initial) : false);
 
   // In default mode, mirror the store draft (story switch / draft load).
   useEffect(() => {
     if (!editMode) setLocalDraft(storeDraft);
   }, [editMode, storeDraft]);
+
+  // Doc 15 §Token Counting (NB-3) — 500 ms-debounced pre-flight estimate.
+  // Default mode only; the meter reads `workspaceStore.tokenEstimate`.
+  useEffect(() => {
+    if (editMode || activeStoryId === null) return;
+    const handle = window.setTimeout(() => {
+      getTokenCount(activeStoryId, localDraft)
+        .then(setTokenEstimate)
+        .catch((e) => {
+          console.error('getTokenCount', e);
+        });
+    }, 500);
+    return () => window.clearTimeout(handle);
+  }, [editMode, activeStoryId, localDraft, setTokenEstimate]);
 
   function update<K extends keyof InputDraft>(field: K, value: InputDraft[K]): void {
     if (editMode) {
@@ -91,9 +120,19 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
     }
   }
 
+  const tokenLabel =
+    !editMode && tokenEstimate !== null
+      ? `~${tokenEstimate.total.toLocaleString('en-US')} tok`
+      : '';
+
   return (
-    <div className="flex flex-col gap-2 border-t border-[--color-border] bg-[--color-bg-soft] p-3">
-      <Field label="Plot direction" required>
+    <div className="bg-[--color-bg-elevated] px-3 pb-3 pt-2">
+      <div className="rounded-lg border border-[--color-border-subtle] bg-[--color-bg-pane] px-3.5 py-2.5">
+        {/* Plot Direction — always visible */}
+        <div className="flex items-center justify-between">
+          <FieldLabel required>Plot Direction</FieldLabel>
+          {!expanded && <FieldsToggle onClick={() => setExpanded(true)}>+ Fields</FieldsToggle>}
+        </div>
         <textarea
           value={localDraft.plot_direction}
           onChange={(e) => update('plot_direction', e.target.value)}
@@ -105,111 +144,147 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
           }}
           placeholder="What should happen next?"
           rows={3}
-          className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="mt-1 w-full resize-none bg-transparent text-[13px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
         />
-      </Field>
-      <Field label="Background information">
-        <textarea
-          value={localDraft.background_information}
-          onChange={(e) => update('background_information', e.target.value)}
-          rows={2}
-          placeholder="Context the model should know but not write directly"
-          className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
-        />
-      </Field>
-      <Field label="Modificators">
-        <ChipInput
-          chips={localDraft.modificators}
-          onChange={(chips) => update('modificators', chips)}
-          placeholder="noir, tight pacing, present tense"
-        />
-      </Field>
-      <Field label="Constraints">
-        <textarea
-          value={localDraft.constraints}
-          onChange={(e) => update('constraints', e.target.value)}
-          rows={2}
-          placeholder="What the model must obey but never include in the prose"
-          className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
-        />
-      </Field>
 
-      <div className="flex items-center justify-end gap-2">
-        {editMode && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded-sm border border-[--color-border] px-3 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
-          >
-            Cancel
-          </button>
-        )}
-        {!editMode && isGenerating ? (
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded-sm border border-[--color-border] bg-[--color-bg] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent]"
-          >
-            Cancel
-          </button>
-        ) : (
+        {expanded && (
           <>
-            {cacheActive && cacheStale && (
-              <button
-                type="button"
-                onClick={() => void handleUpdateCache()}
-                title="Cache is outdated. Update it before sending for cost savings, or send anyway."
-                className="text-[11px] text-[--color-text-muted] underline-offset-2 hover:text-[--color-text-primary] hover:underline"
-              >
-                Update cache
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={
-                !canSubmit || (!editMode && isGenerating) || (!editMode && activeStoryId === null)
-              }
-              title={
-                cacheStale
-                  ? 'Cache is outdated. Update it before sending for cost savings, or send anyway.'
-                  : undefined
-              }
-              className="relative rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submitLabel ?? 'Send'}
-              {cacheStale && (
-                <span
-                  aria-label="Cache is stale"
-                  className="absolute -right-1 -top-1 h-2 w-2 rounded-full"
-                  style={{ background: 'var(--color-warning, #f59e0b)' }}
-                />
-              )}
-            </button>
+            <Divider />
+            <div className="flex items-center justify-between">
+              <FieldLabel dim>Background Information</FieldLabel>
+              <FieldsToggle onClick={() => setExpanded(false)}>− Fields</FieldsToggle>
+            </div>
+            <textarea
+              value={localDraft.background_information}
+              onChange={(e) => update('background_information', e.target.value)}
+              rows={2}
+              placeholder="Context the model should know but not write directly"
+              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+            />
+
+            <Divider />
+            <FieldLabel dim>Modificators</FieldLabel>
+            <div className="mt-1">
+              <ChipInput
+                chips={localDraft.modificators}
+                onChange={(chips) => update('modificators', chips)}
+                placeholder="noir, tight pacing, present tense"
+              />
+            </div>
+
+            <Divider />
+            <FieldLabel dim>Constraints</FieldLabel>
+            <textarea
+              value={localDraft.constraints}
+              onChange={(e) => update('constraints', e.target.value)}
+              rows={2}
+              placeholder="What the model must obey but never include in the prose"
+              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+            />
           </>
         )}
+
+        <Divider />
+
+        {/* Bottom bar: token meter + actions */}
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[10px] text-[--color-text-muted]">{tokenLabel}</span>
+          <div className="flex items-center gap-2">
+            {editMode && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="rounded-md border border-[--color-border] px-4 py-1.5 text-[12px] font-medium text-[--color-text-secondary] hover:text-[--color-text-primary]"
+              >
+                Cancel
+              </button>
+            )}
+            {!editMode && isGenerating ? (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="rounded-md border border-[--color-border] px-4 py-1.5 text-[12px] font-medium text-[--color-text-secondary] hover:text-[--color-text-primary]"
+              >
+                Cancel
+              </button>
+            ) : (
+              <>
+                {cacheActive && cacheStale && (
+                  <button
+                    type="button"
+                    onClick={() => void handleUpdateCache()}
+                    title="Cache is outdated. Update it before sending for cost savings, or send anyway."
+                    className="text-[11px] text-[--color-text-muted] underline-offset-2 hover:text-[--color-text-primary] hover:underline"
+                  >
+                    Update cache
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={
+                    !canSubmit ||
+                    (!editMode && isGenerating) ||
+                    (!editMode && activeStoryId === null)
+                  }
+                  title={
+                    cacheStale
+                      ? 'Cache is outdated. Update it before sending for cost savings, or send anyway.'
+                      : undefined
+                  }
+                  className="relative rounded-md bg-[--color-accent] px-4 py-1.5 text-[12px] font-medium text-[--color-text-on-accent] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {submitLabel ?? 'Send'}
+                  {cacheStale && (
+                    <span
+                      aria-label="Cache is stale"
+                      className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[--color-warning]"
+                    />
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  required,
+function Divider() {
+  return <div className="my-2 h-px bg-[--color-border-subtle]" />;
+}
+
+function FieldLabel({
   children,
+  required,
+  dim,
 }: {
-  label: string;
+  children: string;
   required?: boolean;
-  children: React.ReactNode;
+  dim?: boolean;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[--color-text-muted]">
-        {label}
-        {required && <span className="ml-1 text-[--color-accent]">*</span>}
-      </span>
+    <span
+      className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted] ${
+        dim ? 'opacity-70' : ''
+      }`}
+    >
       {children}
-    </label>
+      {required && <span className="ml-1 text-[--color-accent]">*</span>}
+    </span>
+  );
+}
+
+function FieldsToggle({ children, onClick }: { children: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-[3px] border border-[--color-border-subtle] px-1.5 py-px text-[10px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -264,18 +339,18 @@ function ChipInput({ chips, onChange, placeholder }: ChipInputProps) {
   }
 
   return (
-    <div className="flex min-h-[34px] flex-wrap items-center gap-1 rounded-sm border border-[--color-border] bg-[--color-bg] p-1.5">
+    <div className="flex min-h-[24px] flex-wrap items-center gap-1">
       {chips.map((chip, i) => (
         <span
           key={`${chip}-${i}`}
-          className="flex items-center gap-1 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-1.5 py-0.5 text-[12px] text-[--color-text-secondary]"
+          className="flex items-center gap-1 rounded-sm bg-[--color-accent-subtle] px-2 py-0.5 text-[10px] text-[--color-accent-text]"
         >
           {chip}
           <button
             type="button"
             onClick={() => removeChip(i)}
             aria-label={`Remove ${chip}`}
-            className="text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="text-[--color-accent-text] opacity-70 hover:opacity-100"
           >
             ×
           </button>
@@ -289,7 +364,7 @@ function ChipInput({ chips, onChange, placeholder }: ChipInputProps) {
         onKeyDown={handleKeyDown}
         onBlur={() => commitDraft(draft)}
         placeholder={chips.length === 0 ? placeholder : ''}
-        className="flex-1 min-w-[120px] bg-transparent text-[13px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+        className="min-w-[120px] flex-1 bg-transparent text-[12px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
       />
     </div>
   );

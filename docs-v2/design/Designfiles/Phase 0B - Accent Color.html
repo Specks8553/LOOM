@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOOM — Phase 0B: Accent Color</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #080808; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+
+// ─── Approved Warm Palette (Phase 0A) ───
+
+const W = {
+  bgBase:     "#100f0c",
+  bgPane:     "#15140f",
+  bgTheater:  "#0c0b08",
+  bgElevated: "#1d1b16",
+  bgHover:    "#262318",
+  bgActive:   "#2e2b21",
+  border:     "#2d291f",
+  borderSub:  "#221f17",
+  txtPri:     "#e7e4dc",
+  txtSec:     "#8c867a",
+  txtMut:     "#595349",
+};
+
+// ─── Color Math ───
+
+function hexToHsl(hex) {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+
+function hslToHex(h, s, l) {
+  h /= 360; s /= 100; l /= 100;
+  let r, g, b;
+  if (s === 0) { r = g = b = l; } else {
+    const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+  }
+  return "#" + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, "0")).join("");
+}
+
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+function deriveAccent(hex) {
+  const [h, s, l] = hexToHsl(hex);
+  const hover = hslToHex(h, s, Math.max(0, l - 10));
+  const textV = hslToHex(h, Math.min(100, s * 0.8), Math.min(95, l + 35));
+  const [r, g, b] = hexToRgb(hex);
+  // 8% alpha overlay on bg-base (#100f0c)
+  const [br, bg2, bb] = hexToRgb(W.bgBase);
+  const alpha = 0.08;
+  const sr = Math.round(r * alpha + br * (1 - alpha));
+  const sg = Math.round(g * alpha + bg2 * (1 - alpha));
+  const sb = Math.round(b * alpha + bb * (1 - alpha));
+  const subtle = "#" + [sr, sg, sb].map(x => x.toString(16).padStart(2, "0")).join("");
+  return { base: hex, hover, subtle, text: textV, rgba8: `rgba(${r},${g},${b},0.08)`, rgba15: `rgba(${r},${g},${b},0.15)`, rgba40: `rgba(${r},${g},${b},0.40)` };
+}
+
+// ─── Accent Options ───
+
+const accentOptions = [
+  { key: "violet",    hex: "#7c3aed", label: "Violet",     subtitle: "Creative, distinctive — current default" },
+  { key: "lavender",  hex: "#8b6cc1", label: "Lavender",   subtitle: "Softer purple — gentler, literary" },
+  { key: "teal",      hex: "#2aa198", label: "Teal",       subtitle: "Calm, focused — a writer's concentration" },
+  { key: "ember",     hex: "#c87941", label: "Ember",      subtitle: "Warm amber — deeply editorial, matches the theme" },
+  { key: "sage",      hex: "#6b9f78", label: "Sage",       subtitle: "Organic, earthy — a quiet creative space" },
+  { key: "rose",      hex: "#c2667a", label: "Dusty Rose", subtitle: "Warm, distinctive — literary with personality" },
+];
+
+// ─── Swatch Row ───
+
+function SwatchTriad({ accent, label }) {
+  const a = deriveAccent(accent);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[
+          { bg: a.base, lbl: "Base", hex: a.base },
+          { bg: a.hover, lbl: "Hover", hex: a.hover },
+          { bg: a.subtle, lbl: "Subtle", hex: a.subtle },
+          { bg: a.text, lbl: "Text", hex: a.text, textDark: true },
+        ].map((s, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 8, background: s.bg,
+              border: i === 2 ? `1px solid ${W.border}` : "1px solid rgba(255,255,255,0.06)",
+            }}></div>
+            <div style={{ fontSize: 9, color: W.txtSec }}>{s.lbl}</div>
+            <div style={{ fontSize: 8, fontFamily: "monospace", color: W.txtMut }}>{s.hex}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Context Preview ───
+
+function ContextPreview({ accent }) {
+  const a = deriveAccent(accent);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Buttons */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Buttons</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{
+            padding: "6px 16px", borderRadius: 6, background: a.base, color: "#fff",
+            fontSize: 12, fontWeight: 500, cursor: "pointer",
+          }}>Send</div>
+          <div style={{
+            padding: "6px 16px", borderRadius: 6, background: "transparent", color: a.text,
+            fontSize: 12, fontWeight: 500, border: `1px solid ${W.border}`, cursor: "pointer",
+          }}>Cancel</div>
+          <div style={{
+            padding: "6px 16px", borderRadius: 6, background: "#f43f5e", color: "#fff",
+            fontSize: 12, fontWeight: 500, cursor: "pointer",
+          }}>Delete</div>
+        </div>
+      </div>
+
+      {/* User Bubble */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>User Bubble</div>
+        <div style={{
+          background: a.rgba8, border: `1px solid ${a.rgba15}`,
+          borderRadius: 10, padding: "10px 14px", maxWidth: 300,
+        }}>
+          <div style={{ fontSize: 11, color: W.txtPri, lineHeight: 1.5 }}>
+            Write a tense dialogue between Marcus and his brother about their father's will.
+          </div>
+        </div>
+      </div>
+
+      {/* Mode Switcher */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Mode Switcher</div>
+        <div style={{
+          display: "flex", gap: 0, background: W.bgPane, borderRadius: 6,
+          border: `1px solid ${W.borderSub}`, overflow: "hidden",
+        }}>
+          {["Story", "Handover", "Consulting"].map((m, i) => (
+            <div key={i} style={{
+              padding: "7px 16px", fontSize: 11, fontWeight: i === 0 ? 500 : 400,
+              color: i === 0 ? W.txtPri : W.txtSec,
+              borderBottom: i === 0 ? `2px solid ${a.base}` : "2px solid transparent",
+              cursor: "pointer",
+            }}>{m}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Selected Item */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Navigator Selection</div>
+        <div style={{ background: W.bgPane, borderRadius: 8, padding: 8, border: `1px solid ${W.borderSub}` }}>
+          {["Chapter 1", "Chapter 2", "Chapter 3", "Notes"].map((t, i) => (
+            <div key={i} style={{
+              padding: "5px 10px", borderRadius: 4, fontSize: 11, marginBottom: 2,
+              color: i === 1 ? W.txtPri : W.txtSec,
+              background: i === 1 ? a.rgba8 : "transparent",
+              borderLeft: i === 1 ? `2px solid ${a.base}` : "2px solid transparent",
+            }}>{t}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tag Input */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Modificator Tags</div>
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 10px",
+          background: W.bgPane, borderRadius: 6, border: `1px solid ${a.rgba15}`,
+        }}>
+          {["noir", "tight pacing", "present tense"].map((tag, i) => (
+            <span key={i} style={{
+              padding: "3px 10px", borderRadius: 4, fontSize: 11,
+              background: a.rgba8, color: a.text, fontWeight: 500,
+            }}>{tag}</span>
+          ))}
+          <span style={{ fontSize: 11, color: W.txtMut }}>add tag…</span>
+        </div>
+      </div>
+
+      {/* Text Selection */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Text Selection</div>
+        <div style={{ background: W.bgTheater, borderRadius: 8, padding: 14, border: `1px solid ${W.borderSub}` }}>
+          <div style={{ fontSize: 13, color: W.txtPri, lineHeight: 1.7 }}>
+            The morning light caught the edge of the
+            <span style={{ background: a.rgba40, padding: "1px 0" }}> window frame, casting thin gold lines </span>
+            across the floor.
+          </div>
+        </div>
+      </div>
+
+      {/* Slider */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Slider (Settings)</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, height: 4, borderRadius: 2, background: W.bgActive, position: "relative" }}>
+            <div style={{ width: "60%", height: 4, borderRadius: 2, background: a.base }}></div>
+            <div style={{
+              position: "absolute", left: "60%", top: -4, width: 12, height: 12, borderRadius: 6,
+              background: a.base, border: `2px solid ${W.bgBase}`, transform: "translateX(-50%)",
+            }}></div>
+          </div>
+          <span style={{ fontSize: 11, color: W.txtSec, fontFamily: "monospace", minWidth: 24 }}>0.6</span>
+        </div>
+      </div>
+
+      {/* Switch */}
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Toggle</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ width: 36, height: 20, borderRadius: 10, background: a.base, position: "relative", cursor: "pointer" }}>
+            <div style={{ position: "absolute", right: 3, top: 3, width: 14, height: 14, borderRadius: 7, background: "#fff" }}></div>
+          </div>
+          <span style={{ fontSize: 11, color: W.txtSec }}>Use summary</span>
+          <div style={{ width: 36, height: 20, borderRadius: 10, background: W.bgActive, position: "relative", cursor: "pointer", marginLeft: 12 }}>
+            <div style={{ position: "absolute", left: 3, top: 3, width: 14, height: 14, borderRadius: 7, background: W.txtSec }}></div>
+          </div>
+          <span style={{ fontSize: 11, color: W.txtMut }}>Off state</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Feature Colors ───
+
+function FeatureColors({ accent }) {
+  const a = deriveAccent(accent);
+  const feedback = deriveAccent("#f59e0b");
+
+  const features = [
+    { label: "Ghostwriter", color: a, desc: "Tracks accent — bubble pulse, button accents, diff highlight" },
+    { label: "Accordion", color: a, desc: "Tracks accent — segment banner, chapter markers" },
+    { label: "Checkpoint", color: a, desc: "Tracks accent — checkpoint banner in Theater" },
+    { label: "Feedback", color: feedback, desc: "Independent amber — annotation strip, always stable", independent: true },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em" }}>Feature Colors</div>
+      {features.map((f, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: f.color.base }}></div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: f.color.hover }}></div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: f.color.subtle, border: `1px solid ${W.border}` }}></div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: f.independent ? "#f59e0b" : W.txtPri }}>{f.label}</div>
+            <div style={{ fontSize: 9, color: W.txtMut }}>{f.desc}</div>
+          </div>
+        </div>
+      ))}
+
+      {/* Ghostwriter pulse preview */}
+      <div style={{ marginTop: 4 }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Ghostwriter Active Bubble</div>
+        <style>{`
+          @keyframes gw-pulse-${accent.slice(1)} {
+            0%, 100% { outline-color: ${a.base}; }
+            50% { outline-color: ${a.rgba8}; }
+          }
+        `}</style>
+        <div style={{
+          background: W.bgElevated, borderRadius: 10, padding: "10px 14px",
+          border: `1px solid ${W.borderSub}`, maxWidth: 300,
+          outline: `2px solid ${a.base}`, outlineOffset: 3,
+          animation: `gw-pulse-${accent.slice(1)} 1.5s ease-in-out infinite`,
+        }}>
+          <div style={{ fontSize: 11, color: W.txtPri, lineHeight: 1.6, fontStyle: "italic" }}>
+            Marcus set his coffee down carefully, as if the sound might shatter something…
+          </div>
+        </div>
+      </div>
+
+      {/* Feedback strip preview */}
+      <div style={{ marginTop: 4 }}>
+        <div style={{ fontSize: 9, fontWeight: 500, color: W.txtMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Feedback Strip (Independent Amber)</div>
+        <div style={{
+          padding: "6px 10px",
+          borderLeft: "2px solid #f59e0b",
+          background: "rgba(245, 158, 11, 0.06)",
+          borderRadius: "0 4px 4px 0",
+          maxWidth: 300,
+        }}>
+          <div style={{ fontSize: 11, color: W.txtSec, lineHeight: 1.4 }}>
+            Great pacing — keep this tension through the next scene
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Accent Card ───
+
+function AccentCard({ option }) {
+  const a = deriveAccent(option.hex);
+  return (
+    <div style={{
+      background: W.bgBase,
+      borderRadius: 12,
+      padding: 24,
+      display: "flex",
+      flexDirection: "column",
+      gap: 20,
+      border: `1px solid ${W.borderSub}`,
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 12, background: option.hex,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <span style={{ fontSize: 20, color: "#fff", fontWeight: 600 }}>L</span>
+        </div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: W.txtPri }}>{option.label}</div>
+          <div style={{ fontSize: 11, color: W.txtSec, marginTop: 2 }}>{option.subtitle}</div>
+          <div style={{ fontSize: 10, fontFamily: "monospace", color: W.txtMut, marginTop: 2 }}>{option.hex}</div>
+        </div>
+      </div>
+
+      <SwatchTriad accent={option.hex} label="Derived Triad" />
+      <div style={{ height: 1, background: W.borderSub }}></div>
+      <ContextPreview accent={option.hex} />
+      <div style={{ height: 1, background: W.borderSub }}></div>
+      <FeatureColors accent={option.hex} />
+    </div>
+  );
+}
+
+// ─── App ───
+
+function App() {
+  return (
+    <DesignCanvas
+      title="LOOM — Phase 0B: Accent Color"
+      subtitle="Pick an accent hue — all variants derive from one hex value"
+      background="#080808"
+    >
+      <DCSection id="accents" title="Accent Color Options">
+        {accentOptions.map(opt => (
+          <DCArtboard
+            key={opt.key}
+            id={opt.key}
+            label={opt.label}
+            subtitle={opt.subtitle}
+            width={420}
+            height={1520}
+          >
+            <AccentCard option={opt} />
+          </DCArtboard>
+        ))}
+      </DCSection>
+
+      <DCSection id="notes" title="Design Notes">
+        <DCArtboard id="rationale" label="Accent System Rationale" width={420} height={480}>
+          <div style={{
+            background: W.bgBase, borderRadius: 12, padding: 24,
+            border: `1px solid ${W.borderSub}`,
+            color: W.txtSec, fontSize: 12, lineHeight: 1.7,
+          }}>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 12 }}>How the accent system works</div>
+            <p style={{ marginBottom: 10 }}>
+              The writer picks <strong style={{ color: W.txtPri }}>one hex value</strong> per World. Everything else is computed at runtime:
+            </p>
+            <ul style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              <li><strong style={{ color: W.txtPri }}>Hover</strong> — HSL lightness −10%</li>
+              <li><strong style={{ color: W.txtPri }}>Subtle</strong> — 8% alpha blend on bg-base</li>
+              <li><strong style={{ color: W.txtPri }}>Text</strong> — HSL lightness +35% (for text on dark bg)</li>
+            </ul>
+            <p style={{ marginBottom: 10 }}>
+              Feature colors (Ghostwriter, Accordion, Checkpoint) <strong style={{ color: W.txtPri }}>track the accent by default</strong> — when the writer changes their accent, all features update. Each can be independently overridden in World settings.
+            </p>
+            <p style={{ marginBottom: 10 }}>
+              Feedback is the exception — it uses a <strong style={{ color: "#f59e0b" }}>stable amber</strong> (#f59e0b) by default so annotations look consistent regardless of accent choice.
+            </p>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 8, marginTop: 16 }}>Recommendation</div>
+            <p style={{ marginBottom: 8 }}>
+              <strong style={{ color: W.txtPri }}>Ember</strong> pairs naturally with the warm dark palette — it's cohesive, editorial, distinctive. But the accent is per-World, so the <em>default</em> should work broadly.
+            </p>
+            <p>
+              <strong style={{ color: W.txtPri }}>Violet</strong> or <strong style={{ color: W.txtPri }}>Lavender</strong> are safer defaults — they contrast well against warm backgrounds without blending in, and feel creative without being generic.
+            </p>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="a11y" label="Contrast Notes" width={420} height={260}>
+          <div style={{
+            background: W.bgBase, borderRadius: 12, padding: 24,
+            border: `1px solid ${W.borderSub}`,
+            color: W.txtSec, fontSize: 12, lineHeight: 1.7,
+          }}>
+            <div style={{ color: W.txtPri, fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Accessibility</div>
+            <p style={{ marginBottom: 10 }}>
+              The <strong style={{ color: W.txtPri }}>accent-text</strong> variant (lightened +35%) is used for text on dark backgrounds. All options meet WCAG AA contrast against bg-theater.
+            </p>
+            <p>
+              The raw accent hex is used for <strong style={{ color: W.txtPri }}>non-text elements only</strong> — buttons (with white text on top), active indicators, slider fills. The spec's <code style={{ background: W.bgElevated, padding: "1px 4px", borderRadius: 3, fontSize: 11 }}>--color-text-on-accent</code> stays pure white (#fff).
+            </p>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

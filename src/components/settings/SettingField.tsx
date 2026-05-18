@@ -151,7 +151,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
           )}
         </div>
       </div>
-      {error !== null && <span className="text-[11px] text-[--color-danger,#ef4444]">{error}</span>}
+      {error !== null && <span className="text-[11px] text-[--color-error]">{error}</span>}
     </div>
   );
 }
@@ -166,7 +166,7 @@ interface ControlProps {
 
 function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlProps) {
   const inputBase =
-    'rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-2 py-1 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]';
+    'rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]';
 
   switch (spec.kind) {
     case 'toggle': {
@@ -216,7 +216,7 @@ function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlPr
           <input
             type="text"
             value={value}
-            placeholder={spec.allowEmpty ? 'tracks accent' : '#7c3aed'}
+            placeholder={spec.allowEmpty ? 'tracks accent' : '#6b9f78'}
             onChange={(e) => onEdit(e.target.value)}
             {...focusProps}
             className={cn(inputBase, 'w-28 font-mono')}

@@ -64,7 +64,7 @@ export function OnboardingShell() {
                 type="password"
                 autoFocus
                 autoComplete="new-password"
-                className="rounded border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
                 placeholder="Min 8 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -79,7 +79,7 @@ export function OnboardingShell() {
                 id="ob-confirm"
                 type="password"
                 autoComplete="new-password"
-                className="rounded border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
                 placeholder="Repeat password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
@@ -119,7 +119,7 @@ export function OnboardingShell() {
                 type="password"
                 autoFocus
                 autoComplete="off"
-                className="rounded border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
                 placeholder="AIza..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}

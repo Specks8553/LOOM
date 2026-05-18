@@ -212,12 +212,12 @@ export function DocEditor({ docId }: DocEditorProps) {
 
       {/* Body */}
       {isImage && (
-        <div className="border-b border-[--color-border] bg-[--color-bg-soft] px-4 py-2 text-[12px] text-[--color-text-muted]">
+        <div className="border-b border-[--color-border] bg-[--color-bg-elevated] px-4 py-2 text-[12px] text-[--color-text-muted]">
           Image editing arrives in Phase 10. The caption below is read-only for now.
         </div>
       )}
       {!isImage && isSoftDeleted && (
-        <div className="border-b border-[--color-border] bg-[--color-bg-soft] px-4 py-2 text-[12px] text-[--color-text-muted]">
+        <div className="border-b border-[--color-border] bg-[--color-bg-elevated] px-4 py-2 text-[12px] text-[--color-text-muted]">
           This document is in Trash — restore to edit.
         </div>
       )}

@@ -97,7 +97,7 @@ export function Settings() {
 
         {/* Search + override filter */}
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-2">
+          <div className="flex items-center gap-1.5 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2">
             <Search size={12} aria-hidden className="text-[--color-text-muted]" />
             <input
               type="text"
@@ -138,7 +138,7 @@ export function Settings() {
                 'rounded-sm px-2 py-1.5 text-left text-[13px]',
                 t.id === activeTab?.id
                   ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-                  : 'text-[--color-text-primary] hover:bg-[--color-bg-soft]',
+                  : 'text-[--color-text-primary] hover:bg-[--color-bg-elevated]',
               )}
             >
               {t.label}

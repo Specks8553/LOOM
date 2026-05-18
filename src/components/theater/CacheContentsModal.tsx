@@ -232,7 +232,7 @@ function ActionRow({ onClose, onUpdate, onDelete, busy }: ActionRowProps) {
           type="button"
           onClick={onUpdate}
           disabled={busy}
-          className="rounded-sm border border-[--color-border] bg-[--color-bg] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent] disabled:opacity-50"
+          className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent] disabled:opacity-50"
         >
           {busy ? 'Updating…' : 'Update'}
         </button>

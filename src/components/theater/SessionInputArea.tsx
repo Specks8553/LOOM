@@ -47,7 +47,7 @@ export function SessionInputArea({ sessionId, submitLabel, placeholder }: Props)
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-[--color-border] bg-[--color-bg-soft] p-3">
+    <div className="flex flex-col gap-2 bg-[--color-bg-elevated] px-3 pb-3 pt-2">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -59,14 +59,14 @@ export function SessionInputArea({ sessionId, submitLabel, placeholder }: Props)
         }}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+        className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-base] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
       />
       <div className="flex items-center justify-end gap-2">
         {isGenerating ? (
           <button
             type="button"
             onClick={handleCancel}
-            className="rounded-sm border border-[--color-border] bg-[--color-bg] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent]"
+            className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent]"
           >
             Cancel
           </button>

@@ -1,3 +1,4 @@
+import { BookOpen } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { AccordionBanner } from '@/components/theater/AccordionBanner';
@@ -89,7 +90,6 @@ export function TheaterBody() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {activeStoryId !== null && <ModeSwitcher storyId={activeStoryId} />}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -142,13 +142,18 @@ export function TheaterBody() {
           <button
             type="button"
             onClick={jumpToBottom}
-            className="sticky bottom-2 ml-auto block rounded-full border border-[--color-border] bg-[--color-bg-soft] px-3 py-1 text-[12px] text-[--color-text-primary] shadow hover:border-[--color-accent]"
+            className="sticky bottom-2 ml-auto block rounded-full border border-[--color-border] bg-[--color-bg-elevated] px-3 py-1 text-[12px] text-[--color-text-primary] shadow hover:border-[--color-accent]"
           >
             ↓ New content
           </button>
         )}
       </div>
-      {activeStoryId !== null && renderInput()}
+      {activeStoryId !== null && (
+        <>
+          <ModeSwitcher storyId={activeStoryId} />
+          {renderInput()}
+        </>
+      )}
     </div>
   );
 
@@ -329,18 +334,32 @@ function lastStoryModelMessageId(messages: ChatMessage[]): string | null {
   return null;
 }
 
+/** Doc 12 §No Story Selected — empty-state template (icon + headline). */
 function NoStorySelected() {
   return (
-    <div className="grid h-full place-items-center text-center text-sm text-[--color-text-muted]">
-      <p>Select a story from the Navigator, or create one to begin.</p>
+    <div className="grid h-full place-items-center">
+      <div className="flex max-w-sm flex-col items-center gap-2.5 text-center">
+        <BookOpen size={40} className="text-[--color-text-muted] opacity-50" aria-hidden />
+        <p className="text-[15px] font-medium text-[--color-text-primary]">
+          Select a story from the Navigator, or create one to begin.
+        </p>
+      </div>
     </div>
   );
 }
 
+/** Doc 12 §No Messages — no icon; the InputArea below is the action. */
 function BeginYourStory() {
   return (
-    <div className="grid h-full place-items-center text-center text-sm text-[--color-text-muted]">
-      <p>Begin your story.</p>
+    <div className="grid h-full place-items-center">
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <p className="text-[15px] font-medium text-[--color-text-primary]">
+          Your story begins here.
+        </p>
+        <p className="text-[13px] text-[--color-text-secondary]">
+          Write a direction and press Send to start.
+        </p>
+      </div>
     </div>
   );
 }

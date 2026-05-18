@@ -87,7 +87,7 @@ export function TemplatesTab() {
               'flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px]',
               t.id === selectedId
                 ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-                : 'text-[--color-text-primary] hover:bg-[--color-bg-soft]',
+                : 'text-[--color-text-primary] hover:bg-[--color-bg-elevated]',
             )}
           >
             <FileText size={13} aria-hidden className="shrink-0 text-[--color-text-muted]" />
@@ -166,7 +166,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
             setName(e.target.value);
             scheduleSave(e.target.value, content);
           }}
-          className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-2 py-1 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
         />
         <button
           type="button"
@@ -190,7 +190,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
 
       {preview ? (
         <div
-          className="loom-prose flex-1 overflow-y-auto rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-[13px] text-[--color-text-primary]"
+          className="loom-prose flex-1 overflow-y-auto rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary]"
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
       ) : (
@@ -201,7 +201,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
             scheduleSave(name, e.target.value);
           }}
           spellCheck={false}
-          className="flex-1 resize-none rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="flex-1 resize-none rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
           placeholder="Template body — {{placeholders}} are filled when a document is created."
         />
       )}
@@ -219,7 +219,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
           <button
             type="button"
             onClick={() => void onDelete()}
-            className="flex items-center gap-1.5 rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-danger,#ef4444] hover:bg-[--color-bg-soft]"
+            className="flex items-center gap-1.5 rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-error] hover:bg-[--color-bg-elevated]"
           >
             <Trash2 size={13} aria-hidden />
             Delete

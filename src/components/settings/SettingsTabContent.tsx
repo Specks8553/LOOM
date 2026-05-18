@@ -125,7 +125,7 @@ function ApiKeyField() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={hasKey ? '••••••••' : 'Paste your key'}
-            className="w-56 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-2 py-1 font-mono text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+            className="w-56 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 font-mono text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
           />
           <button
             type="button"

@@ -255,7 +255,7 @@ export function validateField(spec: FieldSpec, value: string): string | null {
   switch (spec.kind) {
     case 'hex': {
       if (v === '') return spec.allowEmpty ? null : `${spec.label} cannot be empty.`;
-      return isHexColor(v) ? null : 'Enter a hex colour like #7c3aed.';
+      return isHexColor(v) ? null : 'Enter a hex colour like #6b9f78.';
     }
     case 'toggle':
       return v === 'true' || v === 'false' ? null : 'Must be on or off.';

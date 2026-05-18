@@ -1,7 +1,8 @@
 # 10 — Layout and Navigation
 
-> **Status:** Complete
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: Theater Content Switching now lists Settings as a full workspace surface; `<ImageViewer />` collapsed into `<DocEditor />` per Doc 18 (image source documents share the editor with a lightbox layout) (CD-5).
+> **Status:** Complete — verified against the Designfiles visual design pass
+> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): layout values verified against `docs-v2/design/Designfiles/Phase 1 - Workspace Shell.html`. Pane widths (260/280), min/max bounds, the 7px/1px PaneDivider, the 32px collapsed bar, and pane background tokens all match the mockup — no value changes. **Mode switcher relocated to the bottom of the Theater** (directly above the input area — owner decision); §Mode Layout Variations updated accordingly.
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: Theater Content Switching now lists Settings as a full workspace surface; `<ImageViewer />` collapsed into `<DocEditor />` per Doc 18 (image source documents share the editor with a lightbox layout) (CD-5).
 > **Earlier:** 2026-04-29 — Doc 23 design pass: mode switcher confirmed in Theater top bar; mode-switch scroll behaviour corrected to "scroll persists" (single shared Theater scroll); mode layout variations table updated to reflect handover / consulting specs
 > **Earlier:** 2026-04-26 — initial layout pass
 
@@ -158,7 +159,7 @@ This switching logic lives in `Workspace.tsx`. The center pane div is always pre
 
 Modes (`story`, `handover`, `consulting`) change what the input area, mode switcher, and right-pane sections render. The three-pane shell is identical across all modes; the Theater scroll surface is shared and renders all message kinds and partitions regardless of active mode.
 
-The mode switcher is a horizontal tab strip at the top of the Theater pane (above the scroll surface). Three tabs: **Story · Handover · Consulting**. The active session name (when applicable) appears as a sub-label on the active tab. Visual treatment is owned by Doc 27 (Theater Composition).
+The mode switcher is a segmented pill row at the **bottom** of the Theater pane, directly above the input area (the switcher and input area together form the Theater's bottom input region — there is no Theater top bar). Three segments: **Story · Handover · Consulting**. The active session name (when applicable) appears as a sub-label on the active segment. Visual treatment is owned by Doc 27 (Theater Composition).
 
 | Mode | Input area | Theater scroll surface | Right pane |
 |---|---|---|---|

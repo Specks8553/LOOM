@@ -144,7 +144,7 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
       {hint !== undefined && <p className="text-[11px] text-[--color-text-muted]">{hint}</p>}
       {preview ? (
         <div
-          className="loom-prose min-h-24 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-[13px] text-[--color-text-primary]"
+          className="loom-prose min-h-24 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary]"
           // Trusted local content — same as DocEditor's preview.
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
@@ -160,7 +160,7 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
           }}
           spellCheck={false}
           rows={6}
-          className="resize-y rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
           placeholder="Empty — the built-in default is used."
         />
       )}

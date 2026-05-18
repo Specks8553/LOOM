@@ -43,12 +43,12 @@ Navigation hub and decision log for LOOM 2.0. All architectural decisions are re
 
 | Doc | Title | Status |
 |---|---|---|
-| [08](design/08-design-tokens.md) | Design Tokens | Complete — values provisional |
-| [09](design/09-component-library.md) | Component Library | Complete — visual values provisional |
+| [08](design/08-design-tokens.md) | Design Tokens | Complete — values finalized (Designfiles) |
+| [09](design/09-component-library.md) | Component Library | Complete — visual values finalized (Designfiles) |
 | [10](design/10-layout-and-navigation.md) | Layout and Navigation | Complete |
 | [11](design/11-interaction-patterns.md) | Interaction Patterns | Complete — shortcuts deferred |
-| [12](design/12-empty-states-and-errors.md) | Empty States and Errors | Complete — copy provisional |
-| [27](design/27-theater-composition.md) | Theater Composition | Complete — visual values provisional |
+| [12](design/12-empty-states-and-errors.md) | Empty States and Errors | Complete — copy partly verified (Designfiles) |
+| [27](design/27-theater-composition.md) | Theater Composition | Complete — visual values reconciled (Designfiles) |
 
 ### Features — one doc per feature; self-contained
 

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { BubbleActionRow, StreamingDots } from '@/components/theater/BubbleActions';
 import { FeedbackStrip } from '@/components/theater/FeedbackStrip';
 import { GhostwriterBubble } from '@/components/theater/GhostwriterBubble';
 import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+import type { BubbleAction } from '@/components/theater/BubbleActions';
 import type { ChatMessage } from '@/lib/types';
 
 /** Doc 17 §Revert — count accepted edits stored in `ghostwriter_history`. */
@@ -150,17 +152,14 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   }
 
   return (
-    <div
-      className="group relative mx-auto w-full max-w-[80%] py-2"
-      onContextMenu={handleContextMenu}
-    >
-      <div className="rounded-md border border-[--color-border] bg-[--color-bg] p-3 text-[15px] leading-relaxed text-[--color-text-primary]">
+    <div className="group w-full max-w-[80%] py-2" onContextMenu={handleContextMenu}>
+      <div className="rounded-bubble border border-[--color-border-subtle] bg-[--bubble-ai-bg] px-5 py-4 font-theater-body text-[15px] leading-[1.7] text-[--color-text-primary]">
         {editing ? (
           <div className="flex flex-col gap-2">
             <textarea
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-soft] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -181,17 +180,8 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </div>
         ) : (
           <>
-            {showThinkingHint ? (
-              <span className="text-[--color-text-muted]">…</span>
-            ) : (
-              <div className="whitespace-pre-wrap">{message.content}</div>
-            )}
-            {streaming && message.content.length > 0 && (
-              <span
-                aria-hidden
-                className="ml-0.5 inline-block h-[1em] w-[2px] animate-pulse align-middle bg-[--color-accent]"
-              />
-            )}
+            {!showThinkingHint && <div className="whitespace-pre-wrap">{message.content}</div>}
+            {streaming && <StreamingDots />}
           </>
         )}
         {showStoppedBadge && (
@@ -206,14 +196,14 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           ref={menuRef}
           role="menu"
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
-          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
+          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg-base] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
         >
           {!isBlocks && (
             <button
               type="button"
               role="menuitem"
               onClick={handleGhostwriter}
-              className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-soft]"
+              className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated]"
             >
               ✦ Ghostwriter…
             </button>
@@ -223,76 +213,61 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
             role="menuitem"
             onClick={() => void handleInsertCheckpoint()}
             disabled={isGenerating}
-            className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-soft] disabled:cursor-not-allowed disabled:opacity-50"
+            className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Insert checkpoint here
           </button>
         </div>
       )}
-      {!editing && !streaming && (
-        <div className="pointer-events-none absolute -top-1 right-0 flex gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-          {!isBlocks && (
-            <ActionButton disabled={false} onClick={handleGhostwriter}>
-              ✦ Ghostwriter
-            </ActionButton>
-          )}
-          {!isBlocks && (
-            <ActionButton disabled={false} active={hasFeedback} onClick={handleFeedback}>
-              Feedback
-            </ActionButton>
-          )}
-          {historyLen > 0 && (
-            <ActionButton disabled={isGenerating} onClick={() => void handleRevert()}>
-              Revert
-            </ActionButton>
-          )}
-          <ActionButton
-            disabled={isGenerating}
-            onClick={() => {
-              setEditValue(message.content);
-              setEditing(true);
-            }}
-          >
-            Edit
-          </ActionButton>
-          {isLast && (
-            <ActionButton disabled={isGenerating} onClick={() => void handleRegenerate()}>
-              Regenerate
-            </ActionButton>
-          )}
-          <ActionButton disabled={isGenerating} onClick={() => void handleDelete()}>
-            Delete
-          </ActionButton>
-        </div>
-      )}
+      {!editing && !streaming && <BubbleActionRow align="left" actions={actionRow()} />}
       {revertGuardModal}
     </div>
   );
-}
 
-function ActionButton({
-  onClick,
-  disabled,
-  active = false,
-  children,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  /** Doc 28 — tints the entry with the feedback colour when the bubble
-   *  already carries feedback. */
-  active?: boolean;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-sm border border-[--color-border] bg-[--color-bg] px-2 py-0.5 text-[11px] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50 ${
-        active ? 'text-[--color-feedback]' : 'text-[--color-text-muted]'
-      }`}
-    >
-      {children}
-    </button>
-  );
+  /** Doc 27 §AI bubble — below-bubble hover action row. */
+  function actionRow(): BubbleAction[] {
+    const actions: BubbleAction[] = [];
+    if (!isBlocks) {
+      actions.push({ icon: '✦', label: 'Ghostwriter', onClick: handleGhostwriter });
+      actions.push({
+        icon: '◎',
+        label: 'Feedback',
+        active: hasFeedback,
+        onClick: handleFeedback,
+      });
+    }
+    if (historyLen > 0) {
+      actions.push({
+        icon: '↺',
+        label: 'Revert',
+        disabled: isGenerating,
+        onClick: () => void handleRevert(),
+      });
+    }
+    actions.push({
+      icon: '✎',
+      label: 'Edit',
+      disabled: isGenerating,
+      onClick: () => {
+        setEditValue(message.content);
+        setEditing(true);
+      },
+    });
+    if (isLast) {
+      actions.push({
+        icon: '⟳',
+        label: 'Regenerate',
+        disabled: isGenerating,
+        onClick: () => void handleRegenerate(),
+      });
+    }
+    actions.push({
+      icon: '×',
+      label: 'Delete',
+      destructive: true,
+      disabled: isGenerating,
+      onClick: () => void handleDelete(),
+    });
+    return actions;
+  }
 }

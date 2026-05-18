@@ -64,7 +64,7 @@ export function FeedbackStrip({ message }: { message: ChatMessage }) {
   if (isEditing) {
     return (
       <div className="mt-1 w-full">
-        <div className="rounded-md border border-[--color-border] bg-[--color-bg-soft] p-2">
+        <div className="rounded-md border border-[--color-border] bg-[--color-bg-elevated] p-2">
           <textarea
             ref={textareaRef}
             value={value}
@@ -72,7 +72,7 @@ export function FeedbackStrip({ message }: { message: ChatMessage }) {
             onKeyDown={handleKeyDown}
             rows={3}
             placeholder="Note for the AI about this response…"
-            className="max-h-[140px] w-full resize-none rounded-sm border border-[--color-border] bg-[--color-bg] p-2 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-feedback]"
+            className="max-h-[140px] w-full resize-none rounded-sm border border-[--color-border] bg-[--color-bg-base] p-2 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-feedback]"
           />
           <div className="mt-1 flex items-center justify-between">
             <span className="text-[10px] text-[--color-text-muted]">

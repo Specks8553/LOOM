@@ -184,7 +184,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
                   setCreating(false);
                 }
               }}
-              className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-soft] px-3 py-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
             />
             <button
               type="button"
@@ -276,7 +276,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
   return (
     <div
       onClick={confirmingDelete ? undefined : onOpen}
-      className={`group flex cursor-pointer flex-col gap-2 rounded-sm border bg-[--color-bg-soft] p-4 transition-colors ${
+      className={`group flex cursor-pointer flex-col gap-2 rounded-sm border bg-[--color-bg-elevated] p-4 transition-colors ${
         isActive
           ? 'border-l-4 border-[--color-accent] pl-3'
           : 'border-[--color-border] hover:bg-[--color-bg-hover]'
