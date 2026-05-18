@@ -83,7 +83,7 @@ export function SessionPartition({ session, messages }: SessionPartitionProps) {
             <button
               type="button"
               onClick={handleExit}
-              className="rounded-sm border border-[--color-border] px-3 py-1 text-[11px] text-[--color-text-primary] hover:border-[--color-accent]"
+              className="rounded-sm border border-[var(--color-border)] px-3 py-1 text-[11px] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
             >
               Exit
             </button>
@@ -91,7 +91,7 @@ export function SessionPartition({ session, messages }: SessionPartitionProps) {
             <button
               type="button"
               onClick={handleEnter}
-              className="rounded-sm bg-[--color-accent] px-3 py-1 text-[11px] font-medium text-white"
+              className="rounded-sm bg-[var(--color-accent)] px-3 py-1 text-[11px] font-medium text-white"
             >
               Enter
             </button>
@@ -100,7 +100,9 @@ export function SessionPartition({ session, messages }: SessionPartitionProps) {
       }
     >
       {messages.length === 0 ? (
-        <p className="py-2 text-center text-[12px] text-[--color-text-muted]">No messages yet.</p>
+        <p className="py-2 text-center text-[12px] text-[var(--color-text-muted)]">
+          No messages yet.
+        </p>
       ) : (
         <SessionBubbleList messages={messages} />
       )}

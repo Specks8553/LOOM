@@ -47,7 +47,7 @@ export function SessionInputArea({ sessionId, submitLabel, placeholder }: Props)
   }
 
   return (
-    <div className="flex flex-col gap-2 bg-[--color-bg-elevated] px-3 pb-3 pt-2">
+    <div className="flex flex-col gap-2 bg-[var(--color-bg-elevated)] px-3 pb-3 pt-2">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -59,14 +59,14 @@ export function SessionInputArea({ sessionId, submitLabel, placeholder }: Props)
         }}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-base] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+        className="w-full resize-y rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] p-2 text-[14px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
       />
       <div className="flex items-center justify-end gap-2">
         {isGenerating ? (
           <button
             type="button"
             onClick={handleCancel}
-            className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent]"
+            className="rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-1 text-[12px] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
           >
             Cancel
           </button>
@@ -75,7 +75,7 @@ export function SessionInputArea({ sessionId, submitLabel, placeholder }: Props)
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-sm bg-[var(--color-accent)] px-3 py-1 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {submitLabel ?? 'Send'}
           </button>

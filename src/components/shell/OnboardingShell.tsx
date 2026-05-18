@@ -43,20 +43,20 @@ export function OnboardingShell() {
   }
 
   return (
-    <main className="grid h-full place-items-center bg-[--color-bg-base]">
+    <main className="grid h-full place-items-center bg-[var(--color-bg-base)]">
       <div className="flex w-full max-w-sm flex-col gap-6 px-4">
-        <h1 className="text-center text-2xl font-semibold tracking-tight text-[--color-text-primary]">
+        <h1 className="text-center text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">
           LOOM
         </h1>
 
         {step === 'password' && (
           <form className="flex flex-col gap-4" onSubmit={handlePasswordContinue}>
-            <p className="text-center text-sm text-[--color-text-muted]">
+            <p className="text-center text-sm text-[var(--color-text-muted)]">
               Create a master password to encrypt your vault.
             </p>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-[--color-text-muted]" htmlFor="ob-password">
+              <label className="text-xs text-[var(--color-text-muted)]" htmlFor="ob-password">
                 Password
               </label>
               <input
@@ -64,7 +64,7 @@ export function OnboardingShell() {
                 type="password"
                 autoFocus
                 autoComplete="new-password"
-                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-muted)]"
                 placeholder="Min 8 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -72,14 +72,14 @@ export function OnboardingShell() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-[--color-text-muted]" htmlFor="ob-confirm">
+              <label className="text-xs text-[var(--color-text-muted)]" htmlFor="ob-confirm">
                 Confirm password
               </label>
               <input
                 id="ob-confirm"
                 type="password"
                 autoComplete="new-password"
-                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-muted)]"
                 placeholder="Repeat password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
@@ -94,7 +94,7 @@ export function OnboardingShell() {
             <button
               type="submit"
               disabled={!passwordValid}
-              className="rounded bg-[--color-accent] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
+              className="rounded bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               Continue
             </button>
@@ -103,15 +103,15 @@ export function OnboardingShell() {
 
         {step === 'api-key' && (
           <div className="flex flex-col gap-4">
-            <p className="text-center text-sm text-[--color-text-muted]">
+            <p className="text-center text-sm text-[var(--color-text-muted)]">
               Enter your Gemini API key.
             </p>
-            <p className="text-center text-xs text-[--color-text-muted]">
+            <p className="text-center text-xs text-[var(--color-text-muted)]">
               Your Gemini API key. Never sent anywhere except Google's API.
             </p>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-[--color-text-muted]" htmlFor="ob-apikey">
+              <label className="text-xs text-[var(--color-text-muted)]" htmlFor="ob-apikey">
                 API key
               </label>
               <input
@@ -119,7 +119,7 @@ export function OnboardingShell() {
                 type="password"
                 autoFocus
                 autoComplete="off"
-                className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+                className="rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-muted)]"
                 placeholder="AIza..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -137,7 +137,7 @@ export function OnboardingShell() {
               <button
                 type="button"
                 disabled={submitting || apiKey.length === 0}
-                className="rounded bg-[--color-accent] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
+                className="rounded bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
                 onClick={() => void handleFinish(false)}
               >
                 {submitting ? 'Setting up…' : 'Finish'}
@@ -145,7 +145,7 @@ export function OnboardingShell() {
               <button
                 type="button"
                 disabled={submitting}
-                className="text-xs text-[--color-text-muted] underline-offset-2 hover:underline"
+                className="text-xs text-[var(--color-text-muted)] underline-offset-2 hover:underline"
                 onClick={() => void handleFinish(true)}
               >
                 Skip for now

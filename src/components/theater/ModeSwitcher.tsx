@@ -45,7 +45,7 @@ export function ModeSwitcher({ storyId }: Props) {
     <div
       role="tablist"
       aria-label="Mode switcher"
-      className="flex shrink-0 gap-1 border-t border-[--color-border] bg-[--color-bg-elevated] px-3 pt-2.5 pb-0.5"
+      className="flex shrink-0 gap-1 border-t border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 pt-2.5 pb-0.5"
     >
       <Tab
         label="Story"
@@ -86,8 +86,8 @@ function Tab({ label, sublabel, isActive, onClick }: TabProps) {
       className={[
         'max-w-[200px] truncate rounded-sm px-3 py-1 text-[11px] outline-none transition-colors',
         isActive
-          ? 'bg-[--color-bg-active] font-medium text-[--color-text-primary]'
-          : 'text-[--color-text-muted] hover:bg-[--color-bg-hover] hover:text-[--color-text-primary]',
+          ? 'bg-[var(--color-bg-active)] font-medium text-[var(--color-text-primary)]'
+          : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]',
       ].join(' ')}
     >
       {text}

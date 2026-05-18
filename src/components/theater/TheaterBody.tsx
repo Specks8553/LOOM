@@ -142,7 +142,7 @@ export function TheaterBody() {
           <button
             type="button"
             onClick={jumpToBottom}
-            className="sticky bottom-2 ml-auto block rounded-full border border-[--color-border] bg-[--color-bg-elevated] px-3 py-1 text-[12px] text-[--color-text-primary] shadow hover:border-[--color-accent]"
+            className="sticky bottom-2 ml-auto block rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-1 text-[12px] text-[var(--color-text-primary)] shadow hover:border-[var(--color-accent)]"
           >
             ↓ New content
           </button>
@@ -339,8 +339,8 @@ function NoStorySelected() {
   return (
     <div className="grid h-full place-items-center">
       <div className="flex max-w-sm flex-col items-center gap-2.5 text-center">
-        <BookOpen size={40} className="text-[--color-text-muted] opacity-50" aria-hidden />
-        <p className="text-[15px] font-medium text-[--color-text-primary]">
+        <BookOpen size={40} className="text-[var(--color-text-muted)] opacity-50" aria-hidden />
+        <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
           Select a story from the Navigator, or create one to begin.
         </p>
       </div>
@@ -353,10 +353,10 @@ function BeginYourStory() {
   return (
     <div className="grid h-full place-items-center">
       <div className="flex flex-col items-center gap-1.5 text-center">
-        <p className="text-[15px] font-medium text-[--color-text-primary]">
+        <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
           Your story begins here.
         </p>
-        <p className="text-[13px] text-[--color-text-secondary]">
+        <p className="text-[13px] text-[var(--color-text-secondary)]">
           Write a direction and press Send to start.
         </p>
       </div>

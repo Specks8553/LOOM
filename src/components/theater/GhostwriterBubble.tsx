@@ -74,7 +74,7 @@ export function GhostwriterBubble({ message, compact = false }: GhostwriterBubbl
     <div className="group relative mx-auto w-full max-w-[80%] py-2">
       <div
         ref={setContainerEl}
-        className={`gw-active-frame rounded-md border border-[--color-border] bg-[--color-bg-base] p-3 leading-relaxed text-[--color-text-primary] ${proseSize}`}
+        className={`gw-active-frame rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] p-3 leading-relaxed text-[var(--color-text-primary)] ${proseSize}`}
       >
         {gw.phase === 'reviewing' && gw.diff !== null ? (
           <div className="whitespace-pre-wrap">

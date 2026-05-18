@@ -151,11 +151,11 @@ export function AccordionBanner({
 
   const label = (
     <>
-      <span className="font-medium text-[--color-text-primary]">{checkpoint.name}</span>
-      <span className="text-[--color-text-muted]"> · {tail}</span>
+      <span className="font-medium text-[var(--color-text-primary)]">{checkpoint.name}</span>
+      <span className="text-[var(--color-text-muted)]"> · {tail}</span>
       {isStale && (
         <span
-          className="ml-1 text-[--color-warning]"
+          className="ml-1 text-[var(--color-warning)]"
           title="Segment is stale (a contained message was edited)"
         >
           ⚠
@@ -166,7 +166,7 @@ export function AccordionBanner({
 
   return (
     <div
-      className="my-2 overflow-hidden rounded-md border border-[--color-border] bg-[--color-bg-elevated]"
+      className="my-2 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]"
       onContextMenu={handleContextMenu}
     >
       <div className="flex w-full items-center gap-2 px-3 py-2">
@@ -175,7 +175,7 @@ export function AccordionBanner({
           onClick={toggleCollapse}
           disabled={!hasSummary}
           aria-label={isCollapsed ? 'Expand chapter' : 'Collapse chapter'}
-          className="shrink-0 text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-30"
+          className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronRight
             size={14}
@@ -195,7 +195,7 @@ export function AccordionBanner({
                 if (e.key === 'Escape') setRenameValue(null);
               }}
               onBlur={() => void handleRenameSubmit()}
-              className="w-full rounded-sm border border-[--color-border] bg-[--color-bg-base] px-1 py-0.5 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="w-full rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-1 py-0.5 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
             />
           )}
         </div>
@@ -213,31 +213,31 @@ export function AccordionBanner({
        *  summary card. When expanded, the parent renders the bubbles between
        *  the chevron and the next banner (we render the inline editor only). */}
       {segment !== null && isCollapsed && hasSummary && (
-        <div className="border-t border-[--color-border] bg-[--color-bg-base] px-3 py-2 text-[14px] text-[--color-text-primary]">
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-[14px] text-[var(--color-text-primary)]">
           <div className="whitespace-pre-wrap">{segment.summary}</div>
         </div>
       )}
 
       {/* Inline summary editor — shown after `Edit summary` in the menu. */}
       {segment !== null && editingSummary !== null && (
-        <div className="border-t border-[--color-border] bg-[--color-bg-base] px-3 py-2">
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2">
           <textarea
             value={editingSummary}
             onChange={(e) => setEditingSummary(e.target.value)}
-            className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+            className="min-h-[120px] w-full resize-y rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-2 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
           />
           <div className="mt-2 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setEditingSummary(null)}
-              className="rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => void handleSaveSummaryEdit()}
-              className="rounded-sm bg-[--color-accent] px-2 py-1 text-[12px] text-white"
+              className="rounded-sm bg-[var(--color-accent)] px-2 py-1 text-[12px] text-white"
             >
               Save
             </button>
@@ -251,7 +251,7 @@ export function AccordionBanner({
           ref={menuRef}
           role="menu"
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
-          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg-base] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
+          className="min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] py-1 text-[12px] text-[var(--color-text-primary)] shadow-lg"
         >
           {segment !== null && !hasSummary && (
             <MenuItem onClick={() => void handleSummariseSegment(segment)} disabled={isGenerating}>
@@ -320,7 +320,7 @@ function MenuItem({
       role="menuitem"
       onClick={onClick}
       disabled={disabled}
-      className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated] disabled:cursor-not-allowed disabled:opacity-50"
+      className="block w-full px-3 py-1.5 text-left hover:bg-[var(--color-bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -349,7 +349,7 @@ function BannerButtonSlot({
     return (
       <Loader2
         size={14}
-        className="shrink-0 animate-spin text-[--color-text-muted]"
+        className="shrink-0 animate-spin text-[var(--color-text-muted)]"
         aria-label="Summarising"
       />
     );
@@ -362,7 +362,7 @@ function BannerButtonSlot({
         onClick={onGenerate}
         disabled={isGenerating}
         title={isGenerating ? 'Generation already in progress' : undefined}
-        className="shrink-0 rounded-sm border border-[--color-border] bg-[--color-bg-base] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
+        className="shrink-0 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         Generate summary
       </button>
@@ -377,10 +377,10 @@ function BannerButtonSlot({
     <button
       type="button"
       onClick={onToggleUseSummary}
-      className={`shrink-0 rounded-sm border border-[--color-border] px-2 py-0.5 text-[11px] ${
+      className={`shrink-0 rounded-sm border border-[var(--color-border)] px-2 py-0.5 text-[11px] ${
         segment.use_summary
-          ? 'bg-[--color-accent] text-white'
-          : 'bg-[--color-bg-base] text-[--color-text-muted] hover:text-[--color-text-primary]'
+          ? 'bg-[var(--color-accent)] text-white'
+          : 'bg-[var(--color-bg-base)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
       }`}
       aria-pressed={segment.use_summary}
       title="Toggle summary substitution in API history"

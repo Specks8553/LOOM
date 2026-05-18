@@ -75,11 +75,11 @@ function formatTokens(n: number): string {
 
 function Section({ glyph, children }: { glyph?: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-[--color-border] px-3 py-2">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-[--color-text-muted]">
+    <div className="border-t border-[var(--color-border)] px-3 py-2">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
         Status
       </div>
-      <div className="mt-1 flex items-center gap-2 text-[12px] text-[--color-text-primary]">
+      <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--color-text-primary)]">
         {glyph !== undefined && <span aria-hidden>{glyph}</span>}
         <span>{children}</span>
       </div>

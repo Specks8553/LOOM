@@ -129,10 +129,10 @@ export function VaultTreeRow({
       onContextMenu={onContextMenu}
       className={`group flex h-7 cursor-pointer items-center gap-1 px-2 text-[13px] ${
         dropTarget
-          ? 'bg-[--color-accent-subtle] outline outline-1 outline-[--color-accent]'
+          ? 'bg-[var(--color-accent-subtle)] outline outline-1 outline-[var(--color-accent)]'
           : selected
-            ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-            : 'text-[--color-text-primary] hover:bg-[--color-bg-hover]'
+            ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+            : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]'
       }`}
       style={{ paddingLeft: 8 + depth * 12 }}
     >
@@ -144,7 +144,7 @@ export function VaultTreeRow({
             e.stopPropagation();
             onToggleExpanded();
           }}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-[--color-text-muted]"
+          className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--color-text-muted)]"
         >
           <ChevronRight
             size={12}
@@ -155,7 +155,7 @@ export function VaultTreeRow({
       ) : (
         <span aria-hidden className="h-4 w-4 shrink-0" />
       )}
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[--color-text-muted]">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--color-text-muted)]">
         {rowIcon(item.item_type, expanded)}
       </span>
       {editing ? (
@@ -172,7 +172,7 @@ export function VaultTreeRow({
               setEditing(false);
             }
           }}
-          className="flex-1 bg-transparent outline-none ring-1 ring-[--color-accent] rounded-sm px-1"
+          className="flex-1 bg-transparent outline-none ring-1 ring-[var(--color-accent)] rounded-sm px-1"
         />
       ) : (
         <span className="flex-1 truncate">{item.name}</span>
@@ -188,8 +188,8 @@ export function VaultTreeRow({
           }}
           className={`flex h-4 w-4 shrink-0 items-center justify-center ${
             attached
-              ? 'text-[--color-accent]'
-              : 'invisible text-[--color-text-muted] hover:text-[--color-text-primary] group-hover:visible'
+              ? 'text-[var(--color-accent)]'
+              : 'invisible text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] group-hover:visible'
           }`}
         >
           <Paperclip size={12} aria-hidden />
@@ -202,7 +202,7 @@ export function VaultTreeRow({
           e.stopPropagation();
           onContextMenu(e);
         }}
-        className="invisible flex h-4 w-4 shrink-0 items-center justify-center text-[--color-text-muted] group-hover:visible"
+        className="invisible flex h-4 w-4 shrink-0 items-center justify-center text-[var(--color-text-muted)] group-hover:visible"
       >
         <MoreVertical size={14} aria-hidden />
       </button>

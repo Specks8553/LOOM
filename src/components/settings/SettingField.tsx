@@ -105,14 +105,14 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
   };
 
   return (
-    <div className="flex flex-col gap-1 border-b border-[--color-border] py-3">
+    <div className="flex flex-col gap-1 border-b border-[var(--color-border)] py-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[--color-text-primary]">{spec.label}</span>
+            <span className="text-[13px] text-[var(--color-text-primary)]">{spec.label}</span>
             {isOverridden && (
               <span
-                className="rounded-sm bg-[--color-accent-subtle] px-1 text-[10px] uppercase tracking-wider text-[--color-accent-text]"
+                className="rounded-sm bg-[var(--color-accent-subtle)] px-1 text-[10px] uppercase tracking-wider text-[var(--color-accent-text)]"
                 title="Overridden in this world"
               >
                 Override
@@ -120,7 +120,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
             )}
           </div>
           {spec.hint !== undefined && (
-            <p className="mt-0.5 text-[11px] text-[--color-text-muted]">{spec.hint}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">{spec.hint}</p>
           )}
         </div>
 
@@ -142,7 +142,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
               className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-sm',
                 isOverridden
-                  ? 'text-[--color-text-muted] hover:text-[--color-text-primary]'
+                  ? 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                   : 'cursor-default text-transparent',
               )}
             >
@@ -151,7 +151,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
           )}
         </div>
       </div>
-      {error !== null && <span className="text-[11px] text-[--color-error]">{error}</span>}
+      {error !== null && <span className="text-[11px] text-[var(--color-error)]">{error}</span>}
     </div>
   );
 }
@@ -166,7 +166,7 @@ interface ControlProps {
 
 function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlProps) {
   const inputBase =
-    'rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]';
+    'rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]';
 
   switch (spec.kind) {
     case 'toggle': {
@@ -179,7 +179,7 @@ function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlPr
           onClick={() => onDiscrete(on ? 'false' : 'true')}
           className={cn(
             'flex h-5 w-9 items-center rounded-full px-0.5 transition-colors',
-            on ? 'bg-[--color-accent]' : 'bg-[--color-border]',
+            on ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border)]',
           )}
         >
           <span
@@ -210,7 +210,7 @@ function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlPr
         <div className="flex items-center gap-2">
           <span
             aria-hidden
-            className="h-5 w-5 rounded-sm border border-[--color-border]"
+            className="h-5 w-5 rounded-sm border border-[var(--color-border)]"
             style={{ background: value === '' ? 'transparent' : value }}
           />
           <input
@@ -234,9 +234,9 @@ function FieldControl({ spec, value, onEdit, onDiscrete, focusProps }: ControlPr
             value={Number(value) || spec.min || 0}
             onChange={(e) => onEdit(e.target.value)}
             {...focusProps}
-            className="w-40 accent-[--color-accent]"
+            className="w-40 accent-[var(--color-accent)]"
           />
-          <span className="w-16 text-right font-mono text-[12px] text-[--color-text-muted]">
+          <span className="w-16 text-right font-mono text-[12px] text-[var(--color-text-muted)]">
             {value}
             {spec.unit ?? ''}
           </span>

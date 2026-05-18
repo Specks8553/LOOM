@@ -78,7 +78,7 @@ export function CreateMenu({ open, onOpenChange, parentId, trigger }: CreateMenu
         <div
           ref={popoverRef}
           role="menu"
-          className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-sm border border-[--color-border] bg-[--color-bg-pane] py-1 text-[13px] shadow-lg"
+          className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-pane)] py-1 text-[13px] shadow-lg"
         >
           <CreateMenuItem
             label="New story"
@@ -101,7 +101,7 @@ function CreateMenuItem({ label, onSelect }: { label: string; onSelect: () => vo
       type="button"
       role="menuitem"
       onClick={onSelect}
-      className="block w-full px-3 py-1.5 text-left text-[--color-text-primary] hover:bg-[--color-bg-hover]"
+      className="block w-full px-3 py-1.5 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]"
     >
       {label}
     </button>

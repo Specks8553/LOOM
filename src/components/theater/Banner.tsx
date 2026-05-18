@@ -38,33 +38,33 @@ export function Banner({
 }: BannerProps) {
   return (
     <div
-      className={`my-2 overflow-hidden rounded-md border border-[--color-border] bg-[--color-bg-elevated] ${
-        active ? 'border-l-2 border-l-[--color-accent]' : ''
+      className={`my-2 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] ${
+        active ? 'border-l-2 border-l-[var(--color-accent)]' : ''
       }`}
     >
       <button
         type="button"
         onClick={onToggle}
         onContextMenu={onContextMenu}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[--color-bg-hover]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-bg-hover)]"
       >
         <ChevronRight
           size={14}
           aria-hidden
           className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
         />
-        <span className="flex-1 truncate text-[12px] font-medium text-[--color-text-primary]">
+        <span className="flex-1 truncate text-[12px] font-medium text-[var(--color-text-primary)]">
           {label}
         </span>
       </button>
 
       {expanded && (
         <>
-          <div className="border-t border-[--color-border] bg-[--color-bg-base] px-3 py-2">
+          <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2">
             {children}
           </div>
           {bottomActions !== undefined && (
-            <div className="flex items-center justify-end gap-2 border-t border-[--color-border] px-3 py-2">
+            <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] px-3 py-2">
               {bottomActions}
             </div>
           )}

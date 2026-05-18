@@ -40,24 +40,24 @@ export function CachedMessageConfirmModal({
       role="alertdialog"
       aria-modal="true"
       aria-label="Cached message warning"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[--color-bg-base]/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-bg-base)]/70 backdrop-blur-sm"
       onClick={onCancel}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-md border border-[--color-border] bg-[--color-bg-pane] p-4 shadow-lg"
+        className="w-full max-w-sm rounded-md border border-[var(--color-border)] bg-[var(--color-bg-pane)] p-4 shadow-lg"
       >
-        <h2 className="mb-2 text-[14px] font-semibold text-[--color-text-primary]">
+        <h2 className="mb-2 text-[14px] font-semibold text-[var(--color-text-primary)]">
           Message is in the {cacheLabel}
         </h2>
-        <p className="mb-4 text-[12px] leading-relaxed text-[--color-text-muted]">
+        <p className="mb-4 text-[12px] leading-relaxed text-[var(--color-text-muted)]">
           {verb} this message will invalidate the cache. The next send will rebuild it.
         </p>
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-sm border border-[--color-border] px-3 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="rounded-sm border border-[var(--color-border)] px-3 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             Cancel
           </button>
@@ -65,7 +65,7 @@ export function CachedMessageConfirmModal({
             type="button"
             onClick={onConfirm}
             autoFocus
-            className="rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white"
+            className="rounded-sm bg-[var(--color-accent)] px-3 py-1 text-[12px] font-medium text-white"
           >
             {confirmLabel}
           </button>

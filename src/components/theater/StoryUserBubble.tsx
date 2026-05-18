@@ -67,17 +67,17 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
 
   return (
     <div className="group ml-auto flex w-fit max-w-[65%] flex-col items-end py-2">
-      <div className="rounded-bubble border bg-[--bubble-user-bg] px-4 py-3 [border-color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]">
+      <div className="rounded-bubble border bg-[var(--bubble-user-bg)] px-4 py-3 [border-color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]">
         {parsed.plot_direction.trim().length > 0 && (
           <Field label="Plot Direction">
-            <p className="whitespace-pre-wrap text-[13px] leading-normal text-[--color-text-primary]">
+            <p className="whitespace-pre-wrap text-[13px] leading-normal text-[var(--color-text-primary)]">
               {parsed.plot_direction}
             </p>
           </Field>
         )}
         {parsed.background_information.trim().length > 0 && (
           <Field label="Background" dim>
-            <p className="whitespace-pre-wrap text-[12px] leading-normal text-[--color-text-secondary]">
+            <p className="whitespace-pre-wrap text-[12px] leading-normal text-[var(--color-text-secondary)]">
               {parsed.background_information}
             </p>
           </Field>
@@ -87,7 +87,7 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
             {parsed.modificators.map((m, i) => (
               <span
                 key={`${m}-${i}`}
-                className="rounded-sm bg-[--color-accent-subtle] px-2 py-0.5 text-[10px] text-[--color-accent-text]"
+                className="rounded-sm bg-[var(--color-accent-subtle)] px-2 py-0.5 text-[10px] text-[var(--color-accent-text)]"
               >
                 {m}
               </span>
@@ -96,7 +96,7 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
         )}
         {parsed.constraints.trim().length > 0 && (
           <Field label="Constraints" dim>
-            <p className="whitespace-pre-wrap text-[12px] italic leading-snug text-[--color-text-muted]">
+            <p className="whitespace-pre-wrap text-[12px] italic leading-snug text-[var(--color-text-muted)]">
               {parsed.constraints}
             </p>
           </Field>
@@ -162,7 +162,7 @@ function Field({
   return (
     <div className="mt-2.5 first:mt-0">
       <span
-        className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted] ${
+        className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)] ${
           dim ? 'opacity-70' : ''
         }`}
       >

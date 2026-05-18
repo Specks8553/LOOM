@@ -126,8 +126,8 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
       : '';
 
   return (
-    <div className="bg-[--color-bg-elevated] px-3 pb-3 pt-2">
-      <div className="rounded-lg border border-[--color-border-subtle] bg-[--color-bg-pane] px-3.5 py-2.5">
+    <div className="bg-[var(--color-bg-elevated)] px-3 pb-3 pt-2">
+      <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-pane)] px-3.5 py-2.5">
         {/* Plot Direction — always visible */}
         <div className="flex items-center justify-between">
           <FieldLabel required>Plot Direction</FieldLabel>
@@ -144,7 +144,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
           }}
           placeholder="What should happen next?"
           rows={3}
-          className="mt-1 w-full resize-none bg-transparent text-[13px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+          className="mt-1 w-full resize-none bg-transparent text-[13px] leading-normal text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
         />
 
         {expanded && (
@@ -159,7 +159,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
               onChange={(e) => update('background_information', e.target.value)}
               rows={2}
               placeholder="Context the model should know but not write directly"
-              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
             />
 
             <Divider />
@@ -179,7 +179,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
               onChange={(e) => update('constraints', e.target.value)}
               rows={2}
               placeholder="What the model must obey but never include in the prose"
-              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+              className="mt-1 w-full resize-none bg-transparent text-[12px] leading-normal text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
             />
           </>
         )}
@@ -188,13 +188,13 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
 
         {/* Bottom bar: token meter + actions */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] text-[--color-text-muted]">{tokenLabel}</span>
+          <span className="font-mono text-[10px] text-[var(--color-text-muted)]">{tokenLabel}</span>
           <div className="flex items-center gap-2">
             {editMode && (
               <button
                 type="button"
                 onClick={handleCancel}
-                className="rounded-md border border-[--color-border] px-4 py-1.5 text-[12px] font-medium text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                className="rounded-md border border-[var(--color-border)] px-4 py-1.5 text-[12px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               >
                 Cancel
               </button>
@@ -203,7 +203,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
               <button
                 type="button"
                 onClick={handleCancel}
-                className="rounded-md border border-[--color-border] px-4 py-1.5 text-[12px] font-medium text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                className="rounded-md border border-[var(--color-border)] px-4 py-1.5 text-[12px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               >
                 Cancel
               </button>
@@ -214,7 +214,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
                     type="button"
                     onClick={() => void handleUpdateCache()}
                     title="Cache is outdated. Update it before sending for cost savings, or send anyway."
-                    className="text-[11px] text-[--color-text-muted] underline-offset-2 hover:text-[--color-text-primary] hover:underline"
+                    className="text-[11px] text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-text-primary)] hover:underline"
                   >
                     Update cache
                   </button>
@@ -232,13 +232,13 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
                       ? 'Cache is outdated. Update it before sending for cost savings, or send anyway.'
                       : undefined
                   }
-                  className="relative rounded-md bg-[--color-accent] px-4 py-1.5 text-[12px] font-medium text-[--color-text-on-accent] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="relative rounded-md bg-[var(--color-accent)] px-4 py-1.5 text-[12px] font-medium text-[var(--color-text-on-accent)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {submitLabel ?? 'Send'}
                   {cacheStale && (
                     <span
                       aria-label="Cache is stale"
-                      className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[--color-warning]"
+                      className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--color-warning)]"
                     />
                   )}
                 </button>
@@ -252,7 +252,7 @@ export function InputArea({ initial, onCommit, onCancel, submitLabel }: InputAre
 }
 
 function Divider() {
-  return <div className="my-2 h-px bg-[--color-border-subtle]" />;
+  return <div className="my-2 h-px bg-[var(--color-border-subtle)]" />;
 }
 
 function FieldLabel({
@@ -266,12 +266,12 @@ function FieldLabel({
 }) {
   return (
     <span
-      className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted] ${
+      className={`text-[9px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)] ${
         dim ? 'opacity-70' : ''
       }`}
     >
       {children}
-      {required && <span className="ml-1 text-[--color-accent]">*</span>}
+      {required && <span className="ml-1 text-[var(--color-accent)]">*</span>}
     </span>
   );
 }
@@ -281,7 +281,7 @@ function FieldsToggle({ children, onClick }: { children: string; onClick: () => 
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[3px] border border-[--color-border-subtle] px-1.5 py-px text-[10px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+      className="rounded-[3px] border border-[var(--color-border-subtle)] px-1.5 py-px text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
     >
       {children}
     </button>
@@ -343,14 +343,14 @@ function ChipInput({ chips, onChange, placeholder }: ChipInputProps) {
       {chips.map((chip, i) => (
         <span
           key={`${chip}-${i}`}
-          className="flex items-center gap-1 rounded-sm bg-[--color-accent-subtle] px-2 py-0.5 text-[10px] text-[--color-accent-text]"
+          className="flex items-center gap-1 rounded-sm bg-[var(--color-accent-subtle)] px-2 py-0.5 text-[10px] text-[var(--color-accent-text)]"
         >
           {chip}
           <button
             type="button"
             onClick={() => removeChip(i)}
             aria-label={`Remove ${chip}`}
-            className="text-[--color-accent-text] opacity-70 hover:opacity-100"
+            className="text-[var(--color-accent-text)] opacity-70 hover:opacity-100"
           >
             ×
           </button>
@@ -364,7 +364,7 @@ function ChipInput({ chips, onChange, placeholder }: ChipInputProps) {
         onKeyDown={handleKeyDown}
         onBlur={() => commitDraft(draft)}
         placeholder={chips.length === 0 ? placeholder : ''}
-        className="min-w-[120px] flex-1 bg-transparent text-[12px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+        className="min-w-[120px] flex-1 bg-transparent text-[12px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
       />
     </div>
   );

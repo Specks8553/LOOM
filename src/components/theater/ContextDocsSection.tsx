@@ -41,13 +41,13 @@ export function ContextDocsSection() {
   return (
     <section
       aria-label="Context documents"
-      className="flex shrink-0 flex-col border-t border-[--color-border] px-3 py-2"
+      className="flex shrink-0 flex-col border-t border-[var(--color-border)] px-3 py-2"
     >
-      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted]">
+      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Context documents
       </h3>
       {attachedDocs.length === 0 ? (
-        <p className="text-[12px] text-[--color-text-muted]">No context documents.</p>
+        <p className="text-[12px] text-[var(--color-text-muted)]">No context documents.</p>
       ) : (
         <ul className="flex flex-col gap-0.5">
           {attachedDocs.map((doc) => (
@@ -67,15 +67,15 @@ interface ContextDocRowProps {
 function ContextDocRow({ doc, onDetach }: ContextDocRowProps) {
   const Icon = doc.item_type === 'Image' ? ImageIcon : FileText;
   return (
-    <li className="group flex h-6 items-center gap-1.5 rounded-sm px-1 text-[13px] text-[--color-text-primary] hover:bg-[--color-bg-hover]">
-      <Icon size={12} aria-hidden className="shrink-0 text-[--color-text-muted]" />
+    <li className="group flex h-6 items-center gap-1.5 rounded-sm px-1 text-[13px] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]">
+      <Icon size={12} aria-hidden className="shrink-0 text-[var(--color-text-muted)]" />
       <span className="flex-1 truncate">{doc.name}</span>
       <button
         type="button"
         onClick={onDetach}
         aria-label={`Detach ${doc.name}`}
         title="Detach from story"
-        className="invisible flex h-4 w-4 shrink-0 items-center justify-center text-[--color-text-muted] hover:text-[--color-text-primary] group-hover:visible"
+        className="invisible flex h-4 w-4 shrink-0 items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] group-hover:visible"
       >
         <X size={12} aria-hidden />
       </button>

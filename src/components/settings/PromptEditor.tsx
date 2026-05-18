@@ -93,11 +93,11 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
   }, [preview, value]);
 
   return (
-    <div className="flex flex-col gap-2 border-b border-[--color-border] py-4">
+    <div className="flex flex-col gap-2 border-b border-[var(--color-border)] py-4">
       <div className="flex items-center gap-2">
-        <span className="text-[13px] text-[--color-text-primary]">{label}</span>
+        <span className="text-[13px] text-[var(--color-text-primary)]">{label}</span>
         {isOverridden && (
-          <span className="rounded-sm bg-[--color-accent-subtle] px-1 text-[10px] uppercase tracking-wider text-[--color-accent-text]">
+          <span className="rounded-sm bg-[var(--color-accent-subtle)] px-1 text-[10px] uppercase tracking-wider text-[var(--color-accent-text)]">
             Override
           </span>
         )}
@@ -108,8 +108,8 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
             className={cn(
               'rounded-sm px-2 py-0.5 text-[11px] uppercase tracking-wider',
               preview
-                ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-                : 'text-[--color-text-muted] hover:text-[--color-text-primary]',
+                ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
             )}
           >
             Preview
@@ -123,7 +123,7 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
               className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-sm',
                 isOverridden
-                  ? 'text-[--color-text-muted] hover:text-[--color-text-primary]'
+                  ? 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                   : 'cursor-default text-transparent',
               )}
             >
@@ -134,17 +134,17 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
             <button
               type="button"
               onClick={handleRestore}
-              className="rounded-sm px-2 py-0.5 text-[11px] uppercase tracking-wider text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="rounded-sm px-2 py-0.5 text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Restore Default
             </button>
           )}
         </div>
       </div>
-      {hint !== undefined && <p className="text-[11px] text-[--color-text-muted]">{hint}</p>}
+      {hint !== undefined && <p className="text-[11px] text-[var(--color-text-muted)]">{hint}</p>}
       {preview ? (
         <div
-          className="loom-prose min-h-24 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary]"
+          className="loom-prose min-h-24 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]"
           // Trusted local content — same as DocEditor's preview.
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
@@ -160,7 +160,7 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
           }}
           spellCheck={false}
           rows={6}
-          className="resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="resize-y rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 font-mono text-[12px] leading-5 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
           placeholder="Empty — the built-in default is used."
         />
       )}

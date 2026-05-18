@@ -73,7 +73,7 @@ export function PaneDivider({ side, width, min, max, onResize, onResizeEnd }: Pa
       onMouseDown={onMouseDown}
       className="group relative h-full w-[7px] shrink-0 cursor-col-resize"
     >
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[--color-border]" />
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--color-border)]" />
     </div>
   );
 }

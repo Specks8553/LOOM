@@ -20,14 +20,14 @@ export function RightPane({ width, children }: RightPaneProps) {
   if (collapsed) {
     return (
       <aside
-        className="flex h-full w-8 shrink-0 flex-col items-center border-l border-[--color-border] bg-[--color-bg-pane] py-2"
+        className="flex h-full w-8 shrink-0 flex-col items-center border-l border-[var(--color-border)] bg-[var(--color-bg-pane)] py-2"
         aria-label="Right pane (collapsed)"
       >
         <button
           type="button"
           onClick={toggle}
           aria-label="Expand right pane"
-          className="text-[--color-text-muted] hover:text-[--color-text-primary]"
+          className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         >
           <PanelRightOpen size={14} aria-hidden />
         </button>
@@ -37,7 +37,7 @@ export function RightPane({ width, children }: RightPaneProps) {
 
   return (
     <aside
-      className="flex h-full shrink-0 flex-col overflow-hidden bg-[--color-bg-pane]"
+      className="flex h-full shrink-0 flex-col overflow-hidden bg-[var(--color-bg-pane)]"
       style={{ width }}
     >
       <header className="flex h-9 shrink-0 items-center justify-end px-2">
@@ -45,7 +45,7 @@ export function RightPane({ width, children }: RightPaneProps) {
           type="button"
           onClick={toggle}
           aria-label="Collapse right pane"
-          className="text-[--color-text-muted] hover:text-[--color-text-primary]"
+          className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         >
           <PanelRightClose size={14} aria-hidden />
         </button>

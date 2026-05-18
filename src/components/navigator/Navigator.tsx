@@ -169,20 +169,20 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
   return (
     <div className="flex h-full flex-col">
       {/* Top: world picker / settings / lock */}
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-[--color-border] px-2">
+      <header className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border)] px-2">
         <button
           type="button"
           onClick={onOpenWorldPicker}
-          className="truncate text-[13px] font-medium text-[--color-text-primary] hover:text-[--color-accent]"
+          className="truncate text-[13px] font-medium text-[var(--color-text-primary)] hover:text-[var(--color-accent)]"
         >
           {activeWorld ? activeWorld.name : 'Select a world'}
         </button>
-        <div className="flex items-center gap-1 text-[--color-text-muted]">
+        <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
           <button
             type="button"
             onClick={onOpenSettings}
             aria-label="Settings"
-            className="px-1 hover:text-[--color-text-primary]"
+            className="px-1 hover:text-[var(--color-text-primary)]"
           >
             ⚙
           </button>
@@ -190,7 +190,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
             type="button"
             onClick={onLock}
             aria-label="Lock"
-            className="px-1 hover:text-[--color-text-primary]"
+            className="px-1 hover:text-[var(--color-text-primary)]"
           >
             🔒
           </button>
@@ -199,13 +199,13 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
 
       {/* Filter + create */}
       {!isTrashView && activeWorldId !== null && (
-        <div className="flex h-8 shrink-0 items-center gap-1 border-b border-[--color-border] px-2">
+        <div className="flex h-8 shrink-0 items-center gap-1 border-b border-[var(--color-border)] px-2">
           <input
             type="text"
             placeholder="Filter items…"
             value={filterQuery}
             onChange={(e) => setFilter(e.target.value)}
-            className="h-6 flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 text-[12px] text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted] focus:border-[--color-accent]"
+            className="h-6 flex-1 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 text-[12px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)]"
           />
           <CreateMenu
             open={createMenuOpen}
@@ -215,7 +215,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
               <button
                 type="button"
                 aria-label="New item"
-                className="flex h-6 w-6 items-center justify-center rounded-sm text-[--color-text-muted] hover:bg-[--color-bg-hover] hover:text-[--color-text-primary]"
+                className="flex h-6 w-6 items-center justify-center rounded-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
               >
                 <Plus size={14} aria-hidden />
               </button>
@@ -251,14 +251,14 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
               setRootDropActive(false);
               if (draggingId !== null) void performMove(draggingId, null);
             }}
-            className={`h-full ${rootDropActive ? 'bg-[--color-accent-subtle]' : ''}`}
+            className={`h-full ${rootDropActive ? 'bg-[var(--color-accent-subtle)]' : ''}`}
           >
             <NoItems hasFilter={filterQuery.length > 0} />
           </div>
         ) : (
           <ul
             role="tree"
-            className={`min-h-full py-1 ${rootDropActive ? 'bg-[--color-accent-subtle]' : ''}`}
+            className={`min-h-full py-1 ${rootDropActive ? 'bg-[var(--color-accent-subtle)]' : ''}`}
             onDragOver={(e) => {
               // Allow drop onto empty root area (not on a row).
               if (draggingId !== null && e.target === e.currentTarget) {
@@ -315,10 +315,10 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
         <button
           type="button"
           onClick={() => setTrashView(!isTrashView)}
-          className={`flex h-8 shrink-0 items-center gap-2 border-t border-[--color-border] px-3 text-[12px] ${
+          className={`flex h-8 shrink-0 items-center gap-2 border-t border-[var(--color-border)] px-3 text-[12px] ${
             isTrashView
-              ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-              : 'text-[--color-text-muted] hover:text-[--color-text-primary]'
+              ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+              : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
           }`}
         >
           <Trash2 size={14} aria-hidden />
@@ -457,11 +457,11 @@ function TreeBranch({
 function NoWorldSelected({ onPick }: { onPick: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
-      <p className="text-[12px] text-[--color-text-muted]">Select a world to begin.</p>
+      <p className="text-[12px] text-[var(--color-text-muted)]">Select a world to begin.</p>
       <button
         type="button"
         onClick={onPick}
-        className="text-[12px] text-[--color-accent] hover:underline"
+        className="text-[12px] text-[var(--color-accent)] hover:underline"
       >
         Open World Picker
       </button>
@@ -472,14 +472,14 @@ function NoWorldSelected({ onPick }: { onPick: () => void }) {
 function NoItems({ hasFilter }: { hasFilter: boolean }) {
   if (hasFilter) {
     return (
-      <p className="px-4 py-6 text-center text-[12px] text-[--color-text-muted]">
+      <p className="px-4 py-6 text-center text-[12px] text-[var(--color-text-muted)]">
         No items match the filter.
       </p>
     );
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-[12px] text-[--color-text-muted]">
-      <p className="text-[13px] text-[--color-text-secondary]">Nothing here yet.</p>
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-[12px] text-[var(--color-text-muted)]">
+      <p className="text-[13px] text-[var(--color-text-secondary)]">Nothing here yet.</p>
       <p>Create a story to start writing.</p>
     </div>
   );
@@ -494,7 +494,9 @@ interface TrashViewProps {
 function TrashView({ items, onRestore, onPermanentDelete }: TrashViewProps) {
   if (items.length === 0) {
     return (
-      <p className="px-4 py-6 text-center text-[12px] text-[--color-text-muted]">Trash is empty.</p>
+      <p className="px-4 py-6 text-center text-[12px] text-[var(--color-text-muted)]">
+        Trash is empty.
+      </p>
     );
   }
   return (
@@ -502,21 +504,21 @@ function TrashView({ items, onRestore, onPermanentDelete }: TrashViewProps) {
       {items.map((item) => (
         <li
           key={item.id}
-          className="flex h-7 items-center justify-between gap-2 px-3 text-[13px] text-[--color-text-secondary] hover:bg-[--color-bg-hover]"
+          className="flex h-7 items-center justify-between gap-2 px-3 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
         >
           <span className="truncate">{item.name}</span>
           <span className="flex shrink-0 items-center gap-2 text-[11px]">
             <button
               type="button"
               onClick={() => onRestore(item.id)}
-              className="text-[--color-text-muted] hover:text-[--color-accent]"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
             >
               Restore
             </button>
             <button
               type="button"
               onClick={() => onPermanentDelete(item)}
-              className="text-[--color-text-muted] hover:text-red-400"
+              className="text-[var(--color-text-muted)] hover:text-red-400"
             >
               Delete
             </button>

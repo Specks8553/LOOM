@@ -60,7 +60,7 @@ export function TemplatesTab() {
 
   if (templates.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-[13px] text-[--color-text-muted]">
+      <div className="flex h-full items-center justify-center text-[13px] text-[var(--color-text-muted)]">
         Open a world to manage its templates.
       </div>
     );
@@ -69,11 +69,11 @@ export function TemplatesTab() {
   return (
     <div className="flex h-full gap-4">
       {/* List */}
-      <div className="flex w-56 shrink-0 flex-col gap-1 border-r border-[--color-border] pr-3">
+      <div className="flex w-56 shrink-0 flex-col gap-1 border-r border-[var(--color-border)] pr-3">
         <button
           type="button"
           onClick={() => void handleNew()}
-          className="mb-1 flex items-center gap-1.5 rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+          className="mb-1 flex items-center gap-1.5 rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         >
           <Plus size={13} aria-hidden />
           New template
@@ -86,14 +86,14 @@ export function TemplatesTab() {
             className={cn(
               'flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px]',
               t.id === selectedId
-                ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-                : 'text-[--color-text-primary] hover:bg-[--color-bg-elevated]',
+                ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+                : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-elevated)]',
             )}
           >
-            <FileText size={13} aria-hidden className="shrink-0 text-[--color-text-muted]" />
+            <FileText size={13} aria-hidden className="shrink-0 text-[var(--color-text-muted)]" />
             <span className="truncate">{t.name}</span>
             {t.is_builtin && (
-              <span className="ml-auto text-[10px] uppercase tracking-wider text-[--color-text-muted]">
+              <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
                 Built-in
               </span>
             )}
@@ -166,7 +166,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
             setName(e.target.value);
             scheduleSave(e.target.value, content);
           }}
-          className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="flex-1 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[14px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
         />
         <button
           type="button"
@@ -174,15 +174,15 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
           className={cn(
             'rounded-sm px-2 py-0.5 text-[11px] uppercase tracking-wider',
             preview
-              ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-              : 'text-[--color-text-muted] hover:text-[--color-text-primary]',
+              ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+              : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
           )}
         >
           Preview
         </button>
       </div>
 
-      <div className="flex items-center gap-2 text-[11px] text-[--color-text-muted]">
+      <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
         <span>
           {template.is_builtin ? 'Built-in template' : 'Template'} · {template.slug}
         </span>
@@ -190,7 +190,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
 
       {preview ? (
         <div
-          className="loom-prose flex-1 overflow-y-auto rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary]"
+          className="loom-prose flex-1 overflow-y-auto rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]"
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
       ) : (
@@ -201,7 +201,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
             scheduleSave(name, e.target.value);
           }}
           spellCheck={false}
-          className="flex-1 resize-none rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 font-mono text-[12px] leading-5 text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+          className="flex-1 resize-none rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 font-mono text-[12px] leading-5 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
           placeholder="Template body — {{placeholders}} are filled when a document is created."
         />
       )}
@@ -211,7 +211,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
           <button
             type="button"
             onClick={() => void onRestore()}
-            className="rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             Restore default
           </button>
@@ -219,7 +219,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
           <button
             type="button"
             onClick={() => void onDelete()}
-            className="flex items-center gap-1.5 rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-error] hover:bg-[--color-bg-elevated]"
+            className="flex items-center gap-1.5 rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-error)] hover:bg-[var(--color-bg-elevated)]"
           >
             <Trash2 size={13} aria-hidden />
             Delete

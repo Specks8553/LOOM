@@ -135,17 +135,17 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
       role="dialog"
       aria-modal="true"
       aria-label="World Picker"
-      className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-[--color-bg-base]/95 px-6 py-12 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-[var(--color-bg-base)]/95 px-6 py-12 backdrop-blur-sm"
     >
       <header className="mb-8 flex w-full max-w-3xl items-center justify-between">
-        <h2 className="text-[20px] font-semibold tracking-tight text-[--color-text-primary]">
+        <h2 className="text-[20px] font-semibold tracking-tight text-[var(--color-text-primary)]">
           Worlds
         </h2>
         {activeWorldId !== null && (
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             Close
           </button>
@@ -184,13 +184,13 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
                   setCreating(false);
                 }
               }}
-              className="flex-1 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="flex-1 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
             />
             <button
               type="button"
               onClick={() => void handleCreate()}
               disabled={busy || !newName.trim()}
-              className="rounded-sm bg-[--color-accent] px-4 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
+              className="rounded-sm bg-[var(--color-accent)] px-4 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               Create
             </button>
@@ -200,7 +200,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
                 setNewName('');
                 setCreating(false);
               }}
-              className="text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Cancel
             </button>
@@ -210,7 +210,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="text-[13px] text-[--color-accent] hover:underline"
+              className="text-[13px] text-[var(--color-accent)] hover:underline"
             >
               + Create world
             </button>
@@ -218,7 +218,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
               type="button"
               onClick={() => void handleImport()}
               disabled={busy}
-              className="flex items-center gap-1 text-[13px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:opacity-40"
+              className="flex items-center gap-1 text-[13px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
             >
               <Upload size={12} aria-hidden />
               Import backup
@@ -276,10 +276,10 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
   return (
     <div
       onClick={confirmingDelete ? undefined : onOpen}
-      className={`group flex cursor-pointer flex-col gap-2 rounded-sm border bg-[--color-bg-elevated] p-4 transition-colors ${
+      className={`group flex cursor-pointer flex-col gap-2 rounded-sm border bg-[var(--color-bg-elevated)] p-4 transition-colors ${
         isActive
-          ? 'border-l-4 border-[--color-accent] pl-3'
-          : 'border-[--color-border] hover:bg-[--color-bg-hover]'
+          ? 'border-l-4 border-[var(--color-accent)] pl-3'
+          : 'border-[var(--color-border)] hover:bg-[var(--color-bg-hover)]'
       }`}
       role={confirmingDelete ? undefined : 'button'}
       tabIndex={confirmingDelete ? -1 : 0}
@@ -291,7 +291,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="truncate text-[15px] font-medium text-[--color-text-primary]">
+        <h3 className="truncate text-[15px] font-medium text-[var(--color-text-primary)]">
           {world.name}
         </h3>
         {!confirmingDelete && (
@@ -304,7 +304,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
                 void performExport();
               }}
               disabled={busy}
-              className="invisible text-[--color-text-muted] hover:text-[--color-text-primary] group-hover:visible disabled:opacity-40"
+              className="invisible text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] group-hover:visible disabled:opacity-40"
             >
               <Download size={14} aria-hidden />
             </button>
@@ -315,7 +315,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
                 e.stopPropagation();
                 setConfirmingDelete(true);
               }}
-              className="invisible text-[--color-text-muted] hover:text-red-400 group-hover:visible"
+              className="invisible text-[var(--color-text-muted)] hover:text-red-400 group-hover:visible"
             >
               <Trash2 size={14} aria-hidden />
             </button>
@@ -323,9 +323,9 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
         )}
       </div>
       {world.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 text-[11px] text-[--color-text-muted]">
+        <div className="flex flex-wrap gap-1 text-[11px] text-[var(--color-text-muted)]">
           {world.tags.map((t) => (
-            <span key={t} className="rounded-sm border border-[--color-border] px-1.5">
+            <span key={t} className="rounded-sm border border-[var(--color-border)] px-1.5">
               {t}
             </span>
           ))}
@@ -334,18 +334,18 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
       {confirmingDelete && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="mt-2 flex flex-col gap-2 border-t border-[--color-border] pt-3"
+          className="mt-2 flex flex-col gap-2 border-t border-[var(--color-border)] pt-3"
         >
-          <p className="text-[12px] text-[--color-text-secondary]">
-            Type <span className="font-medium text-[--color-text-primary]">{world.name}</span> to
-            confirm. This cannot be undone.
+          <p className="text-[12px] text-[var(--color-text-secondary)]">
+            Type <span className="font-medium text-[var(--color-text-primary)]">{world.name}</span>{' '}
+            to confirm. This cannot be undone.
           </p>
           <input
             autoFocus
             type="text"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
-            className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-2 py-1 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+            className="rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-2 py-1 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
           />
           <div className="flex gap-2">
             <button
@@ -354,7 +354,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
                 setConfirmingDelete(false);
                 setConfirmText('');
               }}
-              className="text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Cancel
             </button>
@@ -376,14 +376,14 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mt-12 flex w-full max-w-md flex-col items-center gap-4 text-center">
-      <p className="text-[15px] text-[--color-text-primary]">No worlds yet.</p>
-      <p className="text-[13px] text-[--color-text-secondary]">
+      <p className="text-[15px] text-[var(--color-text-primary)]">No worlds yet.</p>
+      <p className="text-[13px] text-[var(--color-text-secondary)]">
         A world holds your stories, documents, and settings.
       </p>
       <button
         type="button"
         onClick={onCreate}
-        className="rounded-sm bg-[--color-accent] px-4 py-2 text-[13px] font-medium text-white hover:opacity-90"
+        className="rounded-sm bg-[var(--color-accent)] px-4 py-2 text-[13px] font-medium text-white hover:opacity-90"
       >
         Create your first world
       </button>

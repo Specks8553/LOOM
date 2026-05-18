@@ -157,7 +157,7 @@ export function WorkspaceShell() {
   }
 
   return (
-    <main className="flex h-full w-full overflow-hidden bg-[--color-bg-base]">
+    <main className="flex h-full w-full overflow-hidden bg-[var(--color-bg-base)]">
       <LeftPane width={leftWidth}>
         <Navigator
           onLock={() => void handleLock()}

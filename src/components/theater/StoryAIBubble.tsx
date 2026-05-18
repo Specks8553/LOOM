@@ -153,26 +153,26 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
 
   return (
     <div className="group w-full max-w-[80%] py-2" onContextMenu={handleContextMenu}>
-      <div className="rounded-bubble border border-[--color-border-subtle] bg-[--bubble-ai-bg] px-5 py-4 font-theater-body text-[15px] leading-[1.7] text-[--color-text-primary]">
+      <div className="rounded-bubble border border-[var(--color-border-subtle)] bg-[var(--bubble-ai-bg)] px-5 py-4 font-theater-body text-[15px] leading-[1.7] text-[var(--color-text-primary)]">
         {editing ? (
           <div className="flex flex-col gap-2">
             <textarea
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="min-h-[120px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] p-2 text-[14px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+              className="min-h-[120px] w-full resize-y rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-2 text-[14px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+                className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleEditSubmit()}
-                className="rounded-sm bg-[--color-accent] px-2 py-1 text-[12px] text-white"
+                className="rounded-sm bg-[var(--color-accent)] px-2 py-1 text-[12px] text-white"
               >
                 Save
               </button>
@@ -185,7 +185,7 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </>
         )}
         {showStoppedBadge && (
-          <div className="mt-2 text-[11px] uppercase tracking-wider text-[--color-text-muted]">
+          <div className="mt-2 text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
             ⚠ Stopped · {message.finish_reason}
           </div>
         )}
@@ -196,14 +196,14 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           ref={menuRef}
           role="menu"
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
-          className="min-w-[200px] rounded-md border border-[--color-border] bg-[--color-bg-base] py-1 text-[12px] text-[--color-text-primary] shadow-lg"
+          className="min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] py-1 text-[12px] text-[var(--color-text-primary)] shadow-lg"
         >
           {!isBlocks && (
             <button
               type="button"
               role="menuitem"
               onClick={handleGhostwriter}
-              className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated]"
+              className="block w-full px-3 py-1.5 text-left hover:bg-[var(--color-bg-elevated)]"
             >
               ✦ Ghostwriter…
             </button>
@@ -213,7 +213,7 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
             role="menuitem"
             onClick={() => void handleInsertCheckpoint()}
             disabled={isGenerating}
-            className="block w-full px-3 py-1.5 text-left hover:bg-[--color-bg-elevated] disabled:cursor-not-allowed disabled:opacity-50"
+            className="block w-full px-3 py-1.5 text-left hover:bg-[var(--color-bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Insert checkpoint here
           </button>

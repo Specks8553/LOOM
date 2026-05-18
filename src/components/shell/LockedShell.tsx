@@ -32,9 +32,9 @@ export function LockedShell() {
   }
 
   return (
-    <main className="grid h-full place-items-center bg-[--color-bg-base]">
+    <main className="grid h-full place-items-center bg-[var(--color-bg-base)]">
       <div className="flex w-full max-w-xs flex-col gap-6 px-4">
-        <h1 className="text-center text-2xl font-semibold tracking-tight text-[--color-text-primary]">
+        <h1 className="text-center text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">
           LOOM
         </h1>
 
@@ -44,7 +44,7 @@ export function LockedShell() {
             type="password"
             autoFocus
             autoComplete="current-password"
-            className="rounded border border-[--color-border] bg-[--color-bg-elevated] px-3 py-2 text-sm text-[--color-text-primary] outline-none focus:border-[--color-accent] placeholder:text-[--color-text-muted]"
+            className="rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-muted)]"
             placeholder="Password"
             value={password}
             onChange={(e) => {
@@ -58,7 +58,7 @@ export function LockedShell() {
           <button
             type="submit"
             disabled={submitting || !password}
-            className="rounded bg-[--color-accent] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
+            className="rounded bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40 hover:opacity-90"
           >
             {submitting ? 'Unlocking…' : 'Unlock'}
           </button>

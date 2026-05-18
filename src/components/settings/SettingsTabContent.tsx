@@ -53,7 +53,7 @@ function FieldListTab({ tab, chapter, query, onlyOverridden }: TabContentProps) 
       {chapter === 'world' && <ResetAllOverridesButton tab={tab.id} />}
       {tab.id === 'gemini' && chapter === 'app' && query === '' && <ApiKeyField />}
       {fields.length === 0 ? (
-        <p className="py-6 text-[13px] text-[--color-text-muted]">
+        <p className="py-6 text-[13px] text-[var(--color-text-muted)]">
           {onlyOverridden ? 'No overrides on this tab.' : 'No matching settings.'}
         </p>
       ) : (
@@ -79,9 +79,11 @@ function GeneralTab({ tab, query }: { tab: SettingsTabSpec; query: string }) {
         <SettingField key={f.key} spec={f} chapter="app" />
       ))}
       <div className="py-4">
-        <h3 className="text-[11px] uppercase tracking-wider text-[--color-text-muted]">About</h3>
-        <p className="mt-2 text-[13px] text-[--color-text-primary]">LOOM {version}</p>
-        <p className="mt-1 text-[11px] text-[--color-text-muted]">
+        <h3 className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
+          About
+        </h3>
+        <p className="mt-2 text-[13px] text-[var(--color-text-primary)]">LOOM {version}</p>
+        <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
           Local-first, encrypted, offline-capable creative writing.
         </p>
       </div>
@@ -111,11 +113,11 @@ function ApiKeyField() {
   }
 
   return (
-    <div className="flex flex-col gap-1 border-b border-[--color-border] py-3">
+    <div className="flex flex-col gap-1 border-b border-[var(--color-border)] py-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <span className="text-[13px] text-[--color-text-primary]">Gemini API key</span>
-          <p className="mt-0.5 text-[11px] text-[--color-text-muted]">
+          <span className="text-[13px] text-[var(--color-text-primary)]">Gemini API key</span>
+          <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
             {hasKey ? 'A key is set. Enter a new value to replace it.' : 'No key set.'}
           </p>
         </div>
@@ -125,12 +127,12 @@ function ApiKeyField() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={hasKey ? '••••••••' : 'Paste your key'}
-            className="w-56 rounded-sm border border-[--color-border] bg-[--color-bg-elevated] px-2 py-1 font-mono text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-accent]"
+            className="w-56 rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
           />
           <button
             type="button"
             onClick={() => setShow((v) => !v)}
-            className="text-[11px] uppercase tracking-wider text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             {show ? 'Hide' : 'Show'}
           </button>
@@ -138,7 +140,7 @@ function ApiKeyField() {
             type="button"
             onClick={() => void handleSave()}
             disabled={draft.trim() === ''}
-            className="rounded-sm bg-[--color-accent] px-2 py-1 text-[12px] text-white disabled:opacity-40"
+            className="rounded-sm bg-[var(--color-accent)] px-2 py-1 text-[12px] text-white disabled:opacity-40"
           >
             Save
           </button>
@@ -181,7 +183,7 @@ function SystemInstructionsTab({ chapter }: { chapter: Chapter }) {
 function DeveloperTab() {
   return (
     <div className="flex flex-col">
-      <p className="py-2 text-[11px] text-[--color-text-muted]">
+      <p className="py-2 text-[11px] text-[var(--color-text-muted)]">
         Internal prompts encode contracts the rest of the app depends on. Edit with care — each has
         a Restore Default.
       </p>
@@ -251,7 +253,7 @@ function ResetAllOverridesButton({ tab }: { tab: string }) {
         type="button"
         onClick={() => void handleClear()}
         disabled={!hasAny}
-        className="rounded-sm border border-[--color-border] px-2 py-1 text-[11px] uppercase tracking-wider text-[--color-text-muted] hover:text-[--color-text-primary] disabled:opacity-40"
+        className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
       >
         Reset all overrides in this tab
       </button>

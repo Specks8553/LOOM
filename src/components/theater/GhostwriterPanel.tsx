@@ -130,20 +130,20 @@ export function GhostwriterPanel({ bubbleEl }: { bubbleEl: HTMLElement | null })
         visibility: pos !== null && pos.visible ? 'visible' : 'hidden',
         zIndex: 40,
       }}
-      className="flex flex-col gap-2 rounded-md border border-[--color-ghostwriter] bg-[--color-bg-base] p-3 shadow-lg"
+      className="flex flex-col gap-2 rounded-md border border-[var(--color-ghostwriter)] bg-[var(--color-bg-base)] p-3 shadow-lg"
     >
-      <header className="text-[11px] font-medium uppercase tracking-[0.08em] text-[--color-ghostwriter]">
+      <header className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-ghostwriter)]">
         {headerText(gw.phase)}
       </header>
 
       {gw.phase === 'reviewing' ? (
-        <p className="text-[12px] leading-relaxed text-[--color-text-muted]">
+        <p className="text-[12px] leading-relaxed text-[var(--color-text-muted)]">
           Changed sections are highlighted.
         </p>
       ) : (
         <>
           {gw.phase === 'selecting' && (
-            <p className="text-[12px] leading-relaxed text-[--color-text-muted]">
+            <p className="text-[12px] leading-relaxed text-[var(--color-text-muted)]">
               Select at least one word in the message…
             </p>
           )}
@@ -153,7 +153,7 @@ export function GhostwriterPanel({ bubbleEl }: { bubbleEl: HTMLElement | null })
             onChange={(e) => setInstruction(e.target.value)}
             disabled={gw.phase !== 'composing'}
             placeholder="How should this passage change?"
-            className="min-h-[60px] w-full resize-y rounded-sm border border-[--color-border] bg-[--color-bg-elevated] p-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-ghostwriter] disabled:opacity-50"
+            className="min-h-[60px] w-full resize-y rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-2 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-ghostwriter)] disabled:opacity-50"
           />
         </>
       )}
@@ -164,14 +164,14 @@ export function GhostwriterPanel({ bubbleEl }: { bubbleEl: HTMLElement | null })
             <button
               type="button"
               onClick={() => reject()}
-              className="rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Reject
             </button>
             <button
               type="button"
               onClick={() => void handleAccept()}
-              className="rounded-sm bg-[--color-ghostwriter] px-2 py-1 text-[12px] font-medium text-[--color-bg-base] hover:bg-[--color-ghostwriter-hover]"
+              className="rounded-sm bg-[var(--color-ghostwriter)] px-2 py-1 text-[12px] font-medium text-[var(--color-bg-base)] hover:bg-[var(--color-ghostwriter-hover)]"
             >
               Accept ✓
             </button>
@@ -181,7 +181,7 @@ export function GhostwriterPanel({ bubbleEl }: { bubbleEl: HTMLElement | null })
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded-sm border border-[--color-border] px-2 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+              className="rounded-sm border border-[var(--color-border)] px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
             >
               Cancel
             </button>
@@ -191,7 +191,7 @@ export function GhostwriterPanel({ bubbleEl }: { bubbleEl: HTMLElement | null })
                 onClick={() => void generate()}
                 disabled={gw.phase !== 'composing' || !instructionReady || isGenerating}
                 title={isGenerating ? 'Generation already in progress' : undefined}
-                className="rounded-sm bg-[--color-ghostwriter] px-2 py-1 text-[12px] font-medium text-[--color-bg-base] hover:bg-[--color-ghostwriter-hover] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-sm bg-[var(--color-ghostwriter)] px-2 py-1 text-[12px] font-medium text-[var(--color-bg-base)] hover:bg-[var(--color-ghostwriter-hover)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Generate ✦
               </button>

@@ -78,7 +78,9 @@ export function CacheContentsModal({ storyId, onClose }: CacheContentsModalProps
   if (!status || status.cache_name === null) {
     return (
       <Overlay onClose={onClose} title="Cache contents">
-        <p className="text-[13px] text-[--color-text-muted]">No active cache for this story.</p>
+        <p className="text-[13px] text-[var(--color-text-muted)]">
+          No active cache for this story.
+        </p>
         <ActionRow onClose={onClose} />
       </Overlay>
     );
@@ -112,38 +114,40 @@ export function CacheContentsModal({ storyId, onClose }: CacheContentsModalProps
   return (
     <Overlay onClose={onClose} title="Cache contents">
       <dl className="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
-        <dt className="text-[--color-text-muted]">Resource</dt>
-        <dd className="break-all font-mono text-[11px] text-[--color-text-primary]">
+        <dt className="text-[var(--color-text-muted)]">Resource</dt>
+        <dd className="break-all font-mono text-[11px] text-[var(--color-text-primary)]">
           {status.cache_name}
         </dd>
-        <dt className="text-[--color-text-muted]">TTL</dt>
-        <dd className="tabular-nums text-[--color-text-primary]">{formatTtl(status.expiry_at)}</dd>
-        <dt className="text-[--color-text-muted]">Tokens</dt>
-        <dd className="tabular-nums text-[--color-text-primary]">
+        <dt className="text-[var(--color-text-muted)]">TTL</dt>
+        <dd className="tabular-nums text-[var(--color-text-primary)]">
+          {formatTtl(status.expiry_at)}
+        </dd>
+        <dt className="text-[var(--color-text-muted)]">Tokens</dt>
+        <dd className="tabular-nums text-[var(--color-text-primary)]">
           {status.total_token_count !== null ? `${status.total_token_count.toLocaleString()}` : '—'}
         </dd>
         {status.is_stale && (
           <>
-            <dt className="text-[--color-text-muted]">Status</dt>
+            <dt className="text-[var(--color-text-muted)]">Status</dt>
             <dd style={{ color: 'var(--color-warning, var(--color-accent))' }}>Stale</dd>
           </>
         )}
       </dl>
 
-      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted]">
+      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Source documents ({attachedDocs.length})
       </h3>
       {attachedDocs.length === 0 ? (
-        <p className="mb-3 text-[12px] text-[--color-text-muted]">No documents in cache.</p>
+        <p className="mb-3 text-[12px] text-[var(--color-text-muted)]">No documents in cache.</p>
       ) : (
         <ul className="mb-3 flex flex-col gap-0.5">
           {attachedDocs.map((doc) => (
             <li
               key={doc.id}
-              className="flex items-center gap-2 text-[12px] text-[--color-text-primary]"
+              className="flex items-center gap-2 text-[12px] text-[var(--color-text-primary)]"
             >
               <span className="flex-1 truncate">{doc.name}</span>
-              <span className="shrink-0 text-[--color-text-muted]">
+              <span className="shrink-0 text-[var(--color-text-muted)]">
                 {docDirty[doc.id] ? '⚠ changed' : '✓ unchanged'}
               </span>
             </li>
@@ -151,10 +155,10 @@ export function CacheContentsModal({ storyId, onClose }: CacheContentsModalProps
         </ul>
       )}
 
-      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted]">
+      <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Story history
       </h3>
-      <p className="mb-3 text-[12px] text-[--color-text-primary]">
+      <p className="mb-3 text-[12px] text-[var(--color-text-primary)]">
         {status.last_cached_message_id !== null
           ? `Through message ${status.last_cached_message_id.slice(0, 8)} (${docMessageCount} docs cached).`
           : 'No story history cached yet.'}
@@ -184,19 +188,19 @@ function Overlay({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[--color-bg-base]/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-bg-base)]/70 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-md border border-[--color-border] bg-[--color-bg-pane] p-4 shadow-lg"
+        className="w-full max-w-md rounded-md border border-[var(--color-border)] bg-[var(--color-bg-pane)] p-4 shadow-lg"
       >
         <header className="mb-3 flex items-center justify-between">
-          <h2 className="text-[14px] font-semibold text-[--color-text-primary]">{title}</h2>
+          <h2 className="text-[14px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+            className="text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             Close
           </button>
@@ -222,7 +226,7 @@ function ActionRow({ onClose, onUpdate, onDelete, busy }: ActionRowProps) {
           type="button"
           onClick={onDelete}
           disabled={busy}
-          className="rounded-sm border border-[--color-border] px-3 py-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:opacity-50"
+          className="rounded-sm border border-[var(--color-border)] px-3 py-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
         >
           Delete
         </button>
@@ -232,7 +236,7 @@ function ActionRow({ onClose, onUpdate, onDelete, busy }: ActionRowProps) {
           type="button"
           onClick={onUpdate}
           disabled={busy}
-          className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-3 py-1 text-[12px] text-[--color-text-primary] hover:border-[--color-accent] disabled:opacity-50"
+          className="rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-1 text-[12px] text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:opacity-50"
         >
           {busy ? 'Updating…' : 'Update'}
         </button>
@@ -241,7 +245,7 @@ function ActionRow({ onClose, onUpdate, onDelete, busy }: ActionRowProps) {
         type="button"
         onClick={onClose}
         disabled={busy}
-        className="rounded-sm bg-[--color-accent] px-3 py-1 text-[12px] font-medium text-white disabled:opacity-50"
+        className="rounded-sm bg-[var(--color-accent)] px-3 py-1 text-[12px] font-medium text-white disabled:opacity-50"
       >
         Close
       </button>

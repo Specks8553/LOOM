@@ -159,27 +159,27 @@ export function DocEditor({ docId }: DocEditorProps) {
 
   if (item === null) {
     return (
-      <div className="flex h-full items-center justify-center text-[13px] text-[--color-text-muted]">
+      <div className="flex h-full items-center justify-center text-[13px] text-[var(--color-text-muted)]">
         Loading document…
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col bg-[--color-bg-base]">
+    <div className="flex h-full flex-col bg-[var(--color-bg-base)]">
       {/* Header */}
-      <header className="flex h-10 shrink-0 items-center gap-3 border-b border-[--color-border] px-3">
+      <header className="flex h-10 shrink-0 items-center gap-3 border-b border-[var(--color-border)] px-3">
         <button
           type="button"
           onClick={() => void closeDoc()}
-          className="flex items-center gap-1 text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+          className="flex items-center gap-1 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           aria-label="Close editor"
         >
           <ArrowLeft size={14} aria-hidden />
           <span>Back</span>
         </button>
-        <span className="flex items-center gap-2 text-[13px] text-[--color-text-primary]">
-          <span aria-hidden className="text-[--color-text-muted]">
+        <span className="flex items-center gap-2 text-[13px] text-[var(--color-text-primary)]">
+          <span aria-hidden className="text-[var(--color-text-muted)]">
             {isImage ? <ImageIcon size={14} /> : <FileText size={14} />}
           </span>
           <span className="truncate">{item.name}</span>
@@ -187,7 +187,7 @@ export function DocEditor({ docId }: DocEditorProps) {
             <span
               aria-label="Unsaved changes"
               title="Unsaved changes"
-              className="text-[--color-accent]"
+              className="text-[var(--color-accent)]"
             >
               ·
             </span>
@@ -200,8 +200,8 @@ export function DocEditor({ docId }: DocEditorProps) {
               onClick={() => setPreviewMode((v) => !v)}
               className={`rounded-sm px-2 py-0.5 text-[11px] uppercase tracking-wider ${
                 previewMode
-                  ? 'bg-[--color-accent-subtle] text-[--color-accent-text]'
-                  : 'text-[--color-text-muted] hover:text-[--color-text-primary]'
+                  ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent-text)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               }`}
             >
               Preview
@@ -212,12 +212,12 @@ export function DocEditor({ docId }: DocEditorProps) {
 
       {/* Body */}
       {isImage && (
-        <div className="border-b border-[--color-border] bg-[--color-bg-elevated] px-4 py-2 text-[12px] text-[--color-text-muted]">
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2 text-[12px] text-[var(--color-text-muted)]">
           Image editing arrives in Phase 10. The caption below is read-only for now.
         </div>
       )}
       {!isImage && isSoftDeleted && (
-        <div className="border-b border-[--color-border] bg-[--color-bg-elevated] px-4 py-2 text-[12px] text-[--color-text-muted]">
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2 text-[12px] text-[var(--color-text-muted)]">
           This document is in Trash — restore to edit.
         </div>
       )}
@@ -233,7 +233,7 @@ export function DocEditor({ docId }: DocEditorProps) {
             onKeyDown={handleKeyDown}
             readOnly={readOnly}
             spellCheck={false}
-            className="h-full w-full resize-none bg-transparent px-6 py-4 font-mono text-[13px] leading-6 text-[--color-text-primary] outline-none placeholder:text-[--color-text-muted]"
+            className="h-full w-full resize-none bg-transparent px-6 py-4 font-mono text-[13px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
             placeholder={isImage ? '' : 'Write your source document here.'}
           />
         )}
@@ -248,7 +248,7 @@ function MarkdownPreview({ html }: { html: string }) {
   // already sent verbatim to the model).
   return (
     <div
-      className="loom-prose px-6 py-4 text-[15px] leading-[1.7] text-[--color-text-primary]"
+      className="loom-prose px-6 py-4 text-[15px] leading-[1.7] text-[var(--color-text-primary)]"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

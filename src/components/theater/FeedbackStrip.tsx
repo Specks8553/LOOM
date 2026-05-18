@@ -64,7 +64,7 @@ export function FeedbackStrip({ message }: { message: ChatMessage }) {
   if (isEditing) {
     return (
       <div className="mt-1 w-full">
-        <div className="rounded-md border border-[--color-border] bg-[--color-bg-elevated] p-2">
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-2">
           <textarea
             ref={textareaRef}
             value={value}
@@ -72,24 +72,24 @@ export function FeedbackStrip({ message }: { message: ChatMessage }) {
             onKeyDown={handleKeyDown}
             rows={3}
             placeholder="Note for the AI about this response…"
-            className="max-h-[140px] w-full resize-none rounded-sm border border-[--color-border] bg-[--color-bg-base] p-2 text-[12px] text-[--color-text-primary] outline-none focus:border-[--color-feedback]"
+            className="max-h-[140px] w-full resize-none rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] p-2 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-feedback)]"
           />
           <div className="mt-1 flex items-center justify-between">
-            <span className="text-[10px] text-[--color-text-muted]">
+            <span className="text-[10px] text-[var(--color-text-muted)]">
               Injected into AI context for future messages.
             </span>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => cancelEdit()}
-                className="rounded-sm border border-[--color-border] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+                className="rounded-sm border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleApply()}
-                className="rounded-sm bg-[--color-accent] px-2 py-0.5 text-[11px] font-medium text-white"
+                className="rounded-sm bg-[var(--color-accent)] px-2 py-0.5 text-[11px] font-medium text-white"
               >
                 Apply
               </button>
@@ -108,7 +108,7 @@ export function FeedbackStrip({ message }: { message: ChatMessage }) {
       type="button"
       onClick={() => beginEdit(message.id)}
       title="Click to edit feedback"
-      className="mt-1 block w-full cursor-text truncate border-l-2 border-[--color-feedback] bg-[--color-feedback-subtle] py-1 pl-2 pr-3 text-left text-[12px] text-[--color-text-muted] hover:text-[--color-text-primary]"
+      className="mt-1 block w-full cursor-text truncate border-l-2 border-[var(--color-feedback)] bg-[var(--color-feedback-subtle)] py-1 pl-2 pr-3 text-left text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
     >
       {saved}
     </button>

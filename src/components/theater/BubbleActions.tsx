@@ -52,11 +52,11 @@ function BubbleActionButton({
       onClick={onClick}
       disabled={disabled}
       className={`flex items-center gap-[3px] rounded-[4px] px-2 py-[3px] text-[11px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
-        active ? 'text-[--color-feedback]' : 'text-[--color-text-muted]'
+        active ? 'text-[var(--color-feedback)]' : 'text-[var(--color-text-muted)]'
       } ${
         destructive
-          ? 'enabled:hover:text-[--color-error]'
-          : 'enabled:hover:text-[--color-accent-text]'
+          ? 'enabled:hover:text-[var(--color-error)]'
+          : 'enabled:hover:text-[var(--color-accent-text)]'
       }`}
     >
       <span aria-hidden className="text-[12px] leading-none">
@@ -77,7 +77,7 @@ export function StreamingDots() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="h-[5px] w-[5px] rounded-full bg-[--color-text-muted]"
+          className="h-[5px] w-[5px] rounded-full bg-[var(--color-text-muted)]"
           style={{ animation: `dot-pulse 1.2s ease-in-out ${i * 0.2}s infinite` }}
         />
       ))}

@@ -58,21 +58,21 @@ export function SessionBubble({ message, streaming = false }: SessionBubbleProps
   return (
     <div className="group relative mx-auto w-full max-w-[80%] py-2">
       <div
-        className={`rounded-md border border-[--color-border] p-3 text-[14px] leading-relaxed ${
+        className={`rounded-md border border-[var(--color-border)] p-3 text-[14px] leading-relaxed ${
           isUser
-            ? 'bg-[--color-bg-elevated] text-[--color-text-primary]'
-            : 'bg-[--color-bg-base] text-[--color-text-primary]'
+            ? 'bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)]'
+            : 'bg-[var(--color-bg-base)] text-[var(--color-text-primary)]'
         }`}
       >
         {showThinkingHint ? (
-          <span className="text-[--color-text-muted]">…</span>
+          <span className="text-[var(--color-text-muted)]">…</span>
         ) : (
           <div className="whitespace-pre-wrap">{message.content}</div>
         )}
         {streaming && message.content.length > 0 && (
           <span
             aria-hidden
-            className="ml-0.5 inline-block h-[1em] w-[2px] animate-pulse align-middle bg-[--color-accent]"
+            className="ml-0.5 inline-block h-[1em] w-[2px] animate-pulse align-middle bg-[var(--color-accent)]"
           />
         )}
       </div>
@@ -109,7 +109,7 @@ function SessionActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-sm border border-[--color-border] bg-[--color-bg-base] px-2 py-0.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-sm border border-[var(--color-border)] bg-[var(--color-bg-base)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>

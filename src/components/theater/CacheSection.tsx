@@ -41,12 +41,12 @@ export function CacheSection() {
   return (
     <section
       aria-label="Cache"
-      className="flex shrink-0 flex-col border-t border-[--color-border] px-3 py-2"
+      className="flex shrink-0 flex-col border-t border-[var(--color-border)] px-3 py-2"
     >
       <button
         type="button"
         onClick={() => setCollapsed((c) => !c)}
-        className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[--color-text-muted] hover:text-[--color-text-primary]"
+        className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
       >
         {collapsed ? <ChevronRight size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
         Cache
@@ -54,7 +54,7 @@ export function CacheSection() {
       {!collapsed && (
         <>
           {alive.length === 0 ? (
-            <p className="text-[12px] text-[--color-text-muted]">No active caches.</p>
+            <p className="text-[12px] text-[var(--color-text-muted)]">No active caches.</p>
           ) : (
             <ul className="flex flex-col gap-0.5">
               {alive.map((row) => (
@@ -113,10 +113,10 @@ function CacheRow({ row, onClick }: CacheRowProps) {
         type="button"
         onClick={onClick}
         onContextMenu={(e) => void handleDelete(e)}
-        className="flex w-full items-center gap-2 rounded-sm px-1 py-0.5 text-left text-[12px] text-[--color-text-primary] hover:bg-[--color-bg-hover]"
+        className="flex w-full items-center gap-2 rounded-sm px-1 py-0.5 text-left text-[12px] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]"
       >
         <span className="flex-1 truncate">{label}</span>
-        <span className="shrink-0 text-[--color-text-muted]">{tokensK}</span>
+        <span className="shrink-0 text-[var(--color-text-muted)]">{tokensK}</span>
         <span
           className="shrink-0 tabular-nums"
           style={{ color: ttlColorToken(row.expiry_at) }}
@@ -137,7 +137,7 @@ function CacheRow({ row, onClick }: CacheRowProps) {
             type="button"
             onClick={(e) => void handleDelete(e)}
             aria-label={`Delete cache for ${row.story_name}`}
-            className="invisible shrink-0 text-[--color-text-muted] hover:text-[--color-text-primary] group-hover:visible"
+            className="invisible shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] group-hover:visible"
           >
             <Trash2 size={11} aria-hidden />
           </button>
@@ -167,7 +167,7 @@ export function CreateCacheButton({ storyId }: { storyId: string }) {
       type="button"
       onClick={() => void handleClick()}
       disabled={busy}
-      className="text-[11px] text-[--color-text-muted] underline-offset-2 hover:text-[--color-text-primary] hover:underline disabled:opacity-50"
+      className="text-[11px] text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-text-primary)] hover:underline disabled:opacity-50"
     >
       {busy ? 'Creating…' : 'Update cache'}
     </button>

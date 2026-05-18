@@ -9,7 +9,7 @@ interface LeftPaneProps {
 export function LeftPane({ width, children }: LeftPaneProps) {
   return (
     <aside
-      className="flex h-full shrink-0 flex-col overflow-hidden bg-[--color-bg-pane]"
+      className="flex h-full shrink-0 flex-col overflow-hidden bg-[var(--color-bg-pane)]"
       style={{ width }}
     >
       {children}
