@@ -14,7 +14,7 @@ The **current / most recent audit** is whichever pair has the latest date in its
 
 | Audit | Started | Status | Plan | Ledger |
 |---|---|---|---|---|
-| 2026-05 | 2026-05-20 | In progress — Pass A + Pass B complete; Pass C underway (C1 punch list done, C2 remediation proposal next); 65 findings | [AUDIT-2026-05-PLAN.md](AUDIT-2026-05-PLAN.md) | [AUDIT-2026-05.md](AUDIT-2026-05.md) |
+| 2026-05 | 2026-05-20 | In progress — Pass A + Pass B complete; Pass C drafted (C1 punch list + C2 remediation proposal), awaiting owner decision next session; 65 findings | [AUDIT-2026-05-PLAN.md](AUDIT-2026-05-PLAN.md) | [AUDIT-2026-05.md](AUDIT-2026-05.md) |
 
 ---
 

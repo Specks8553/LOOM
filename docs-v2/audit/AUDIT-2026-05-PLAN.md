@@ -1,8 +1,8 @@
 # AUDIT-2026-05 — Plan
 
-> **Status:** In progress — Pass A complete (A1–A7); Pass B complete (B1, B2, B4, B5, B6, B7); **Pass C — C1 (punch list) complete, C2 (remediation proposal) next**
+> **Status:** In progress — Pass A complete (A1–A7); Pass B complete (B1, B2, B4, B5, B6, B7); Pass C — C1 (punch list) complete; **C2 (remediation proposal) drafted, awaiting owner decision (deferred to next session)**
 > **Started:** 2026-05-20
-> **Last updated:** 2026-05-22 — Phase C1 (prioritized punch list) complete; 65 findings synthesised into 5 severity tiers + 9-cluster cross-reference map in ledger §Synthesis (Pass C). No new findings (C1 is reorganisation only).
+> **Last updated:** 2026-05-22 — Phase C2 remediation proposal drafted into ledger §Synthesis (Pass C). 65 findings routed into 4 buckets (Phase 12.5 blockers / fold-into-Phase-12 / backlog R20–R27 / owner decisions D1–D6). Owner deferred the proceed/approve decision to the next session; no source-doc edits made.
 > **Snapshot:** HEAD = `5126e6f` (feat(modes): switcher re-enters tail session; session banner action bar) **plus uncommitted working-tree modifications** (Navigator/Theater/stores + Docs 09/11/27/00-INDEX + new `features/29-selection-popup.md` + new `src/components/shared/`, `src/components/navigator/navigatorMenu.ts`).
 > **Ledger:** [AUDIT-2026-05.md](AUDIT-2026-05.md)
 
@@ -293,13 +293,17 @@ Complete, critical, precise audit of LOOM 2.0 as it stands after Phase 12 (visua
 
 ### Phase C2 — Remediation phase proposal
 
-> **Status:** Not started
+> **Status:** In progress (last touched 2026-05-22)
 >
 > **Resumption notes:**
+> - 2026-05-22 — Proposal drafted into ledger §Synthesis (Pass C) → Phase C2. Read IMPLEMENTATION-PLAN.md (Phase 12 still In progress; Phase 13 Not started, its goal already requires CSP verification) + IMPROVEMENT-BACKLOG.md (house style; next free R-number is R20).
+> - 2026-05-22 — Routing realisation: findings split **four** ways, not two. Phase 12 is unfinished, so ~13 CD/DG findings belong to its remaining scope (12-3A+/12-Z), not a new phase. Buckets: (1) Phase 12.5 = 10 ship-blockers in 4 clusters [12.5-A IPC errors, 12.5-B CSP red line, 12.5-C concurrency Wall #6, 12.5-D schema FK]; (2) fold into Phase 12 = 13; (3) backlog R20–R27 = ~36; (4) owner decisions D1–D6. All 65 findings routed (coverage check in ledger).
+> - 2026-05-22 — **Awaiting owner approval** before any edit to IMPLEMENTATION-PLAN.md / IMPROVEMENT-BACKLOG.md. Checkpoint 3 stays open until approval + the separate (non-audit) edits land.
+> - 2026-05-22 — **Owner deferred the decision: "next session we will discuss how to proceed."** Proposal is documented and frozen; no source-doc edits made. **NEXT SESSION:** read ledger §Synthesis (Pass C) → Phase C2 (the full proposal — 4 buckets + coverage check), discuss/resolve owner decisions D1–D6, then land the approved structure (Phase 12.5 into IMPLEMENTATION-PLAN.md + R20–R27 into IMPROVEMENT-BACKLOG.md) as a **separate, non-audit** edit. Audit stays observational until then.
 
-- [ ] Draft a proposed new phase (likely Phase 12.5) for `IMPLEMENTATION-PLAN.md` covering HB-* items that must land before Phase 13.
-- [ ] Draft `IMPROVEMENT-BACKLOG.md` additions for non-blockers.
-- [ ] Present to user; await approval before any edits to `IMPLEMENTATION-PLAN.md` (audit remains observational; only the proposal lands as an edit, separately).
+- [x] Draft a proposed new phase (likely Phase 12.5) for `IMPLEMENTATION-PLAN.md` covering HB-* items that must land before Phase 13. *(Phase 12.5 drafted — 4 clusters; ledger §C2 Bucket 1.)*
+- [x] Draft `IMPROVEMENT-BACKLOG.md` additions for non-blockers. *(R20–R27 drafted; ledger §C2 Bucket 3.)*
+- [ ] Present to user; await approval before any edits to `IMPLEMENTATION-PLAN.md` (audit remains observational; only the proposal lands as an edit, separately). *(Presented 2026-05-22; awaiting approval.)*
 
 ---
 
