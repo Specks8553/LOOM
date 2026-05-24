@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { errorMessage } from '@/lib/errors';
 import { setupVault } from '@/lib/tauriApi/auth';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -36,7 +37,7 @@ export function OnboardingShell() {
       onUnlock(!skipApiKey && apiKey.length > 0, 900);
       setAppPhase('workspace');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }

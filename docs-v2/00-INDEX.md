@@ -1,7 +1,11 @@
 # LOOM 2.0 — Documentation Index
 
 > **Status:** In progress — implementation phase open; Phase 0 and Phase 0.5 complete
-> **Last updated:** 2026-05-16 — Phase 10 re-scoped. D-20: the media surface (image source documents included) is deferred wholesale to v2.1 — Doc 19 status flipped to Deferred. D-21: source-document request delivery model locked — a single prefix builder feeds either a real Gemini cache or an inline "fake cache" (prepended verbatim); a failed cache-create aborts the send with a warning unless the new `inline_context_fallback` setting is on. Doc 03 (`inline_context_fallback` app-settings key), Doc 19 (status), Doc 22 (delivery model section) amended.
+> **Last updated:** 2026-05-23 — D-25: Marks ("mark as important"). The writer marks a passage inside a story user/model bubble; all summary AIs (accordion, handover, future) receive marked passages verbatim under a `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` per-message manifest with an SI clause to preserve them. Summary-only — never enters story/session sends, zero story-cache impact. Created via the Doc 29 Selection Popup; indicated by a bottom-right dot + hover popover and an in-place CSS-highlight; orphan-and-warn when the host message changes. New Doc 30; new `important_marks` table + `mark_color` (Doc 03); Phase 14 added. Docs 29, 27, 16 amended.
+> **Earlier:** 2026-05-23 — D-24: Accordion collapse/summary addendum. Collapse no longer requires a summary (collapse-without-summary is a pure visual fold — full bubbles still sent, no token/cache impact); collapsed-but-unsummarised banners show a click-to-generate "summary needed" card; new per-banner **Collapse previous** control (additive to the chevron) folds the chapter above without scrolling; summarising is **downward-only** — the "Summarise previous chapter" right-click actions are removed (refines D-12). Docs 16, 27, 03 amended; no schema change; Phase 7 code follow-up pending.
+> **Earlier:** 2026-05-19 — D-23: Selection Popup specified. A Perplexity-style floating toolbar appears above a non-empty text selection inside a story AI / session AI / story user bubble. It is a pure observer of the native browser selection — selection is never intercepted (no `user-select` override, no DOM mutation); the toolbar only renders an overlay near the selection the browser already made. Its first action is Ghostwriter (selection-first entry, alongside the existing mode-first entries); the rest of the action list is left open. Frontend-only — no schema, IPC, or Rust change. New Doc 29 created; Doc 11 (§"Text selection inside bubbles" rewritten) and Doc 27 (§Bubbles — `data-loom-selectable` note) amended.
+> **Earlier:** 2026-05-19 — D-22: context-menu contents locked. Right-click menus are resolved per-click from the target and state — one resolver for the Navigator vault tree, one for Theater bubbles — and render through the already-specced Doc 09 `ContextMenu` primitive, mounted once via a `ContextMenuProvider` at the workspace root. Frontend-only: no schema, IPC, or Rust change. Doc 09 (`MenuItem.destructive`, provider pattern), Doc 11 (§Context Menus trigger rules + new §Menu contents by target) amended.
+> **Earlier:** 2026-05-16 — Phase 10 re-scoped. D-20: the media surface (image source documents included) is deferred wholesale to v2.1 — Doc 19 status flipped to Deferred. D-21: source-document request delivery model locked — a single prefix builder feeds either a real Gemini cache or an inline "fake cache" (prepended verbatim); a failed cache-create aborts the send with a warning unless the new `inline_context_fallback` setting is on. Doc 03 (`inline_context_fallback` app-settings key), Doc 19 (status), Doc 22 (delivery model section) amended.
 > **Earlier:** 2026-05-07 — Doc 25 (Testing Strategy) complete; D-19 (Testing Strategy umbrella) added; ST-3 ticked. Vitest + wiremock + happy-dom tooling landed; all recipes demonstrated by passing canary tests; Playwright E2E deferred to v2.0.x. Phase 0 complete (2026-05-07): all 9 checkpoints ticked, SB-1..SB-6 closed.
 > **Earlier:** 2026-05-05 — `IMPLEMENTATION-PLAN.md` drafted: 14 phases (0 Substrate → 0.5 Doc 25 Testing → 1 Auth → 2 Vault/Worlds → 3 Conversation Engine story-mode → 4 Modes → 5 Source Documents → 6 Caching → 7 Accordion → 8 Ghostwriter → 9 Feedback → 10 Media slim → 11 Settings/Themes → 12 Visual polish → 13 Build/Release/Doc 26). Each phase has Status / Goal / Inputs / Scope / Testable Checkpoints / Out of Scope / Resumption notes. `_new_claude.md` §The phase model amended: `Resumption notes:` must be updated **live, not at session end** — sessions end abruptly. Document Map below adds `IMPLEMENTATION-PLAN.md` as the canonical phase ledger.
 > **Earlier:** 2026-05-04 — Doc 24 (Coding Standards) complete; D-18 (Coding Standards umbrella) added; ST-2 closed. Three enforcement tiers (🔴 Linted / 🟡 Reviewed / ⚪ Convention); `tracing` over `log`; `safecommand!` macro dropped; Conventional Commits; `ts-rs` generated `types.ts` committed with CI drift-check; husky + lint-staged pre-commit; SB-1..SB-3, SB-5, SB-6 substrate items have rule home + `<!-- SB-N -->` anchors here (code lands in Phase 0); SB-4 (cancellation lifecycle) deferred to a dedicated Doc 05 amendment pass; v1.0 anti-pattern appendix (13 items) with Forbidden / Preferred snippet pairs. Doc 05 (lock-helper rule cross-ref, `tracing` note, cancellation cross-ref), Doc 06 (`types.ts` SoT line, ESLint enforcement note on §Store Rules) amended; PRE-IMPLEMENTATION-AUDIT ST-2 ticked; IMPROVEMENT-BACKLOG R3 / R5 / R13 / R19 closed, R2 / R4 / R17 / R18 marked "spec'd in Doc 24 — code pending Phase 0"; v1 rule files in `.claude/rules/` annotated with v2.0 banners.
@@ -66,6 +70,8 @@ Navigation hub and decision log for LOOM 2.0. All architectural decisions are re
 | [22](features/22-context-caching.md) | Context Caching | Complete |
 | [23](features/23-modes.md) | Modes | Complete |
 | [28](features/28-feedback.md) | Feedback | Complete |
+| [29](features/29-selection-popup.md) | Selection Popup | Complete — implemented |
+| [30](features/30-marks.md) | Marks (Mark as Important) | Complete — design pass; Phase 14 |
 
 ### Dev — internal; for contributors
 
@@ -74,6 +80,12 @@ Navigation hub and decision log for LOOM 2.0. All architectural decisions are re
 | [24](dev/24-coding-standards.md) | Coding Standards | Complete |
 | [25](dev/25-testing-strategy.md) | Testing Strategy | Complete |
 | [26](dev/26-build-and-release.md) | Build and Release | Stub |
+
+### Audit — post-implementation sweeps (drift, gaps, quality)
+
+| Folder | Purpose |
+|---|---|
+| [`audit/`](audit/README.md) | Post-implementation audits. The folder README lists the current audit (plan + findings ledger). See also [PRE-IMPLEMENTATION-AUDIT.md](PRE-IMPLEMENTATION-AUDIT.md) for the immutable planning-phase reconciliation checklist. |
 
 ---
 
@@ -574,6 +586,91 @@ src-tauri/src/
 **Rationale:** Phase 5 wired source-document storage and attach/detach but never wired docs into the Gemini request; Phase 6 added doc inclusion only inside the cache prefix. The result was a latent bug: a story below `cache_min_tokens` (default 4096) sent none of its attached documents, silently. The fix is to make the prefix builder the single source of doc-inclusion truth and let the *delivery* (cache object vs. inline prepend) be the only thing that varies. Aborting on cache-create failure — rather than the prior silent inline fallback — is the safety posture the writer needs: a missing context cache means the model would answer without the world bible / character sheets, and a degraded answer the writer can't distinguish from a good one is worse than an explicit stop. `inline_context_fallback` exists for the writer who would rather pay full token price than have a send fail.
 
 **Affects:** Doc 03 (`inline_context_fallback` app-settings key); Doc 22 (delivery-model section; CD-12 fallback semantics tightened); `services/settings_keys.rs` (`InlineContextFallback`); `commands/conversation.rs` + `commands/modes.rs` (delivery rework); `IMPLEMENTATION-PLAN.md` (Phase 10 scope + checkpoints).
+
+---
+
+### D-22 — Context Menu Contents (2026-05-19)
+
+**Decision:** Right-click context menus are **resolved per-click** from the target and current state — one pure resolver for the Navigator vault tree, one for Theater bubbles. The menu is the *superset* of a surface's affordances; for bubbles it carries everything the hover action row offers plus menu-only actions. Menus render through the already-specced Doc 09 `ContextMenu` primitive, mounted once via a `ContextMenuProvider` at the workspace root so only one menu is ever open.
+
+| Sub-decision | Locked value |
+|---|---|
+| Primitive | `components/shared/ContextMenu.tsx` — `ContextMenuProvider` owns the single menu instance + state; `useContextMenu()` exposes `showContextMenu(e, items)` / `hideContextMenu()`. `MenuItem` gains a `destructive?` flag (`--color-error` label) |
+| Navigator resolver | Empty tree area → create-at-root; folder → create-inside + rename + delete; story → open + rename + delete; doc/image → open + rename + attach/detach + delete; trash row → restore + permanent-delete |
+| Bubble resolver | Story user → edit + delete (exchange / from-here); story AI → ghostwriter + feedback + edit + regenerate + checkpoint + copy + revert + delete; session AI → ghostwriter + copy + revert; session user → no menu. `blocks` content drops Ghostwriter/Feedback. Suppressed while streaming / in Ghostwriter / editing in place |
+| Hover row vs menu | Both kept (Q1); one set of handlers feeds both. Hover row = quick subset, menu = superset |
+| Multi-select | Right-click on a row inside the selection acts on the whole selection (intersection of valid actions, counts in labels); right-click outside the selection collapses to that row first |
+| Non-empty folder | "Delete to Trash" is disabled — `delete_item` rejects non-empty folders |
+| Editable text | Native browser menu preserved inside InputArea / SessionInputArea / DocEditor / rename input — not intercepted |
+| Rename plumbing | `vaultStore.pendingRenameId` + `requestRename(id)` — a globally-mounted menu signals the target row to enter inline-rename |
+| Escape | The menu consumes Escape locally and does **not** propagate to the Escape Chain (Doc 11 unchanged) |
+
+**Rationale:** Context menus existed only as stubs — the Navigator's was a single `window.confirm` delete, and `StoryAIBubble` carried a hand-rolled two-item menu. Doc 11 specced triggers/shape/behavior but never the *contents*. D-22 fills that gap and unifies the implementation on the Doc 09 primitive. No schema, IPC, or Rust changes — every action already has a command and store action (`detachContextDoc` and `empty_trash` included), so the work is frontend-only.
+
+**Affects:** Doc 09 (`MenuItem.destructive`; `useContextMenu` → provider pattern); Doc 11 (§Context Menus — trigger rules updated, §Menu contents by target added); `stores/vaultStore.ts` (`pendingRenameId` + `requestRename`); new `components/shared/ContextMenu.tsx` + `components/navigator/navigatorMenu.ts`; `Navigator`, `VaultTreeRow`, `StoryUserBubble`, `StoryAIBubble`, `SessionBubble`, `WorkspaceShell`.
+
+---
+
+### D-25 — Marks ("Mark as Important") Umbrella (2026-05-23)
+
+**Decision:** A new feature, fully specified in the new Doc 30. The writer selects a passage inside a story bubble and marks it important; every AI that **summarises** the story is handed the marked passages verbatim with an instruction to preserve them. Marks are a **summary-time signal only** — they never enter a normal story or session generation and have **zero story-cache impact**.
+
+| Sub-decision | Locked value |
+|---|---|
+| What a mark is | A verbatim sub-span (`quoted_text`) on a story user **or** model bubble, with an optional `note`. New `important_marks` table (Doc 03). `quoted_text` is the source of truth; char offsets are a rendering hint (NULL for user bubbles and orphaned marks) |
+| Scope | Story AI + story user bubbles only. Session bubbles, `blocks` bubbles excluded (no summary feature consumes them in v2.0). Both roles (unlike Feedback) — the writer's own input is as worth preserving through compression as the model's prose |
+| Create surface | The Doc 29 Selection Popup — `Mark important` / `Unmark` / `Edit note` are the first content actions in its deliberately-open resolver. Not gated by `isGenerating` (pure DB write) |
+| Indicator | A bottom-right **dot** on any bubble with marks (`--color-mark`); hover → popover listing the marked passages + notes. Uniform across both roles (sidesteps the offset asymmetry) |
+| In-place highlight | CSS Custom Highlight API (no DOM mutation, as Doc 29/17). AI bubbles: offset-based, exact. User bubbles: best-effort re-find of `quoted_text`; ambiguous/absent → dot-only |
+| Delivery | **Per-message manifest** — a `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` block appended to each marked message at assembly time, riding the existing `append_feedback` rail (a `render_marks` helper in `services/history.rs`, called from both message arms). Chosen over a per-segment checklist or inline markers |
+| System instructions | A preserve-clause added to the three summary baselines (`prompt_accordion_summarise`, `prompt_handover_seed`, `prompt_consulting_seed` — Developer-only, hardcoded baseline). The `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` heading is the contract between the manifest and the clause |
+| Applies to | Accordion summarisation, handover synthesis, consulting (frozen at entry via snapshot). **Not** normal story/session sends |
+| Orphaning | On in-place host-content mutation (Ghostwriter accept, model/user edit), a mark whose `quoted_text` no longer occurs is **flagged `is_orphaned`, not deleted** — excluded from the manifest, hidden from highlight, surfaced as a dot **warning** until re-marked or removed. Truncation-class edits hard-delete downstream marks via cascade. Reconciles "old record may be dropped, writer re-marks" with "the dot shows warnings" |
+| Accordion staling | Add / remove / note-edit / orphan of a mark inside a closed segment stales it (Doc 16 §Stale Triggers). Orphaning is already covered transitively by the content-edit trigger; add/remove are the genuinely new triggers |
+| Cache | No new triggers — marks are summary-only, never in a cached prefix. Consulting snapshots freeze marks-at-entry as part of the rendered prefix |
+| Colour | New world-overridable `mark_color` (default `#ec4899` ⚠️ provisional) driving a `--color-mark` triad. Must not collide with feedback-amber or warning-red (the dot doubles as the orphan warning). Does not track the accent |
+| Storage | `workspaceStore.marks` (no new store — same pattern as accordion D-12, feedback D-17) |
+
+**Rationale:** Writers compress aggressively with the Accordion, and the recurring fear is that a load-bearing detail — a name, a planted plot fact, a promise — gets summarised away. Marks make "this must survive" an explicit, durable signal that every summary path honours, without touching the hot path: because marks are summary-only, the story cache is byte-identical with or without them, so the feature is free at send time. Riding the `append_feedback` rail makes delivery a one-line append rather than a new pipeline. Orphan-and-warn (rather than silent drop) was chosen because the writer's importance signal is valuable enough to keep visible until they consciously re-mark or discard — a silent drop would lose intent the moment a passage is reworded. The create surface was already built: Doc 29's Selection Popup left its action list open as a "curveball" — this is that curveball.
+
+**Affects:** new Doc 30 (full spec); Doc 03 (**done** — `important_marks` table, `mark_color` app+world keys, `ImportantMark` interface, `ResolvedSettings.mark_color`, field invariant); Doc 29 (Selection Popup resolver gains `Mark important` / `Unmark` / `Edit note`); Doc 27 (bubble mark dot + hover popover + in-place highlight); Doc 16 (mark-set-change stale triggers); Doc 08 (`--color-mark` triad); Doc 20 (`applyTheme` snapshot carries `mark`, Settings → Features row, SI-clause on summary baselines); Doc 07 (`commands/marks.rs` + `marks_changed` event); Doc 06 (`workspaceStore.marks`); Doc 17 (Ghostwriter accept re-evaluates marks); IMPLEMENTATION-PLAN.md (Phase 14 added). **Code follow-up: Phase 14.**
+
+---
+
+### D-24 — Accordion Collapse / Summary Decoupling Addendum (2026-05-23)
+
+**Decision:** Amends the Accordion design (Doc 16 / Doc 27) on three points. Refines — does not replace — D-12.
+
+| Sub-decision | Locked value |
+|---|---|
+| Collapse no longer requires a summary | The chevron is always enabled. A segment can be collapsed with `summary IS NULL`. The history-assembly OR-rule is **unchanged** (`use_fake_pair = (is_collapsed OR use_summary) AND summary.is_some()`), so a collapsed-no-summary segment sends **full bubbles** — collapse without a summary is a pure visual fold: zero token savings, zero cache impact (the existing "chevron toggle is UI-only" cache rule already covers it) |
+| "Summary needed" card | A collapsed-but-unsummarised banner renders a "summary needed" card in place of the summary card. The card is **itself a click-to-generate target** (fires `summarise_segment`, same as the header "Generate summary" button). Token-impact label gains `· ~M messages · summary needed`. Still user-triggered — "never auto-summarise" is intact |
+| Collapse-previous control | New per-banner header control (additive to the chevron) that folds the chapter **ending** at this checkpoint — a remote control for the segment above, so the writer can fold it without scrolling up to its own banner. Hidden on the start sentinel; **present and active on the open-segment banner** (whose own chevron/button are inert), where it is the entry point to the summarise workflow. No "collapse next" — the chevron already folds the chapter below |
+| Summarising is downward-only | A banner only summarises the chapter that **starts** at it. The `Summarise previous chapter` / `Re-summarise previous chapter` right-click actions (added in D-12 as a discoverability convenience) are **removed**. The replacement for the "I just finished a chapter, summarise it" flow: from the open-segment banner, **Collapse previous** brings the just-finished chapter's owning banner into view, where its "summary needed" card / "Generate summary" button is in reach. Supersedes the D-12 sub-rows that referenced `Summarise previous chapter` (Start sentinel "never targets Summarise previous chapter"; Empty-segments "right-click Summarise previous chapter is the discoverability shortcut") |
+
+**Rationale:** The owner wants to summarise from the story tail without scrolling up through long chapters, and to declutter the Theater while writing before committing to summaries. Decoupling collapse from summary lets folding be a free visual operation (the "summary needed" card keeps the writer honest that folded ≠ cheaper). A single "summary belongs to the banner that owns the chapter" rule replaces D-12's dual-entry-point (own-banner *and* next-banner) summarise shortcuts — costing the prior one-click "summarise previous" but buying consistency plus the fold-to-navigate side-effect. No schema change: `is_collapsed` / `use_summary` / `summary` already exist (Doc 03); the open segment simply has no row to collapse.
+
+**Affects:** Doc 16 (button-slot matrix, banner state matrix, right-click menu, token-impact display, user flows, `set_segment_collapsed` note, errors — removed `already-collapsed-with-no-summary` validation); Doc 27 (accordion partition collapsed-state, button-slot table, right-click menu, token-impact label, new Collapse-previous control); Doc 03 (`is_collapsed` / `use_summary` comments — no DDL change). **Code follow-up pending** (Phase 7 accordion is already implemented): remove the collapse-requires-summary guard, add the Collapse-previous control + summary-needed click-to-generate card, drop the previous-chapter summarise menu items.
+
+---
+
+### D-23 — Selection Popup (2026-05-19)
+
+**Decision:** A **Selection Popup** — a Perplexity-style floating toolbar — appears above a non-empty text selection made inside a story AI, session AI, or story user bubble. It is a **pure observer** of the browser's native selection: drag-to-select, keyboard selection, copy, and browser find are never intercepted. The toolbar is additive — it reads the selection the browser already made and renders an overlay near it. Its first concrete action is Ghostwriter; the rest of the action list is deliberately left open. Specified in full in the new Doc 29.
+
+| Sub-decision | Locked value |
+|---|---|
+| Model | Pure observer — single global debounced `selectionchange` listener; no DOM mutation, no `user-select` override, no `preventDefault` on bubble text. The only event handling is `onMouseDown→preventDefault()` on the toolbar element itself (keeps the selection alive while a button is clicked) |
+| Component | `components/shared/SelectionToolbar.tsx` — one singleton mounted at the workspace root in `WorkspaceShell`. Not a provider/context — nothing invokes it imperatively |
+| Bubble registration | `data-loom-selectable="<messageId>"` + `data-loom-bubble-kind` on the rendered-prose wrapper only. Streaming / in-Ghostwriter / in-edit bubbles render different subtrees → no attribute → structural suppression, no runtime checks |
+| Scope | Story AI + session AI + story user bubbles. Not the compose box, not edit textareas (native menu stands), not `blocks` content (v2.1) |
+| Ghostwriter handoff | Selection-first entry: `enterGhostwriter(id)` then `setGhostwriterSelection({startOffset,endOffset,selectedText})`. Both are existing store actions — **no store / IPC / Rust change**. Selection handed off as offset data, not a live `Range`, so it survives the bubble re-rendering as `GhostwriterBubble`. Ghostwriter on AI bubbles only |
+| Lifecycle | Appear on debounced selection settle; reposition (not dismiss) on scroll/resize — anchored to text; dismiss on deselect / outside-click / Escape (captured, **not** in the Escape Chain) / right-click (context menu wins) |
+| Cross-bubble selection | Suppressed (no popup) |
+
+**Rationale:** Doc 11 previously stated LOOM does not intercept text selection and Ghostwriter is mode-first only. The owner wants a passage-level action surface (Ghostwriter being the first action, contents otherwise an open "curveball"). The observer-overlay model delivers it *without* reversing the non-interception principle — native selection is untouched; the popup only observes it. Selection-first becomes a third sanctioned Ghostwriter entry path alongside the two mode-first entries. Frontend-only: no schema, IPC, or Rust change (audited).
+
+**Affects:** new Doc 29 (Selection Popup); Doc 11 (§"Text selection inside bubbles" rewritten — selection-first sanctioned); Doc 27 (§Bubbles — `data-loom-selectable` note); Doc 17 cross-ref (the popup-seeded path leaves no native selection — the in-mode passage highlight should use the CSS Custom Highlight API); new `components/shared/SelectionToolbar.tsx` + per-target resolver; `WorkspaceShell`, `StoryAIBubble`, `SessionBubble`, `StoryUserBubble` (add `data-loom-selectable`).
 
 ---
 

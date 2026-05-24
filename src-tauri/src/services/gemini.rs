@@ -108,11 +108,15 @@ struct CountTokensResponse {
 /// IPC-facing `TokenEstimate { history, doc, user_turn, total }` shape from
 /// Doc 15 is built in the command layer once doc-attachment lands (Phase 5).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct TokenEstimate {
+    #[ts(type = "number")]
     pub history_tokens: i64,
+    #[ts(type = "number")]
     pub doc_tokens: i64,
+    #[ts(type = "number")]
     pub user_turn_tokens: i64,
+    #[ts(type = "number")]
     pub total: i64,
 }
 

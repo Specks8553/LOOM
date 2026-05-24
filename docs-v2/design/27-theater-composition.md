@@ -1,7 +1,10 @@
 # 27 — Theater Composition
 
 > **Status:** Complete — structural rules + visual values reconciled against the Designfiles visual design pass
-> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): bubble and banner visual values resolved against `docs-v2/design/Designfiles/Phase 2 - Theater.html` and `Phase 0D - Components.html`. Bubble background / alignment / padding inlined; banner row padding resolved; empty-state copy updated to the mockup wording. **Mode switcher relocated to the bottom of the Theater** (a segmented pill row directly above the input area — owner decision), replacing the former top-bar tab strip; Theater is now a two-region stack. Residual ⚠️ markers are limited to items the Designfiles do not yet cover (Ghostwriter panel width, greying opacity, per-kind partition tinting, input-area height cap).
+> **Last updated:** 2026-05-23 — D-25 (Marks): §Bubbles gains a **Mark indicator** subsection — a bottom-right `--color-mark` dot on any story bubble with marks (hover → popover of marked passages + notes; warning state when a mark is orphaned), plus an in-place CSS-Custom-Highlight of marked passages on AI bubbles (best-effort re-find on user bubbles). Visual values provisional; owned by Doc 30. Lands in Phase 14.
+> **Earlier:** 2026-05-23 — D-24 accordion collapse/summary addendum: the chevron is no longer disabled when a segment has no summary — collapsing without a summary is allowed and renders a **"summary needed" card** (click-to-generate) in place of the summary; new per-banner **Collapse previous** header control (folds the chapter above without scrolling); accordion button-slot table and right-click menu updated (previous-chapter *summarise* actions removed — summary is downward-only; previous-chapter *collapse* actions added); token-impact label gains a collapsed-no-summary case.
+> **Earlier:** 2026-05-19 — Selection Popup pass (D-23): §Bubbles notes that every bubble carries a `data-loom-selectable` attribute on its rendered-prose wrapper — the hook the Doc 29 Selection Popup observes; its absence on streaming / Ghostwriter / in-edit subtrees is how the popup is structurally suppressed.
+> **Earlier:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): bubble and banner visual values resolved against `docs-v2/design/Designfiles/Phase 2 - Theater.html` and `Phase 0D - Components.html`. Bubble background / alignment / padding inlined; banner row padding resolved; empty-state copy updated to the mockup wording. **Mode switcher relocated to the bottom of the Theater** (a segmented pill row directly above the input area — owner decision), replacing the former top-bar tab strip; Theater is now a two-region stack. Residual ⚠️ markers are limited to items the Designfiles do not yet cover (Ghostwriter panel width, greying opacity, per-kind partition tinting, input-area height cap).
 > **Earlier:** 2026-05-04 — Feedback design pass (D-17): AI bubble feedback rendering replaced — locked as a compact single-line preview strip below the bubble with `--color-feedback` left border, click-to-edit; cross-reference table now points at Doc 28; "Edit / regenerate / delete / feedback / cancel" entry under Doc 15 narrowed to remove `feedback` (now owned by Doc 28).
 > **Earlier:** 2026-04-29 — Doc 17 design pass: Ghostwriter floating-panel placement documented (right gutter, viewport-clamped to bubble extent); plain-text rendering swap noted on the AI bubble section
 > **Earlier:** 2026-04-29 — Doc 16 design pass: accordion banner detail filled in (button-slot state machine, chevron, name pattern, token-impact display, stale badge, "previous chapter" right-click affordance)
@@ -71,6 +74,8 @@ The input area is not a fixed height — it grows with content up to a cap (visu
 
 A bubble is the rendered form of a single `messages` row. Two roles, two visual treatments.
 
+Every bubble carries a `data-loom-selectable="<messageId>"` (and `data-loom-bubble-kind`) attribute on its **rendered-prose wrapper** — the hook the Selection Popup (Doc 29) uses to observe in-bubble text selection. The attribute is present only on the rendered-prose subtree: a streaming bubble, a bubble in Ghostwriter mode, and a bubble being edited in place render different subtrees and so carry no attribute — that is how the popup is suppressed in those states (Doc 29 §3).
+
 ### Story user bubble
 
 Renders a `messages` row with `role = 'user'` and `kind = 'story'`. The content is `json_user` — parsed back into the four-field `UserContent` shape and rendered as a labelled stack:
@@ -101,6 +106,15 @@ The Ghostwriter floating panel sits in the **Theater's right gutter** (the space
 Same role distinction (user / model). Content is plain text. Visually framed inside their session partition (next section), not rendered standalone in the scroll surface.
 
 Visual treatment differs from story bubbles only by the partition framing — the bubble shape itself is the same, allowing writers to read across modes without learning a new bubble grammar. ⚠️ Provisional: confirm this in visual design — there may be reason to differentiate further.
+
+### Mark indicator and highlight (Doc 30)
+
+Story bubbles (AI **and** user) can carry "mark as important" annotations — passages the writer flags so summary AIs preserve them (Doc 30). Two surfaces compose onto the bubble:
+
+- **The mark dot.** A small dot at the bubble's **bottom-right corner**, `--color-mark`, present whenever the bubble has at least one mark. Hovering it opens a popover listing the bubble's marked passages (truncated `quoted_text`) and any notes, each with Edit-note / Remove affordances. When one or more of the bubble's marks is **orphaned** (the host content changed out from under it — Doc 30 §8), the dot switches to a **warning** treatment (warning tone, not `--color-mark`) and the popover flags the affected marks with a "re-mark or remove" message. The dot is the uniform indicator across both bubble roles.
+- **The in-place highlight.** Marked passages are painted with the **CSS Custom Highlight API** (`new Highlight(range)` + `::highlight()`) — no DOM mutation, the same mechanism Ghostwriter's in-mode highlight uses (§AI Bubble / Doc 17 / Doc 29 §7). Background fill `--color-mark-subtle`. On **AI bubbles** the range is built from stored character offsets (single text node — exact). On **user bubbles** (multi-field render, no single-string offset) it is a best-effort re-find of `quoted_text`; ambiguous or absent matches fall back to dot-only. Orphaned marks are not highlighted.
+
+Marks are created via the Selection Popup (Doc 29), not a hover affordance. Visual values (dot size, popover styling, highlight alpha) are ⚠️ provisional — owned by the visual design phase; Doc 30 owns the behavioural contract.
 
 ---
 
@@ -195,11 +209,13 @@ Inside the partition (when expanded by chevron click):
 - If the segment has a summary: same — constituent bubbles. The summary lives behind the scenes; whether it's used in the API is governed by the `Use summary` toggle in the header.
 
 Inside the partition (when collapsed by chevron click):
-- The summary card replaces the bubbles: a framed body containing the stored summary text rendered as plain prose (not Markdown — `summary` is the author's narrative voice for the chapter, not formatted content). Collapse requires a summary; the chevron is disabled when `summary IS NULL`.
+- **If the segment has a summary:** the summary card replaces the bubbles — a framed body containing the stored summary text rendered as plain prose (not Markdown — `summary` is the author's narrative voice for the chapter, not formatted content).
+- **If the segment has no summary** (D-24): a **"summary needed" card** replaces the bubbles instead — a framed placeholder reading `Summary needed` with a generate affordance. The whole card is a click-to-generate target (fires `summarise_segment`, same as the header "Generate summary" button). Collapse no longer requires a summary; the chevron is always enabled. A collapse-without-summary is a pure visual fold — the API still receives the segment's full bubbles (see Doc 16 §Banner state matrix), so the card doubles as a "folded, still costing full tokens" signal.
 
 The two collapse states (`is_collapsed` for UI; `use_summary` for API) are exposed separately:
-- **Chevron** drives `is_collapsed`.
+- **Chevron** drives `is_collapsed` (always available — D-24).
 - **Button slot in the header** drives `use_summary` — and runs the broader state machine described below.
+- **Collapse previous** (header control) drives `is_collapsed` on the *neighbouring* segment that ends at this checkpoint — a remote control for the chapter above, so the writer can fold it without scrolling up to its own banner. There is no "collapse next" — the chevron already folds the chapter below. Hidden on the start sentinel; present and active on the open-segment banner (whose own chevron/button are inert), where it is the entry point to the summarise workflow.
 
 #### Accordion Button Slot
 
@@ -208,14 +224,16 @@ The accordion banner's header carries a single button whose appearance and behav
 | Segment state | Button rendering | Click behaviour |
 |---|---|---|
 | Open segment (most-recent checkpoint, no `end_cp` yet) | None / hidden | — |
-| Closed segment, `summary IS NULL` | Label `"Generate summary"` | Calls `summarise_segment` |
+| Closed segment, `summary IS NULL` (collapsed **or** expanded) | Label `"Generate summary"` | Calls `summarise_segment` |
 | Generating for this segment | Animated loading indicator | Cancels generation (silent) |
 | Generating elsewhere | `"Generate summary"` greyed; tooltip `"Generation already in progress"` | — |
 | `summary IS NOT NULL`, `is_collapsed = 0` | `"Use summary"` toggle, default ON | Edits `use_summary` |
 | `summary IS NOT NULL`, `is_collapsed = 1` | Hidden (collapse forces fake-pair regardless) | — |
 | Stale (`is_stale = 1`) on top of any of the above | Adds a `⚠` badge on the button | Right-click banner → `Re-summarise this chapter` |
 
-The chevron is always present (when summary state allows); it's not part of this state machine.
+When `summary IS NULL` and `is_collapsed = 1` (D-24), the body is the "summary needed" card, which is itself a click-to-generate target in addition to the header's "Generate summary" button.
+
+The chevron is always present and always enabled (collapse no longer depends on summary state — D-24); it's not part of this state machine.
 
 #### Accordion banner naming
 
@@ -230,11 +248,12 @@ Per Doc 16:
 | `Summarise this chapter` | Closed segment with no summary |
 | `Re-summarise this chapter` | Closed segment with summary |
 | `Edit summary` | Segment with summary |
-| `Summarise previous chapter` | Not on the start sentinel; summarises the chapter ending at this checkpoint (a discoverability shortcut for the most-recent-checkpoint case where "this chapter" is open and disabled) |
-| `Re-summarise previous chapter` | Same as above, when previous segment has summary |
-| `Collapse` / `Expand` | Mirrors chevron; available when segment has summary |
+| `Collapse previous chapter` / `Expand previous chapter` | Not on the start sentinel; mirrors the **Collapse previous** header control — folds/unfolds the chapter ending at this checkpoint |
+| `Collapse` / `Expand` | Mirrors chevron; available regardless of summary state (D-24) |
 | `Rename` | Always |
 | `Delete checkpoint` | Not on the start sentinel — triggers segment merge per Doc 16 |
+
+Summarising is **downward-only** (D-24): a banner only summarises the chapter that starts at it. The former `Summarise previous chapter` / `Re-summarise previous chapter` entries are removed — the writer reaches a previous chapter's summary controls via **Collapse previous** (which brings that chapter's owning banner into view) rather than summarising backward.
 
 #### Accordion stale badge
 
@@ -246,6 +265,7 @@ The header's tail shows token information (⚠️ exact format provisional, owne
 
 - Closed segment, summary used: `· N tok saved`
 - Closed segment, summary not used: `· ~M messages`
+- Closed segment, collapsed with no summary: `· ~M messages · summary needed` (folded but still sending full content — no tokens saved)
 - Open segment (most-recent banner): `· M messages so far`
 
 ---
@@ -305,6 +325,7 @@ Cache-membership indicator: per the cached-message edit/delete protection rule (
 | Doc 17 | Ghostwriter selection, highlight, accept/reject |
 | Doc 23 | Mode switcher, banner / partition operations |
 | Doc 28 | Feedback strip + inline edit on AI bubbles |
+| Doc 30 | Mark dot + hover popover + in-place highlight on story bubbles (Phase 14) |
 
 This doc does not duplicate those — it ensures their visual surfaces compose cleanly inside the Theater regions defined above.
 
@@ -333,3 +354,4 @@ This doc does not duplicate those — it ensures their visual surfaces compose c
 - **Doc 17** — Ghostwriter. Highlight overlays on AI bubbles.
 - **Doc 22** — Context Caching. Cached-message protection rule.
 - **Doc 23** — Modes. Banner and partition behaviour spec.
+- **Doc 30** — Marks. Mark dot, hover popover, and in-place highlight on story bubbles.

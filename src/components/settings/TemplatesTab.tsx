@@ -1,8 +1,8 @@
 import { FileText, Plus, Trash2 } from 'lucide-react';
 import { marked } from 'marked';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -54,7 +54,7 @@ export function TemplatesTab() {
       await upsertTemplate(draft);
       setSelectedId(id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create template');
+      surfaceError(e, 'Could not create template');
     }
   }
 
@@ -141,7 +141,7 @@ function TemplateEditor({ template, onSave, onDelete, onRestore }: TemplateEdito
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       void onSave({ ...template, name: nextName, default_content: nextContent }).catch((e) => {
-        toast.error(e instanceof Error ? e.message : 'Could not save template');
+        surfaceError(e, 'Could not save template');
       });
     }, SAVE_DEBOUNCE_MS);
   }

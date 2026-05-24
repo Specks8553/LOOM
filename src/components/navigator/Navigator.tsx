@@ -4,12 +4,24 @@ import { toast } from 'sonner';
 
 import { CreateMenu } from '@/components/navigator/CreateMenu';
 import { VaultTreeRow } from '@/components/navigator/VaultTreeRow';
+import {
+  buildNavigatorMenu,
+  type NavigatorMenuActions,
+} from '@/components/navigator/navigatorMenu';
 import { buildTree, filterItems, type VaultTreeNode } from '@/components/navigator/vaultTree';
-import { deleteItem, deleteItemPermanent, moveItem, restoreItem } from '@/lib/tauriApi/vault';
+import { useContextMenu } from '@/components/shared/ContextMenu';
+import { surfaceError } from '@/lib/errors';
+import {
+  createItem,
+  deleteItem,
+  deleteItemPermanent,
+  moveItem,
+  restoreItem,
+} from '@/lib/tauriApi/vault';
 import { useVaultStore } from '@/stores/vaultStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
-import type { VaultItemMeta } from '@/lib/types';
+import type { VaultItemMeta, VaultItemType } from '@/lib/types';
 
 interface NavigatorProps {
   onLock: () => void;
@@ -37,8 +49,11 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
   const toggleExpanded = useVaultStore((s) => s.toggleExpanded);
   const toggleSelection = useVaultStore((s) => s.toggleSelection);
   const setSelected = useVaultStore((s) => s.setSelected);
+  const expandFolder = useVaultStore((s) => s.expandFolder);
   const loadVault = useVaultStore((s) => s.loadVault);
   const loadTrash = useVaultStore((s) => s.loadTrash);
+
+  const { showContextMenu } = useContextMenu();
 
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -74,7 +89,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
     try {
       await moveItem(itemId, newParentId, sortOrder);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Move failed');
+      surfaceError(e, 'Move failed');
     }
   }
 
@@ -123,20 +138,23 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
     }
   }
 
-  async function handleSoftDelete(item: VaultItemMeta) {
+  async function handleSoftDelete(targets: VaultItemMeta[]) {
+    if (targets.length === 0) return;
     try {
-      await deleteItem(item.id);
-      toast(`"${item.name}" moved to Trash`, {
+      await Promise.all(targets.map((t) => deleteItem(t.id)));
+      const ids = targets.map((t) => t.id);
+      const label = targets.length === 1 ? `"${targets[0].name}"` : `${targets.length} items`;
+      toast(`${label} moved to Trash`, {
         action: {
           label: 'Undo',
           onClick: () => {
-            void restoreItem(item.id).catch(console.error);
+            void Promise.all(ids.map((id) => restoreItem(id))).catch(console.error);
           },
         },
         duration: 4000,
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not move to Trash');
+      surfaceError(e, 'Could not move to Trash');
     }
   }
 
@@ -145,25 +163,109 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
     useWorkspaceStore.getState().openDoc(item.id);
   }
 
-  async function handleAttachDoc(item: VaultItemMeta) {
+  // Doc 11 §Menu — "Open". Stories route through the same generation guard as
+  // a left-click (Navigator §handleSelect); docs/images open the editor.
+  function handleOpen(item: VaultItemMeta) {
+    if (item.item_type !== 'Story') {
+      useWorkspaceStore.getState().openDoc(item.id);
+      return;
+    }
+    const ws = useWorkspaceStore.getState();
+    if (ws.activeStoryId === item.id) return;
+    if (ws.isGenerating) {
+      if (!window.confirm('Generation in progress. Cancel and switch stories?')) return;
+      void ws.cancel();
+      return;
+    }
+    void ws.setActiveStory(item.id).catch(console.error);
+  }
+
+  async function handleSetAttached(targets: VaultItemMeta[], attached: boolean) {
     // Doc 18 §Attach via paperclip. The store guards against no-active-story.
+    const ws = useWorkspaceStore.getState();
     try {
-      await useWorkspaceStore.getState().attachDoc(item.id);
-      toast(`"${item.name}" attached to story`, { duration: 2000 });
+      for (const t of targets) {
+        await (attached ? ws.attachDoc(t.id) : ws.detachDoc(t.id));
+      }
+      const verb = attached ? 'attached to' : 'detached from';
+      const label = targets.length === 1 ? `"${targets[0].name}"` : `${targets.length} documents`;
+      toast(`${label} ${verb} story`, { duration: 2000 });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not attach document');
+      surfaceError(e, 'Could not update attachment');
     }
   }
 
-  async function handlePermanentDelete(item: VaultItemMeta) {
-    if (!window.confirm(`Delete "${item.name}" permanently? This cannot be undone.`)) {
-      return;
-    }
+  async function createVaultItem(parentId: string | null, type: VaultItemType) {
+    const defaultName =
+      type === 'Story' ? 'Untitled Story' : type === 'Folder' ? 'New Folder' : 'Untitled Document';
     try {
-      await deleteItemPermanent(item.id);
+      const created = await createItem(parentId, type, defaultName);
+      if (parentId !== null) expandFolder(parentId);
+      if (created.item_type === 'SourceDocument') {
+        useWorkspaceStore.getState().openDoc(created.id);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Permanent delete failed');
+      surfaceError(e, 'Could not create item');
     }
+  }
+
+  async function handlePermanentDelete(targets: VaultItemMeta[]) {
+    if (targets.length === 0) return;
+    const prompt =
+      targets.length === 1
+        ? `Delete "${targets[0].name}" permanently? This cannot be undone.`
+        : `Delete ${targets.length} items permanently? This cannot be undone.`;
+    if (!window.confirm(prompt)) return;
+    try {
+      await Promise.all(targets.map((t) => deleteItemPermanent(t.id)));
+    } catch (e) {
+      surfaceError(e, 'Permanent delete failed');
+    }
+  }
+
+  // Doc 11 §Menu contents by target — Navigator resolver action bindings.
+  const navMenuActions: NavigatorMenuActions = {
+    createItem: (parentId, type) => void createVaultItem(parentId, type),
+    rename: (id) => useVaultStore.getState().requestRename(id),
+    open: handleOpen,
+    setAttached: (targets, attached) => void handleSetAttached(targets, attached),
+    softDelete: (targets) => void handleSoftDelete(targets),
+    restore: (item) => void restoreItem(item.id).catch((e) => toast.error(String(e))),
+    permanentDelete: (targets) => void handlePermanentDelete(targets),
+  };
+
+  function navMenuArgs(target: VaultItemMeta | null, selection: VaultItemMeta[]) {
+    return {
+      target,
+      selection,
+      isTrashView,
+      activeStoryId,
+      attachedDocIds: attachedIdSet,
+      childCount: (folderId: string) => items.filter((i) => i.parent_id === folderId).length,
+      actions: navMenuActions,
+    };
+  }
+
+  // Right-click (or `⋮`) on a row. Per Doc 11 §Multi-select: act on the
+  // selection when the row is part of it, else collapse to that row first.
+  function handleRowContextMenu(item: VaultItemMeta, e: React.MouseEvent) {
+    let selection: VaultItemMeta[];
+    if (isTrashView) {
+      selection = [item];
+    } else if (selectedIds.has(item.id)) {
+      selection = items.filter((i) => selectedIds.has(i.id));
+    } else {
+      setSelected(new Set([item.id]));
+      selection = [item];
+    }
+    showContextMenu(e, buildNavigatorMenu(navMenuArgs(item, selection)));
+  }
+
+  // Right-click on the empty tree area — create at the vault root.
+  function handleEmptyContextMenu(e: React.MouseEvent) {
+    if (e.target !== e.currentTarget || isTrashView) return;
+    setSelected(new Set());
+    showContextMenu(e, buildNavigatorMenu(navMenuArgs(null, [])));
   }
 
   return (
@@ -234,7 +336,8 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
             onRestore={(id) => {
               void restoreItem(id).catch((e) => toast.error(String(e)));
             }}
-            onPermanentDelete={(item) => void handlePermanentDelete(item)}
+            onPermanentDelete={(item) => void handlePermanentDelete([item])}
+            onRowContextMenu={handleRowContextMenu}
           />
         ) : tree.length === 0 ? (
           <div
@@ -251,6 +354,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
               setRootDropActive(false);
               if (draggingId !== null) void performMove(draggingId, null);
             }}
+            onContextMenu={handleEmptyContextMenu}
             className={`h-full ${rootDropActive ? 'bg-[var(--color-accent-subtle)]' : ''}`}
           >
             <NoItems hasFilter={filterQuery.length > 0} />
@@ -277,6 +381,7 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
                 if (draggingId !== null) void performMove(draggingId, null);
               }
             }}
+            onContextMenu={handleEmptyContextMenu}
           >
             {tree.map((node) => (
               <TreeBranch
@@ -292,8 +397,8 @@ export function Navigator({ onLock, onOpenWorldPicker, onOpenSettings }: Navigat
                 onToggle={toggleExpanded}
                 onSelect={handleSelect}
                 onOpenDoc={handleOpenDoc}
-                onAttachDoc={(item) => void handleAttachDoc(item)}
-                onContextDelete={(item) => void handleSoftDelete(item)}
+                onAttachDoc={(item) => void handleSetAttached([item], true)}
+                onRowContextMenu={handleRowContextMenu}
                 onDragStartItem={(id) => setDraggingId(id)}
                 onDragEndItem={() => {
                   setDraggingId(null);
@@ -342,7 +447,7 @@ interface TreeBranchProps {
   onSelect: (item: VaultItemMeta, e: React.MouseEvent) => void;
   onOpenDoc: (item: VaultItemMeta) => void;
   onAttachDoc: (item: VaultItemMeta) => void;
-  onContextDelete: (item: VaultItemMeta) => void;
+  onRowContextMenu: (item: VaultItemMeta, e: React.MouseEvent) => void;
   onDragStartItem: (id: string) => void;
   onDragEndItem: () => void;
   onDropTargetChange: (id: string | null) => void;
@@ -362,7 +467,7 @@ function TreeBranch({
   onSelect,
   onOpenDoc,
   onAttachDoc,
-  onContextDelete,
+  onRowContextMenu,
   onDragStartItem,
   onDragEndItem,
   onDropTargetChange,
@@ -388,17 +493,7 @@ function TreeBranch({
         attached={attachedIdSet.has(item.id)}
         canAttach={canAttach}
         onAttachToggle={() => onAttachDoc(item)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          // Phase 2C: keep the context menu lean — single Delete action.
-          // Phase 12 will replace this with a proper popover (rename, move,
-          // "Attach to story" per Doc 18, etc.). For Phase 5 the paperclip
-          // affordance carries the attach interaction; right-click stays
-          // delete-only here to avoid chained confirm prompts.
-          if (window.confirm(`Move "${item.name}" to Trash?`)) {
-            onContextDelete(item);
-          }
-        }}
+        onContextMenu={(e) => onRowContextMenu(item, e)}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', item.id);
@@ -441,7 +536,7 @@ function TreeBranch({
               onSelect={onSelect}
               onOpenDoc={onOpenDoc}
               onAttachDoc={onAttachDoc}
-              onContextDelete={onContextDelete}
+              onRowContextMenu={onRowContextMenu}
               onDragStartItem={onDragStartItem}
               onDragEndItem={onDragEndItem}
               onDropTargetChange={onDropTargetChange}
@@ -489,9 +584,10 @@ interface TrashViewProps {
   items: VaultItemMeta[];
   onRestore: (id: string) => void;
   onPermanentDelete: (item: VaultItemMeta) => void;
+  onRowContextMenu: (item: VaultItemMeta, e: React.MouseEvent) => void;
 }
 
-function TrashView({ items, onRestore, onPermanentDelete }: TrashViewProps) {
+function TrashView({ items, onRestore, onPermanentDelete, onRowContextMenu }: TrashViewProps) {
   if (items.length === 0) {
     return (
       <p className="px-4 py-6 text-center text-[12px] text-[var(--color-text-muted)]">
@@ -504,6 +600,7 @@ function TrashView({ items, onRestore, onPermanentDelete }: TrashViewProps) {
       {items.map((item) => (
         <li
           key={item.id}
+          onContextMenu={(e) => onRowContextMenu(item, e)}
           className="flex h-7 items-center justify-between gap-2 px-3 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
         >
           <span className="truncate">{item.name}</span>

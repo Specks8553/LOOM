@@ -1,7 +1,8 @@
 # 04 — System Overview
 
 > **Status:** Complete
-> **Last updated:** 2026-05-03 — pre-implementation audit: dead `branch_map_updated` example replaced with live events (CD-11).
+> **Last updated:** 2026-05-23 — Phase 12.5-B (CD-03): §Network Boundary corrected — the WebView CSP `connect-src` is `ipc: http://ipc.localhost` (not the previously-claimed `'none'`, and the Gemini host is intentionally *not* in the WebView CSP since all Gemini HTTP is in the Rust backend). `tauri.conf.json` tightened to match.
+> **Earlier:** 2026-05-03 — pre-implementation audit: dead `branch_map_updated` example replaced with live events (CD-11).
 > **Earlier:** 2026-04-27 — consultant pass: AppState diagram, encryption boundary, file system layout, and world-switch sequence corrected post A-02-A and D-07; auto-lock wording aligned with Doc 13; Sonner added to tech stack
 
 The 10,000ft view. Covers process model, IPC boundary, encryption boundary, state lifecycle, network boundary, file system layout, and tech stack decisions with rationale.
@@ -193,7 +194,7 @@ Configured via Settings. Default: 15 minutes of UI inactivity. The timer resets 
 
 Only one external host is permitted: `generativelanguage.googleapis.com` (Gemini API).
 
-All HTTP is made by the Rust backend using `reqwest`. The WebView's Content Security Policy is set to `connect-src 'none'` — the frontend cannot make HTTP requests at all. This is enforced at the platform level, not just by convention.
+All HTTP is made by the Rust backend using `reqwest` — never the frontend. The WebView's Content Security Policy sets `connect-src ipc: http://ipc.localhost` (the Tauri IPC transport only, no external host); the frontend therefore cannot make any network request — it reaches the backend exclusively through Tauri IPC, and the backend reaches Gemini. This is enforced at the platform level, not by convention. (The Gemini host is deliberately *absent* from the WebView `connect-src`: since no frontend code calls it, allowing it would only widen the attack surface — CD-03 / CD-32, resolved Phase 12.5-B.)
 
 **No other network activity:**
 - No analytics or telemetry

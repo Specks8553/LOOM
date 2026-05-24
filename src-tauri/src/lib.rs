@@ -16,7 +16,7 @@ pub mod state;
 /// only "router" the frontend uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub enum AppPhase {
     Onboarding,
     Locked,
@@ -101,6 +101,10 @@ pub fn run() {
             commands::accordion::set_segment_use_summary,
             commands::accordion::clear_segment_summary,
             commands::accordion::summarise_segment,
+            commands::marks::list_marks,
+            commands::marks::add_mark,
+            commands::marks::remove_mark,
+            commands::marks::update_mark_note,
             commands::ghostwriter::send_ghostwriter_request,
             commands::ghostwriter::cancel_ghostwriter_generation,
             commands::ghostwriter::save_ghostwriter_edit,

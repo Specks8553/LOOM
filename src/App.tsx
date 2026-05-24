@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Toaster } from 'sonner';
 
+import { ErrorModal } from '@/components/shared/ErrorModal';
 import { LockedShell } from '@/components/shell/LockedShell';
 import { OnboardingShell } from '@/components/shell/OnboardingShell';
 import { WorkspaceShell } from '@/components/shell/WorkspaceShell';
@@ -89,6 +90,7 @@ export function App() {
       {phase === 'locked' && <LockedShell />}
       {phase === 'workspace' && <WorkspaceShell />}
       <Toaster position="bottom-right" theme="dark" />
+      <ErrorModal />
     </>
   );
 }

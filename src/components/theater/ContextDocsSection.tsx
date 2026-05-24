@@ -1,6 +1,6 @@
 import { FileText, ImageIcon, X } from 'lucide-react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 import type { VaultItemMeta } from '@/lib/types';
@@ -34,7 +34,7 @@ export function ContextDocsSection() {
     try {
       await detachDoc(docId);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not detach document');
+      surfaceError(e, 'Could not detach document');
     }
   }
 

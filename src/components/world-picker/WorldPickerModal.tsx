@@ -3,6 +3,7 @@ import { Download, Trash2, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { cancelGeneration } from '@/lib/tauriApi/conversation';
 import {
   createWorld as createWorldApi,
@@ -87,7 +88,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
       setActiveWorld(world.id, null /* dir is Phase 10 */);
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not open world');
+      surfaceError(e, 'Could not open world');
     } finally {
       setBusy(false);
     }
@@ -106,7 +107,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
       await refreshWorlds();
       toast.success(`Imported "${meta.name}"`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Import failed');
+      surfaceError(e, 'Import failed');
     } finally {
       setBusy(false);
     }
@@ -124,7 +125,7 @@ export function WorldPickerModal({ open, onOpenChange }: WorldPickerModalProps) 
       // Auto-open the new world.
       await handleOpen(meta);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create world');
+      surfaceError(e, 'Could not create world');
     } finally {
       setBusy(false);
     }
@@ -253,7 +254,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
       await exportWorldApi(world.id, dest);
       toast.success(`World exported to ${dest}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Export failed');
+      surfaceError(e, 'Export failed');
     } finally {
       setBusy(false);
     }
@@ -265,7 +266,7 @@ function WorldCard({ world, isActive, onOpen, onDeleted }: WorldCardProps) {
       await deleteWorldApi(world.id, confirmText);
       onDeleted();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Delete failed');
+      surfaceError(e, 'Delete failed');
     } finally {
       setBusy(false);
       setConfirmingDelete(false);

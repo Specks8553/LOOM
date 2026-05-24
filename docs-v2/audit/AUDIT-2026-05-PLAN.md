@@ -1,8 +1,9 @@
 # AUDIT-2026-05 — Plan
 
-> **Status:** In progress — Pass A complete (A1–A7); Pass B complete (B1, B2, B4, B5, B6, B7); Pass C — C1 (punch list) complete; **C2 (remediation proposal) drafted, awaiting owner decision (deferred to next session)**
+> **Status:** **Complete (2026-05-23)** — Pass A (A1–A7) + Pass B (B1, B2, B4, B5, B6, B7) + Pass C (C1 punch list, C2 remediation proposal) all done. Proposal **approved 2026-05-23** with decisions D1–D6; remediation structure landed as separate non-audit edits (Phase 12.5 + Phase 12.6 in IMPLEMENTATION-PLAN.md; R20–R29 in IMPROVEMENT-BACKLOG.md). Audit archived in place.
 > **Started:** 2026-05-20
-> **Last updated:** 2026-05-22 — Phase C2 remediation proposal drafted into ledger §Synthesis (Pass C). 65 findings routed into 4 buckets (Phase 12.5 blockers / fold-into-Phase-12 / backlog R20–R27 / owner decisions D1–D6). Owner deferred the proceed/approve decision to the next session; no source-doc edits made.
+> **Last updated:** 2026-05-23 — Owner approved the C2 proposal. Decisions: D1 ship World Backup (Phase 12.6 + Doc 14 contradiction resolved), D2 PRE-AUDIT immutable, D3 schema FK in 12.5-D, D4 scroll findings → backlog R28, D5 rate limiter deferred to v2.1 (R29), D6 auto-lock code fixed to "wait then lock" (R26). 65 findings routed: 10 → Phase 12.5, 13 → Phase 12 Bucket-2 checkpoint, ~38 → backlog R20–R29, decisions recorded. See ledger §Phase C2 → Decisions resolved.
+> **Earlier:** 2026-05-22 — Phase C2 remediation proposal drafted into ledger §Synthesis (Pass C). 65 findings routed into 4 buckets. Owner deferred the proceed/approve decision to the next session; no source-doc edits made.
 > **Snapshot:** HEAD = `5126e6f` (feat(modes): switcher re-enters tail session; session banner action bar) **plus uncommitted working-tree modifications** (Navigator/Theater/stores + Docs 09/11/27/00-INDEX + new `features/29-selection-popup.md` + new `src/components/shared/`, `src/components/navigator/navigatorMenu.ts`).
 > **Ledger:** [AUDIT-2026-05.md](AUDIT-2026-05.md)
 
@@ -293,9 +294,10 @@ Complete, critical, precise audit of LOOM 2.0 as it stands after Phase 12 (visua
 
 ### Phase C2 — Remediation phase proposal
 
-> **Status:** In progress (last touched 2026-05-22)
+> **Status:** Complete (2026-05-23) — proposal approved with decisions D1–D6; remediation landed as separate non-audit edits.
 >
 > **Resumption notes:**
+> - 2026-05-23 — **Approved.** Decisions D1–D6 resolved (see ledger §Phase C2 → Decisions resolved). Landed: Phase 12.5 (Audit Remediation) + Phase 12.6 (World Backup) into IMPLEMENTATION-PLAN.md; Bucket-2 verification checkpoint added to Phase 12; R20–R29 appended to IMPROVEMENT-BACKLOG.md; PRE-AUDIT immutability banner (D2); Doc 14 §Out of Scope contradiction resolved (D1). Audit is now closed/observational-complete.
 > - 2026-05-22 — Proposal drafted into ledger §Synthesis (Pass C) → Phase C2. Read IMPLEMENTATION-PLAN.md (Phase 12 still In progress; Phase 13 Not started, its goal already requires CSP verification) + IMPROVEMENT-BACKLOG.md (house style; next free R-number is R20).
 > - 2026-05-22 — Routing realisation: findings split **four** ways, not two. Phase 12 is unfinished, so ~13 CD/DG findings belong to its remaining scope (12-3A+/12-Z), not a new phase. Buckets: (1) Phase 12.5 = 10 ship-blockers in 4 clusters [12.5-A IPC errors, 12.5-B CSP red line, 12.5-C concurrency Wall #6, 12.5-D schema FK]; (2) fold into Phase 12 = 13; (3) backlog R20–R27 = ~36; (4) owner decisions D1–D6. All 65 findings routed (coverage check in ledger).
 > - 2026-05-22 — **Awaiting owner approval** before any edit to IMPLEMENTATION-PLAN.md / IMPROVEMENT-BACKLOG.md. Checkpoint 3 stays open until approval + the separate (non-audit) edits land.
@@ -303,7 +305,7 @@ Complete, critical, precise audit of LOOM 2.0 as it stands after Phase 12 (visua
 
 - [x] Draft a proposed new phase (likely Phase 12.5) for `IMPLEMENTATION-PLAN.md` covering HB-* items that must land before Phase 13. *(Phase 12.5 drafted — 4 clusters; ledger §C2 Bucket 1.)*
 - [x] Draft `IMPROVEMENT-BACKLOG.md` additions for non-blockers. *(R20–R27 drafted; ledger §C2 Bucket 3.)*
-- [ ] Present to user; await approval before any edits to `IMPLEMENTATION-PLAN.md` (audit remains observational; only the proposal lands as an edit, separately). *(Presented 2026-05-22; awaiting approval.)*
+- [x] Present to user; await approval before any edits to `IMPLEMENTATION-PLAN.md` (audit remains observational; only the proposal lands as an edit, separately). *(Presented 2026-05-22; **approved 2026-05-23** with decisions D1–D6. Remediation landed as separate non-audit edits — see §Phase C2 → Decisions resolved.)*
 
 ---
 

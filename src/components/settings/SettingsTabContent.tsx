@@ -2,6 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { setApiKey } from '@/lib/tauriApi/auth';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -108,7 +109,7 @@ function ApiKeyField() {
       await refreshResolved();
       toast.success('API key saved. Existing context caches are invalidated.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save API key');
+      surfaceError(e, 'Could not save API key');
     }
   }
 
@@ -241,7 +242,7 @@ function ResetAllOverridesButton({ tab }: { tab: string }) {
       const count = await clearTab(tab);
       toast.success(count === 0 ? 'No overrides to clear.' : `Cleared ${count} override(s).`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not clear overrides');
+      surfaceError(e, 'Could not clear overrides');
     } finally {
       busyRef.current = false;
     }

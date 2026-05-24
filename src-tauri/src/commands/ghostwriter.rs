@@ -12,7 +12,6 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
-use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use ts_rs::TS;
 
@@ -32,9 +31,10 @@ use crate::state::AppState;
 /// Returned by `send_ghostwriter_request`. The frontend stitches per Doc 17
 /// §Response: `new = before + revised_passage.trim() + after`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct GhostwriterResponse {
     pub revised_passage: String,
+    #[ts(type = "number | null")]
     pub token_count: Option<i64>,
     /// `true` iff the user cancelled mid-flight. When true, `revised_passage`
     /// is empty and the frontend returns the panel to `selecting` silently.
@@ -44,7 +44,7 @@ pub struct GhostwriterResponse {
 /// Returned by `revert_ghostwriter_edit` so the frontend can re-render the
 /// bubble and decide whether to keep showing the `[Revert]` action.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct RevertResult {
     pub restored_content: String,
     pub remaining_history_len: usize,
@@ -184,9 +184,11 @@ pub async fn send_ghostwriter_request(
         Ok((model_name, out.request, params))
     })?;
 
-    let cancel_token: CancellationToken = access::install_cancel_token(&state)?;
+    // Scoped guard installs the in-flight token (rejecting a concurrent
+    // generation — Wall #6 / CQ-03) and clears it on every return path.
+    let gen = access::begin_generation(&state)?;
     let outcome =
-        gemini::generate_content(&api_key, &model_name, &request, &params, cancel_token).await?;
+        gemini::generate_content(&api_key, &model_name, &request, &params, gen.token()).await?;
 
     if outcome.cancelled {
         info!(message_id = %message_id, "send_ghostwriter_request cancelled");
@@ -282,6 +284,10 @@ pub fn save_ghostwriter_edit(
 
     mark_segment_stale_for_message(&app, &state, &message_id)?;
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    // The bubble's content was rewritten in place — re-anchor or orphan its
+    // marks (Doc 30 §8). A mark on the revised passage typically orphans; one
+    // outside it re-anchors.
+    crate::commands::marks::reeval_marks_for_message(&app, &state, &message_id)?;
     info!(message_id = %message_id, "save_ghostwriter_edit complete");
     Ok(())
 }
@@ -321,6 +327,9 @@ pub fn revert_ghostwriter_edit(
 
     mark_segment_stale_for_message(&app, &state, &message_id)?;
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
+    // Content was restored in place — re-anchor or orphan marks (Doc 30 §8); a
+    // revert can revive a mark that the reverted edit had orphaned.
+    crate::commands::marks::reeval_marks_for_message(&app, &state, &message_id)?;
     info!(
         message_id = %message_id,
         remaining = %remaining_history_len,

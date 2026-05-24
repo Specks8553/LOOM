@@ -1,7 +1,8 @@
 # 09 — Component Library
 
 > **Status:** Complete — visual values finalized per the Designfiles visual design pass
-> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): visual values verified against `docs-v2/design/Designfiles/Phase 0D - Components.html`. ⚠️ markers cleared (popover shadow confirmed); `LoadingDots` animation timing corrected to the Phase 0D spec (1.2s pulse cycle, 0.2s stagger). Token references inherit Doc 08's warm palette automatically — no per-component value changes needed. Stale `applyAccentColor()` → `applyTheme()`.
+> **Last updated:** 2026-05-19 — Context-menu contents pass (D-22): §ContextMenu API updated — `MenuItem` gains a `destructive?` flag (`--color-error` label); `useContextMenu` documented as a consumer hook of the workspace-root `ContextMenuProvider` (which owns the single menu instance) rather than a local-state hook.
+> **Earlier:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): visual values verified against `docs-v2/design/Designfiles/Phase 0D - Components.html`. ⚠️ markers cleared (popover shadow confirmed); `LoadingDots` animation timing corrected to the Phase 0D spec (1.2s pulse cycle, 0.2s stagger). Token references inherit Doc 08's warm palette automatically — no per-component value changes needed. Stale `applyAccentColor()` → `applyTheme()`.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: Slider use case updated (`gen_*` parameter sliders in Settings → Gemini); stale "output length" reference removed from Select use case (CD-4).
 > **Earlier:** 2026-04-26
 
@@ -167,7 +168,7 @@ ContextMenu (fixed, portal)
       Separator (hr) between groups
 ```
 
-**Variants:** Standard item, disabled item, separator.
+**Variants:** Standard item, disabled item, destructive item, separator.
 
 **States:**
 | State | Visual |
@@ -175,6 +176,7 @@ ContextMenu (fixed, portal)
 | Default | `--color-bg-elevated` background, `--color-border` border |
 | Item hover | `--color-bg-hover` background |
 | Item disabled | 40% opacity, `cursor: default` |
+| Item destructive | `--color-error` label text (Doc 11 §Destructive items) |
 
 **Token references:** `--color-bg-elevated`, `--color-border`, `--color-text-primary`, `--color-bg-hover`, `--color-border-subtle`, `--font-sans`.
 
@@ -191,13 +193,17 @@ interface MenuItem {
   icon?: LucideIcon;
   onClick: () => void;
   disabled?: boolean;
+  destructive?: boolean; // label renders in --color-error (Doc 11 §Destructive items)
   separator?: boolean;   // renders a separator instead of an item
 }
 
-// useContextMenu hook — manages open/close state
-const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
-// showContextMenu(e: React.MouseEvent, items: MenuItem[]) — call on onContextMenu
-// contextMenu: ContextMenuState | null — pass to <ContextMenu menu={contextMenu} />
+// ContextMenuProvider — mounted once at the workspace root. It owns the single
+// menu instance and its open/close state, so only one menu is ever open at a
+// time (Doc 11 §Context Menus).
+// useContextMenu() — consumer hook; returns the trigger API:
+const { showContextMenu, hideContextMenu } = useContextMenu();
+// showContextMenu(e: React.MouseEvent, items: MenuItem[]) — call on onContextMenu.
+//   A no-op when items is empty (suppresses the menu entirely).
 ```
 
 **v2.0 fix:** Replace inline `React.CSSProperties` objects with Tailwind classes referencing tokens.

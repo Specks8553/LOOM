@@ -1,8 +1,8 @@
 import { ArrowLeft, FileText, ImageIcon } from 'lucide-react';
 import { marked } from 'marked';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { getItemContent } from '@/lib/tauriApi/vault';
 import { useVaultStore } from '@/stores/vaultStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -54,7 +54,7 @@ export function DocEditor({ docId }: DocEditorProps) {
       })
       .catch((e) => {
         if (cancelled) return;
-        toast.error(e instanceof Error ? e.message : 'Could not load document');
+        surfaceError(e, 'Could not load document');
         setLoaded(true);
       });
     return () => {

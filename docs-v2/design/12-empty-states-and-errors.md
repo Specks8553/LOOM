@@ -1,7 +1,8 @@
 # 12 — Empty States and Errors
 
 > **Status:** Complete — copy verified against the Designfiles where covered; uncovered copy still provisional ⚠️
-> **Last updated:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): empty-state copy verified against `docs-v2/design/Designfiles/Phase 0D - Components.html` and `Phase 1 / Phase 2`. ⚠️ cleared on the three states the mockups confirm verbatim — No Worlds subtext, No Story Selected (without recents) headline, No Messages headline + subtext. States the Designfiles do not yet cover (No Stories, No Source Documents, No Attached Documents, No Search Results, Handover/Consulting empty) and the §Error Copy Reference remain ⚠️ provisional. Toast tier unchanged (see `docs-v2/future/toast-free-notifications.md` for the future direction).
+> **Last updated:** 2026-05-23 — Phase 12.5 (DG-06): added §Error Display Hierarchy → "0 — `LoomError` → display rule" — the variant↔surface↔copy routing matrix CLAUDE.md §Quality bar item 5 promised, indexed by all 11 `LoomError` kinds + the four `validation_kind` sub-cases. This is the contract `surfaceError()` (CD-33) implements from.
+> **Earlier:** 2026-05-17 — Designfiles reconciliation (Phase 12 prep): empty-state copy verified against `docs-v2/design/Designfiles/Phase 0D - Components.html` and `Phase 1 / Phase 2`. ⚠️ cleared on the three states the mockups confirm verbatim — No Worlds subtext, No Story Selected (without recents) headline, No Messages headline + subtext. States the Designfiles do not yet cover (No Stories, No Source Documents, No Attached Documents, No Search Results, Handover/Consulting empty) and the §Error Copy Reference remain ⚠️ provisional. Toast tier unchanged (see `docs-v2/future/toast-free-notifications.md` for the future direction).
 > **Earlier:** 2026-04-26
 
 Empty states and error surfaces are first-class UI. Blank screens are bugs. Every zero-data condition and every error class has a specified presentation here.
@@ -187,6 +188,43 @@ Subtext:    "Ask questions or get feedback about your story."  ⚠️
 ## Error Display Hierarchy
 
 Errors surface at three levels. The level is determined by severity and recoverability.
+
+### 0 — `LoomError` → display rule (the routing contract)
+
+Every Tauri command returns `Result<T, LoomError>`. The error crosses IPC as an
+adjacently-tagged object `{ "kind": …, "message": … }` (Doc 05 §LoomError; HB-01).
+The frontend's `surfaceError(err, context)` helper switches on `err.kind` and
+routes to the tier + copy below. `context` lets a call site override the default
+surface where the same variant means different things (e.g. a `crypto` failure on
+the unlock screen is inline "Incorrect password", not a blocking modal).
+
+| `kind` | Default surface | Default copy (→ §Error Copy Reference row) |
+|---|---|---|
+| `crypto` | Blocking modal — *unlock screen overrides to Inline* | "Could not unlock your vault." / unlock: "Incorrect password." (Auth → Wrong password) |
+| `database` | Blocking modal | "A database error occurred." / message-send: "Failed to save your message…" (Vault/DB → DB write failed) |
+| `not_found` | Toast (6s) | "That item could no longer be found." ⚠️ |
+| `validation` | Inline (field/section) — keyed by `message.validation_kind`, see below | uses `message.reason` |
+| `forbidden` | Toast (6s) | uses `message` — the op is prohibited (e.g. "Built-in templates can't be deleted") |
+| `api_error` | Toast (6s) — persistent for rate/key/filter sub-cases | "Cannot reach the AI service. Check your connection." (Generation → Network unreachable / Invalid API key) |
+| `cache_create` | Toast (6s) | "Couldn't attach story context; sent without the cache." ⚠️ (Doc 22 §Fallback to Inline) |
+| `rate_limited` | Toast (persistent) | "Rate limit reached. Wait a moment before sending." (Generation → Rate limited) |
+| `io` | Inline (where a field exists) / Toast (6s) | "Failed to save. Check available disk space." (Vault/DB → Doc save failed) |
+| `serialization` | Toast (6s) | "Something went wrong processing data." ⚠️ |
+| `internal` | Toast (6s) | "An unexpected error occurred." ⚠️ |
+
+`validation` carries a `message.validation_kind` discriminator; route on it:
+
+| `validation_kind` | Default surface | Default copy |
+|---|---|---|
+| `generic` | Inline | uses `message.reason` |
+| `invalid_setting_value` | Inline under the setting field; auto-save stays suppressed until valid (Doc 20) | uses `message.reason` |
+| `no_baseline` | Toast (6s) ⚠️ | "Nothing to compare against yet." ⚠️ *(defined; no raise site in v2.0)* |
+| `protected_sentinel` | Toast (6s) | "The story's opening checkpoint can't be removed." ⚠️ (accordion start sentinel) |
+
+> **Generation errors** also arrive out-of-band via the `generation_failed` /
+> `session_generation_failed` events (`error_kind ∈ {api_error, rate_limited,
+> validation, internal}`), not as a command `Result`. `surfaceError` is the
+> shared sink for both paths so the copy and surface match (CD-33).
 
 ### 1 — Toast (transient, bottom-right)
 

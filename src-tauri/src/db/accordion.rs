@@ -13,7 +13,7 @@ use crate::error::LoomError;
 
 /// IPC payload for a checkpoint row.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct Checkpoint {
     pub id: String,
     pub story_id: String,
@@ -27,7 +27,7 @@ pub struct Checkpoint {
 
 /// IPC payload for a closed segment row.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AccordionSegment {
     pub id: String,
     pub story_id: String,
@@ -44,7 +44,7 @@ pub struct AccordionSegment {
 
 /// Aggregate payload returned by `get_accordion_state`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AccordionState {
     pub checkpoints: Vec<Checkpoint>,
     pub segments: Vec<AccordionSegment>,

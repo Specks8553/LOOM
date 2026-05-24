@@ -1,7 +1,8 @@
 # 14 — Vault and Worlds
 
 > **Status:** Complete
-> **Last updated:** 2026-05-03 — pre-implementation audit resolution: `WorldMetaPatch` defined in Doc 03 §IPC Payload and Result Types — `Partial<WorldMeta>` shape, optional fields, explicit `null` clears (IP-3); `vaultStore` field shape canonical in Doc 06 (CD-7).
+> **Last updated:** 2026-05-23 — AUDIT-2026-05 remediation (CD-19, decision D1): World Backup confirmed **in scope for v2.0**. Removed the contradictory "World export / archive" line from §Out of Scope — the §World Backup spec is authoritative. Implementation tracked as a feature phase in `IMPLEMENTATION-PLAN.md`.
+> **Earlier:** 2026-05-03 — pre-implementation audit resolution: `WorldMetaPatch` defined in Doc 03 §IPC Payload and Result Types — `Partial<WorldMeta>` shape, optional fields, explicit `null` clears (IP-3); `vaultStore` field shape canonical in Doc 06 (CD-7).
 > **Earlier:** 2026-04-29 — Doc 19 design pass: World Backup section added (`.loom-backup` zip export/import via `export_world` / `import_world`); imports get a new `world_id` to avoid collision; deferred narrative export to Doc 21
 > **Earlier:** 2026-04-29 — Doc 18 design pass: hover paperclip affordance added to vault row anatomy for `SourceDocument` and `Image` items
 > **Earlier:** 2026-04-27 — consultant pass: world_meta.json write-through rule documented for accent and other display fields
@@ -408,6 +409,5 @@ The canonical TypeScript shape lives in **Doc 06 §`vaultStore`** — `selectedI
 
 - World cover image (deferred — `cover_image_path` field reserved in `world_meta.json`)
 - Image item type (field reserved in `items`; file management deferred to Doc 19)
-- World export / archive
 - Story description UI (field reserved in `items` — see IMPL-NOTES IN-14-A)
 - Item tagging (stories, docs) — no tag field on items in v2.0

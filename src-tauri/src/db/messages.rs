@@ -22,7 +22,7 @@ use crate::error::LoomError;
 /// Per Doc 03 §TypeScript Interfaces §Conversation. The IPC payload type for
 /// `load_messages` and any place a single message crosses the boundary.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct ChatMessage {
     pub id: String,
     pub story_id: String,
@@ -30,6 +30,7 @@ pub struct ChatMessage {
     pub role: String,         // 'user' | 'model'
     pub content_type: String, // 'json_user' | 'text' | 'blocks'
     pub content: String,
+    #[ts(type = "number | null")]
     pub token_count: Option<i64>,
     pub model_name: Option<String>,
     pub finish_reason: Option<String>,

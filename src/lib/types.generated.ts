@@ -18,7 +18,7 @@ export type AccordionState = { checkpoints: Array<Checkpoint>, segments: Array<A
  * Story rows have `session_id = None`; consulting rows (added in 6C) carry
  * the active session id + name.
  */
-export type AliveCacheRow = { story_id: string, story_name: string, session_id: string | null, session_name: string | null, total_tokens: bigint, expiry_at: string, is_stale: boolean, };
+export type AliveCacheRow = { story_id: string, story_name: string, session_id: string | null, session_name: string | null, total_tokens: number, expiry_at: string, is_stale: boolean, };
 
 /**
  * Full `app_config.json` payload.
@@ -37,7 +37,7 @@ export type AttachedDocEntry = { doc_id: string, content_hash: string, };
  * IPC payload per Doc 03 §TypeScript Interfaces §Context Caching.
  * Returned by `get_cache_state` and embedded in `cache_state_changed` events.
  */
-export type CacheStatus = { cache_name: string | null, expiry_at: string | null, is_stale: boolean, last_cached_message_id: string | null, total_token_count: bigint | null, 
+export type CacheStatus = { cache_name: string | null, expiry_at: string | null, is_stale: boolean, last_cached_message_id: string | null, total_token_count: number | null, 
 /**
  * `doc_id -> SHA-256 hex` map. Empty when no cache is active.
  */
@@ -47,7 +47,7 @@ doc_snapshots: { [key in string]?: string }, };
  * Per Doc 03 §TypeScript Interfaces §Conversation. The IPC payload type for
  * `load_messages` and any place a single message crosses the boundary.
  */
-export type ChatMessage = { id: string, story_id: string, session_id: string | null, role: string, content_type: string, content: string, token_count: bigint | null, model_name: string | null, finish_reason: string | null, created_at: string, deleted_at: string | null, user_feedback: string | null, 
+export type ChatMessage = { id: string, story_id: string, session_id: string | null, role: string, content_type: string, content: string, token_count: number | null, model_name: string | null, finish_reason: string | null, created_at: string, deleted_at: string | null, user_feedback: string | null, 
 /**
  * JSON array string; deserialised on the frontend per Doc 03's
  * `GhostwriterEdit[]` interface. v2.0 Phase 3 stores `'[]'` for every
@@ -87,7 +87,7 @@ export type GhostwriterEdit = { edited_at: string, original_content: string, new
  * Returned by `send_ghostwriter_request`. The frontend stitches per Doc 17
  * §Response: `new = before + revised_passage.trim() + after`.
  */
-export type GhostwriterResponse = { revised_passage: string, token_count: bigint | null, 
+export type GhostwriterResponse = { revised_passage: string, token_count: number | null, 
 /**
  * `true` iff the user cancelled mid-flight. When true, `revised_passage`
  * is empty and the frontend returns the panel to `selecting` silently.
@@ -97,13 +97,27 @@ cancelled: boolean, };
 /**
  * Per Doc 03 §IPC Payload and Result Types. Image item metadata.
  */
-export type ImageAssetMeta = { width: bigint, height: bigint, mime_type: string, };
+export type ImageAssetMeta = { width: number, height: number, mime_type: string, };
+
+/**
+ * IPC payload for one mark row (Doc 03 §Marks).
+ */
+export type ImportantMark = { id: string, story_id: string, message_id: string, quoted_text: string, note: string | null, char_start: number | null, char_end: number | null, is_orphaned: boolean, created_at: string, modified_at: string, };
 
 /**
  * Single error type for every Tauri command (Doc 05 §LoomError).
  * Eleven variants — adding a twelfth requires a Doc 05 amendment.
+ *
+ * **Serde representation (HB-01).** Adjacently tagged — `{ "kind": …, "message": … }`.
+ * The internally-tagged form (`#[serde(tag = "kind")]`) *cannot* serialize a
+ * newtype variant wrapping a bare `String`; serde fails at runtime with
+ * "cannot serialize tagged newtype variant …". Ten of these eleven variants
+ * are newtype-of-`String`, so internal tagging silently broke the IPC error
+ * contract. Adjacent tagging puts the payload under `message`: String variants
+ * produce `{ "kind": "crypto", "message": "…" }`; the one struct variant
+ * (`Validation`) produces `{ "kind": "validation", "message": { … } }`.
  */
-export type LoomError = { "kind": "crypto" } & string | { "kind": "database" } & string | { "kind": "not_found" } & string | { "kind": "validation", validation_kind: ValidationKind, key: string | null, reason: string, } | { "kind": "forbidden" } & string | { "kind": "api_error" } & string | { "kind": "cache_create" } & string | { "kind": "rate_limited" } & string | { "kind": "io" } & string | { "kind": "serialization" } & string | { "kind": "internal" } & string;
+export type LoomError = { "kind": "crypto", "message": string } | { "kind": "database", "message": string } | { "kind": "not_found", "message": string } | { "kind": "validation", "message": { validation_kind: ValidationKind, key: string | null, reason: string, } } | { "kind": "forbidden", "message": string } | { "kind": "api_error", "message": string } | { "kind": "cache_create", "message": string } | { "kind": "rate_limited", "message": string } | { "kind": "io", "message": string } | { "kind": "serialization", "message": string } | { "kind": "internal", "message": string };
 
 /**
  * Merged settings cascade returned by `get_resolved_settings` (Doc 03
@@ -111,7 +125,7 @@ export type LoomError = { "kind": "crypto" } & string | { "kind": "database" } &
  * consumes this object directly (theme, runtime gen params, telemetry-tab
  * ceilings).
  */
-export type ResolvedSettings = { text_model_name: string, gen_temperature: number, gen_top_p: number, gen_top_k: number, gen_max_output_tokens: number, gen_summarise_temperature: number, gen_summarise_top_p: number, gen_summarise_top_k: number, gen_summarise_max_output_tokens: number, cache_ttl_secs: number, cache_min_tokens: number, context_token_limit: number, accent_color: string, body_font: string, bubble_user_color: string, bubble_ai_color: string, ghostwriter_color: string, accordion_color: string, checkpoint_color: string, feedback_color: string, story_si: string, handover_si: string, consulting_si: string, aux_slot_1_name: string, aux_slot_1_content: string, aux_slot_2_name: string, aux_slot_2_content: string, has_api_key: boolean, auto_lock_secs: number, rate_limit_rpm: number, rate_limit_tpm: number, rate_limit_rpd: number, };
+export type ResolvedSettings = { text_model_name: string, gen_temperature: number, gen_top_p: number, gen_top_k: number, gen_max_output_tokens: number, gen_summarise_temperature: number, gen_summarise_top_p: number, gen_summarise_top_k: number, gen_summarise_max_output_tokens: number, cache_ttl_secs: number, cache_min_tokens: number, context_token_limit: number, accent_color: string, body_font: string, bubble_user_color: string, bubble_ai_color: string, ghostwriter_color: string, accordion_color: string, checkpoint_color: string, feedback_color: string, mark_color: string, story_si: string, handover_si: string, consulting_si: string, aux_slot_1_name: string, aux_slot_1_content: string, aux_slot_2_name: string, aux_slot_2_content: string, has_api_key: boolean, auto_lock_secs: number, rate_limit_rpm: number, rate_limit_tpm: number, rate_limit_rpd: number, };
 
 /**
  * Returned by `revert_ghostwriter_edit` so the frontend can re-render the
@@ -197,19 +211,19 @@ export type Template = { id: string, slug: string, name: string, icon: string, d
  * Forward-compat for the v2.1 Source Document Creator — not surfaced in
  * v2.0's Settings UI (Doc 20 §Templates).
  */
-creator_instructions: string, is_builtin: boolean, sort_order: bigint, created_at: string, modified_at: string, };
+creator_instructions: string, is_builtin: boolean, sort_order: number, created_at: string, modified_at: string, };
 
 /**
  * Result of a `countTokens` call. Phase 3 returns just the total — the
  * IPC-facing `TokenEstimate { history, doc, user_turn, total }` shape from
  * Doc 15 is built in the command layer once doc-attachment lands (Phase 5).
  */
-export type TokenEstimate = { history_tokens: bigint, doc_tokens: bigint, user_turn_tokens: bigint, total: bigint, };
+export type TokenEstimate = { history_tokens: number, doc_tokens: number, user_turn_tokens: number, total: number, };
 
 /**
  * Result returned by `unlock_vault`.
  */
-export type UnlockResult = { has_api_key: boolean, auto_lock_secs: bigint, };
+export type UnlockResult = { has_api_key: boolean, auto_lock_secs: number, };
 
 /**
  * Parsed `UserContent` per Doc 03 §TypeScript Interfaces. Stored in
@@ -227,7 +241,7 @@ export type ValidationKind = "generic" | "invalid_setting_value" | "no_baseline"
  * etc. The schema's `content` column is fetched separately (only relevant
  * for SourceDocument bodies — Phase 5).
  */
-export type VaultItemMeta = { id: string, parent_id: string | null, item_type: string, item_subtype: string | null, name: string, description: string | null, sort_order: bigint, created_at: string, modified_at: string, deleted_at: string | null, asset_path: string | null, asset_meta: ImageAssetMeta | null, file_api_uri: string | null, };
+export type VaultItemMeta = { id: string, parent_id: string | null, item_type: string, item_subtype: string | null, name: string, description: string | null, sort_order: number, created_at: string, modified_at: string, deleted_at: string | null, asset_path: string | null, asset_meta: ImageAssetMeta | null, file_api_uri: string | null, };
 
 /**
  * Represents one entry in the worlds registry. Doc 03 §IPC Payload and Result
@@ -254,5 +268,7 @@ export type WorldMetaPatch = { name: string | null, tags: Array<string> | null, 
 /**
  * `Some(Some(path))` sets, `Some(None)` clears, `None` leaves untouched.
  * Serialised via `serde` default — frontend sends `null` to clear.
+ * `#[ts(type)]` collapses the `Option<Option<_>>` double-null ts-rs would
+ * otherwise emit (`string | null | null`) to the single `string | null`.
  */
-cover_image_path: string | null | null, };
+cover_image_path: string | null, };

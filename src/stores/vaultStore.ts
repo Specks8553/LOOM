@@ -37,6 +37,10 @@ interface VaultState {
   expandedFolderIds: string[];
   filterQuery: string;
   isTrashView: boolean;
+  /** Doc 11 §Context Menus — rename plumbing. Set by the context menu's
+   *  "Rename" action; the matching `VaultTreeRow` enters inline-rename and
+   *  clears it. Lets a globally-mounted menu drive row-local edit state. */
+  pendingRenameId: string | null;
 
   // actions — worlds
   setWorlds: (worlds: WorldMeta[]) => void;
@@ -53,6 +57,8 @@ interface VaultState {
   toggleExpanded: (folderId: string) => void;
   expandFolder: (folderId: string) => void;
   setTrashView: (val: boolean) => void;
+  requestRename: (id: string) => void;
+  clearRenameRequest: () => void;
 
   // Called on world switch and lock.
   clear: () => void;
@@ -69,6 +75,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   expandedFolderIds: readExpandedFromStorage(),
   filterQuery: '',
   isTrashView: false,
+  pendingRenameId: null,
 
   setWorlds(worlds) {
     set({ worlds });
@@ -141,6 +148,14 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ isTrashView: val });
   },
 
+  requestRename(id) {
+    set({ pendingRenameId: id });
+  },
+
+  clearRenameRequest() {
+    set({ pendingRenameId: null });
+  },
+
   clear() {
     set({
       activeWorldId: null,
@@ -150,6 +165,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       selectedIds: new Set(),
       filterQuery: '',
       isTrashView: false,
+      pendingRenameId: null,
     });
   },
 }));

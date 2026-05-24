@@ -1,8 +1,8 @@
 import { RotateCcw } from 'lucide-react';
 import { marked } from 'marked';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -61,7 +61,7 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
       const save = chapter === 'world' ? saveWorld : saveApp;
       timerRef.current = setTimeout(() => {
         void save(settingKey, next).catch((e) => {
-          toast.error(e instanceof Error ? e.message : 'Could not save');
+          surfaceError(e, 'Could not save');
         });
       }, SAVE_DEBOUNCE_MS);
     },
@@ -71,14 +71,14 @@ export function PromptEditor({ settingKey, label, hint, chapter, restorable }: P
   function handleRevert() {
     if (timerRef.current) clearTimeout(timerRef.current);
     void clearOverride(settingKey).catch((e) => {
-      toast.error(e instanceof Error ? e.message : 'Could not revert');
+      surfaceError(e, 'Could not revert');
     });
   }
 
   function handleRestore() {
     if (timerRef.current) clearTimeout(timerRef.current);
     void restorePrompt(settingKey).catch((e) => {
-      toast.error(e instanceof Error ? e.message : 'Could not restore default');
+      surfaceError(e, 'Could not restore default');
     });
   }
 

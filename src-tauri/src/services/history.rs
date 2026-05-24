@@ -13,8 +13,11 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use std::collections::HashMap;
+
 use crate::db::accordion::{self as db_accordion, AccordionSegment, Checkpoint};
 use crate::db::conversation_sessions::get_session;
+use crate::db::marks::{self as db_marks, ImportantMark};
 use crate::db::messages::{
     get_message, list_session_messages, list_story_messages, list_story_messages_up_to, ChatMessage,
 };
@@ -32,7 +35,7 @@ pub enum ConversationMode {
 /// Parsed `UserContent` per Doc 03 §TypeScript Interfaces. Stored in
 /// `messages.content` as JSON when `content_type = 'json_user'`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct UserContent {
     pub plot_direction: String,
     pub background_information: String,
@@ -153,6 +156,91 @@ pub(crate) fn append_feedback(content: &str, feedback: Option<&str>) -> String {
     }
 }
 
+/// Heading for the per-message marks manifest (Doc 30 §6). This exact string
+/// is the contract between the rendered content and the SI clause
+/// ([`MARKS_PRESERVE_CLAUSE`]) — change one, change both.
+pub(crate) const MARKS_HEADING: &str = "[MARKED IMPORTANT — PRESERVE FAITHFULLY]";
+
+/// System-instruction clause appended to summary-persona SIs when a request
+/// carries at least one marked passage (Doc 30 §7). The summary baselines are
+/// currently empty (only `prompt_ghostwriter` ships a real baseline), so this
+/// is injected at request-build time rather than baked into a constant.
+pub(crate) const MARKS_PRESERVE_CLAUSE: &str = "Some passages below appear under a \
+\"[MARKED IMPORTANT — PRESERVE FAITHFULLY]\" heading. The writer flagged them as essential: \
+preserve their substance — facts, names, commitments, and distinctive wording — in your output. \
+If a note accompanies a marked passage, treat it as guidance on why it matters.";
+
+/// Append the `[MARKED IMPORTANT]` block for a message's marks (Doc 30 §6),
+/// after any feedback block. Orphaned marks are excluded. Empty input is a
+/// no-op.
+pub(crate) fn append_marks(content: &str, marks: &[ImportantMark]) -> String {
+    let mut active = marks.iter().filter(|m| !m.is_orphaned).peekable();
+    if active.peek().is_none() {
+        return content.to_owned();
+    }
+    let mut out = content.to_owned();
+    out.push_str("\n\n");
+    out.push_str(MARKS_HEADING);
+    for m in active {
+        out.push_str("\n- \"");
+        out.push_str(m.quoted_text.trim());
+        out.push('"');
+        if let Some(note) = m.note.as_deref() {
+            let note = note.trim();
+            if !note.is_empty() {
+                out.push_str(" (note: ");
+                out.push_str(note);
+                out.push(')');
+            }
+        }
+    }
+    out
+}
+
+/// Append [`MARKS_PRESERVE_CLAUSE`] to a resolved summary SI. Handles the
+/// empty-baseline case cleanly.
+pub(crate) fn append_marks_clause(system_instruction: &str) -> String {
+    if system_instruction.trim().is_empty() {
+        MARKS_PRESERVE_CLAUSE.to_owned()
+    } else {
+        format!("{system_instruction}\n\n{MARKS_PRESERVE_CLAUSE}")
+    }
+}
+
+/// Per-message marks index for history assembly. Built once per request from a
+/// story's marks; orphaned marks are dropped at construction (they never reach
+/// a summary AI — Doc 30 §8). An empty lookup (the story-send path) emits no
+/// manifest and triggers no SI clause.
+#[derive(Default)]
+pub struct MarksLookup {
+    by_message: HashMap<String, Vec<ImportantMark>>,
+}
+
+impl MarksLookup {
+    pub fn new(marks: Vec<ImportantMark>) -> Self {
+        let mut by_message: HashMap<String, Vec<ImportantMark>> = HashMap::new();
+        for m in marks.into_iter().filter(|m| !m.is_orphaned) {
+            by_message.entry(m.message_id.clone()).or_default().push(m);
+        }
+        Self { by_message }
+    }
+
+    /// Load a story's marks into a lookup (summary / session paths).
+    pub fn load(conn: &rusqlite::Connection, story_id: &str) -> Result<Self, LoomError> {
+        Ok(Self::new(db_marks::list_for_story(conn, story_id)?))
+    }
+
+    pub fn for_message(&self, id: &str) -> &[ImportantMark] {
+        self.by_message.get(id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// True when no (non-orphaned) marks exist — used to decide whether the SI
+    /// preserve-clause is appended.
+    pub fn is_empty(&self) -> bool {
+        self.by_message.is_empty()
+    }
+}
+
 /// Wrap the current user turn in the aux-slot envelope per Doc 15 §Aux Slot
 /// Injection. When `aux` is empty the bare bracketed user content is
 /// returned untouched.
@@ -197,10 +285,11 @@ pub fn build_history_with_accordion(
     segments: &[AccordionSegment],
     checkpoints: &[Checkpoint],
     fake_user_prompt: &str,
+    marks: &MarksLookup,
 ) -> Result<Vec<GeminiContent>, LoomError> {
     if segments.is_empty() {
         // Fast path — nothing to substitute.
-        return render_history_literal(branch_messages);
+        return render_history_literal(branch_messages, marks);
     }
 
     // (start_at, end_at, segment) tuples for active substitutions only.
@@ -242,7 +331,7 @@ pub fn build_history_with_accordion(
             continue;
         }
 
-        render_message_into(msg, &mut out)?;
+        render_message_into(msg, marks.for_message(&msg.id), &mut out)?;
     }
 
     Ok(out)
@@ -252,10 +341,11 @@ pub fn build_history_with_accordion(
 /// when a story has no closed segments.
 fn render_history_literal(
     branch_messages: &[ChatMessage],
+    marks: &MarksLookup,
 ) -> Result<Vec<GeminiContent>, LoomError> {
     let mut out = Vec::with_capacity(branch_messages.len());
     for msg in branch_messages {
-        render_message_into(msg, &mut out)?;
+        render_message_into(msg, marks.for_message(&msg.id), &mut out)?;
     }
     Ok(out)
 }
@@ -268,19 +358,24 @@ fn render_history_literal(
 /// and feedback-append logic.
 pub(crate) fn render_message_into(
     msg: &ChatMessage,
+    marks: &[ImportantMark],
     out: &mut Vec<GeminiContent>,
 ) -> Result<(), LoomError> {
     match msg.role.as_str() {
         "user" => {
             let parsed = parse_user_content(msg)?;
             let rendered = render_user_content(&parsed);
-            if !rendered.is_empty() {
-                out.push(GeminiContent::user(rendered));
+            // A user turn with marks but otherwise-empty rendered body still
+            // emits the manifest so the marked passage reaches the summary AI.
+            let with_marks = append_marks(&rendered, marks);
+            if !with_marks.is_empty() {
+                out.push(GeminiContent::user(with_marks));
             }
         }
         "model" => {
             let with_feedback = append_feedback(&msg.content, msg.user_feedback.as_deref());
-            out.push(GeminiContent::model(with_feedback));
+            let with_marks = append_marks(&with_feedback, marks);
+            out.push(GeminiContent::model(with_marks));
         }
         other => {
             return Err(LoomError::Internal(format!(
@@ -359,8 +454,16 @@ pub fn assemble_story_request(
     let history = list_story_messages(conn, inputs.story_id)?;
     let segments = db_accordion::list_segments(conn, inputs.story_id)?;
     let checkpoints = db_accordion::list_checkpoints(conn, inputs.story_id)?;
-    let mut contents =
-        build_history_with_accordion(&history, &segments, &checkpoints, inputs.fake_user_prompt)?;
+    // Story sends never carry marks — marks are a summary-only signal (Doc 30
+    // §6). Pass an empty lookup so no `[MARKED IMPORTANT]` block is emitted and
+    // the story cache stays byte-identical with or without marks.
+    let mut contents = build_history_with_accordion(
+        &history,
+        &segments,
+        &checkpoints,
+        inputs.fake_user_prompt,
+        &MarksLookup::default(),
+    )?;
 
     let current_turn = render_user_content(inputs.draft);
     if current_turn.trim().is_empty() {
@@ -462,15 +565,27 @@ pub fn assemble_session_request(
     let story_history = list_story_messages_up_to(conn, &session.story_id, boundary.as_deref())?;
     let segments = db_accordion::list_segments(conn, &session.story_id)?;
     let checkpoints = db_accordion::list_checkpoints(conn, &session.story_id)?;
+    // Handover is uncached and reads the story for synthesis — it carries the
+    // marks manifest (Doc 30 §6). Consulting is cached; its prefix is built by
+    // services/cache.rs (marks-free for hash determinism), so consulting marks
+    // are deferred in v2.0 — gate on kind to stay consistent regardless of the
+    // cached/inline path a consulting send takes.
+    let marks = if session.kind == "handover" {
+        MarksLookup::load(conn, &session.story_id)?
+    } else {
+        MarksLookup::default()
+    };
     let mut contents = build_history_with_accordion(
         &story_history,
         &segments,
         &checkpoints,
         inputs.fake_user_prompt,
+        &marks,
     )?;
 
     // Session prior turns. Plain text — both handover and consulting use a
-    // single free-text field, persisted as `content_type = 'text'`.
+    // single free-text field, persisted as `content_type = 'text'`. Session
+    // bubbles never carry marks (story-only).
     let session_history = list_session_messages(conn, inputs.session_id)?;
     for msg in &session_history {
         render_session_message_into(msg, &mut contents)?;
@@ -478,8 +593,15 @@ pub fn assemble_session_request(
 
     contents.push(GeminiContent::user(user_text.to_owned()));
 
+    // Append the preserve-clause only when marks were available to emit.
+    let system_instruction = if marks.is_empty() {
+        inputs.system_instruction.to_owned()
+    } else {
+        append_marks_clause(inputs.system_instruction)
+    };
+
     Ok(AssembledRequest {
-        system_instruction: inputs.system_instruction.to_owned(),
+        system_instruction,
         contents,
         cached_content_name: None,
     })
@@ -579,6 +701,74 @@ mod tests {
     fn append_feedback_passthrough_when_empty() {
         assert_eq!(append_feedback("scene text", None), "scene text");
         assert_eq!(append_feedback("scene text", Some("")), "scene text");
+    }
+
+    fn test_mark(id: &str, message_id: &str, quote: &str, note: Option<&str>) -> ImportantMark {
+        ImportantMark {
+            id: id.into(),
+            story_id: "story1".into(),
+            message_id: message_id.into(),
+            quoted_text: quote.into(),
+            note: note.map(str::to_owned),
+            char_start: None,
+            char_end: None,
+            is_orphaned: false,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            modified_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn append_marks_emits_manifest_with_notes() {
+        let marks = vec![
+            test_mark("k1", "m1", "the locket was her mother's", None),
+            test_mark(
+                "k2",
+                "m1",
+                "he never learned to swim",
+                Some("pays off later"),
+            ),
+        ];
+        let out = append_marks("scene text", &marks);
+        assert!(out.contains("[MARKED IMPORTANT — PRESERVE FAITHFULLY]"));
+        assert!(out.contains("- \"the locket was her mother's\""));
+        assert!(out.contains("- \"he never learned to swim\" (note: pays off later)"));
+    }
+
+    #[test]
+    fn append_marks_passthrough_when_empty_or_all_orphaned() {
+        assert_eq!(append_marks("scene", &[]), "scene");
+        let mut orphan = test_mark("k1", "m1", "gone", None);
+        orphan.is_orphaned = true;
+        assert_eq!(append_marks("scene", &[orphan]), "scene");
+    }
+
+    #[test]
+    fn marks_lookup_drops_orphaned_and_indexes_by_message() {
+        let mut orphan = test_mark("k2", "m1", "gone", None);
+        orphan.is_orphaned = true;
+        let lookup = MarksLookup::new(vec![test_mark("k1", "m1", "keep", None), orphan]);
+        assert!(!lookup.is_empty());
+        assert_eq!(lookup.for_message("m1").len(), 1);
+        assert!(lookup.for_message("m2").is_empty());
+    }
+
+    #[test]
+    fn append_marks_clause_handles_empty_si() {
+        assert_eq!(append_marks_clause(""), MARKS_PRESERVE_CLAUSE);
+        assert!(append_marks_clause("be an analyst").starts_with("be an analyst\n\n"));
+    }
+
+    #[test]
+    fn render_message_into_appends_manifest_after_feedback() {
+        let msg = model_row("m1", "2026-01-01T00:00:02Z", "prose", Some("more grit"));
+        let marks = vec![test_mark("k1", "m1", "keep this", None)];
+        let mut out = Vec::new();
+        render_message_into(&msg, &marks, &mut out).unwrap();
+        let text = &out[0].parts[0].text;
+        let fb = text.find("[WRITER FEEDBACK]").unwrap();
+        let mk = text.find("[MARKED IMPORTANT").unwrap();
+        assert!(fb < mk, "marks block must follow the feedback block");
     }
 
     #[test]
@@ -847,6 +1037,50 @@ mod tests {
     }
 
     #[test]
+    fn assemble_session_request_includes_marks_manifest_and_clause() {
+        let c = fresh_conn();
+        // One story user turn, marked.
+        let u1_c = UserContent {
+            plot_direction: "the locket was her mother's".into(),
+            ..Default::default()
+        };
+        insert_message(&c, &user_row("u1", "2026-01-01T00:00:01Z", &u1_c)).unwrap();
+        db_marks::insert_mark(
+            &c,
+            &ImportantMark {
+                id: "k1".into(),
+                story_id: "story1".into(),
+                message_id: "u1".into(),
+                quoted_text: "the locket was her mother's".into(),
+                note: Some("keep".into()),
+                char_start: None,
+                char_end: None,
+                is_orphaned: false,
+                created_at: "2026-01-01T00:00:02Z".into(),
+                modified_at: "2026-01-01T00:00:02Z".into(),
+            },
+        )
+        .unwrap();
+        insert_session(&c, "s1", "handover", Some("u1"));
+
+        let req = assemble_session_request(
+            &c,
+            SessionAssembleInputs {
+                session_id: "s1",
+                user_text: "Summarise.",
+                system_instruction: "be an analyst",
+                fake_user_prompt: "FAKE",
+            },
+        )
+        .unwrap();
+        assert!(req.contents.iter().any(|c| c.parts[0]
+            .text
+            .contains("[MARKED IMPORTANT — PRESERVE FAITHFULLY]")));
+        assert!(req.system_instruction.contains(MARKS_PRESERVE_CLAUSE));
+        assert!(req.system_instruction.starts_with("be an analyst"));
+    }
+
+    #[test]
     fn assemble_session_request_not_found_for_unknown_session() {
         let c = fresh_conn();
         let err = assemble_session_request(
@@ -957,7 +1191,9 @@ mod tests {
             user_row("u1", "2026-01-01T00:00:01Z", &u1_c),
             model_row("m1", "2026-01-01T00:00:02Z", "reply", None),
         ];
-        let out = build_history_with_accordion(&messages, &[], &[], "FAKE").unwrap();
+        let out =
+            build_history_with_accordion(&messages, &[], &[], "FAKE", &MarksLookup::default())
+                .unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].role, "user");
         assert!(out[0].parts[0].text.contains("p1"));
@@ -992,7 +1228,9 @@ mod tests {
             true,
             true,
         )];
-        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        let out =
+            build_history_with_accordion(&messages, &segs, &cps, "FAKE", &MarksLookup::default())
+                .unwrap();
         assert_eq!(out.len(), 2, "one fake-pair replaces the whole chapter");
         assert_eq!(out[0].role, "user");
         assert_eq!(out[0].parts[0].text, "FAKE");
@@ -1013,7 +1251,9 @@ mod tests {
         let cps = vec![cp("cpStart", None, true), cp("cpEnd", Some("m1"), false)];
         // Segment exists but has no summary — must not substitute.
         let segs = vec![segment("seg1", "cpStart", "cpEnd", None, true, true)];
-        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        let out =
+            build_history_with_accordion(&messages, &segs, &cps, "FAKE", &MarksLookup::default())
+                .unwrap();
         assert_eq!(out.len(), 2);
         assert!(out[0].parts[0].text.contains("p1"));
         assert_eq!(out[1].parts[0].text, "r1");
@@ -1040,7 +1280,9 @@ mod tests {
             false,
             false,
         )];
-        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        let out =
+            build_history_with_accordion(&messages, &segs, &cps, "FAKE", &MarksLookup::default())
+                .unwrap();
         assert_eq!(out.len(), 2);
         assert!(out[0].parts[0].text.contains("p1"));
     }
@@ -1156,7 +1398,9 @@ mod tests {
             true,
             true,
         )];
-        let out = build_history_with_accordion(&messages, &segs, &cps, "FAKE").unwrap();
+        let out =
+            build_history_with_accordion(&messages, &segs, &cps, "FAKE", &MarksLookup::default())
+                .unwrap();
         // fake-pair (2) + u2 + m2 = 4
         assert_eq!(out.len(), 4);
         assert_eq!(out[1].parts[0].text, "SEG SUMMARY");

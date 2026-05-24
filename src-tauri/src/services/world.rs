@@ -40,7 +40,7 @@ const DEFAULT_ACCENT_COLOR: &str = "#6b9f78";
 /// Display cache for the World Picker. The encrypted DB is the source of
 /// truth for everything except `tags`, which lives only here.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct WorldMeta {
     pub id: String,
     pub name: String,
@@ -54,14 +54,17 @@ pub struct WorldMeta {
 /// Patch payload for `update_world_meta` — Doc 03 §IPC Payload and Result
 /// Types. Optional fields; explicit `null` on `cover_image_path` clears it.
 #[derive(Debug, Clone, Default, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct WorldMetaPatch {
     pub name: Option<String>,
     pub tags: Option<Vec<String>>,
     pub accent_color: Option<String>,
     /// `Some(Some(path))` sets, `Some(None)` clears, `None` leaves untouched.
     /// Serialised via `serde` default — frontend sends `null` to clear.
+    /// `#[ts(type)]` collapses the `Option<Option<_>>` double-null ts-rs would
+    /// otherwise emit (`string | null | null`) to the single `string | null`.
     #[serde(default, deserialize_with = "deserialize_optional_field")]
+    #[ts(type = "string | null")]
     pub cover_image_path: Option<Option<String>>,
 }
 

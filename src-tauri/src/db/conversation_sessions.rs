@@ -18,7 +18,7 @@ use crate::error::LoomError;
 /// a JSON string; the frontend rarely needs to parse it (the cache rebuild
 /// path is backend-only).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct ConversationSession {
     pub id: String,
     pub story_id: String,

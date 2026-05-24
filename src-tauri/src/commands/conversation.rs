@@ -166,7 +166,7 @@ fn require_story(conn: &rusqlite::Connection, story_id: &str) -> Result<(), Loom
 /// Returned by `send_message` so the frontend can attach the optimistic user
 /// bubble to its persisted id and listen for its model counterpart.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct SendMessageResult {
     pub user_message_id: String,
     pub model_message_id: String,
@@ -585,7 +585,7 @@ pub async fn send_message(
         }
     };
 
-    let cancel_token = access::install_cancel_token(&state)?;
+    let cancel_token = access::try_install_cancel_token(&state)?;
     let user_message_id = user_id;
     let model_message_id = model_id;
 
@@ -723,6 +723,10 @@ async fn run_stream(
             e,
         ),
     }
+
+    // Release the in-flight slot for the next generation (CQ-03). Covers every
+    // outcome above — complete, cancelled, and failed.
+    let _ = access::clear_cancel_token(&state);
 }
 
 async fn spawn_cache_refresh(
@@ -918,6 +922,11 @@ pub async fn edit_user_message(
         Ok(())
     })?;
 
+    // The pivot user message's content changed in place — re-anchor or orphan
+    // its marks (Doc 30 §8). Downstream messages were truncated; their marks
+    // cascade-delete via the FK. Do this before `re_send_after_edit` consumes `app`.
+    crate::commands::marks::reeval_marks_for_message(&app, &state, &message_id)?;
+
     // Re-fire generation. Re-using send_message would double-insert the
     // user message, so we replicate just the streaming half.
     re_send_after_edit(app, story_id, new_content).await
@@ -976,7 +985,7 @@ async fn re_send_after_edit(
         insert_message(world_db, &model_msg)?;
         Ok((model_name, request, params))
     })?;
-    let cancel_token = access::install_cancel_token(&state)?;
+    let cancel_token = access::try_install_cancel_token(&state)?;
     let model_message_id = model_id;
 
     // Re-issue: there's no separate user message id here — the caller is
@@ -1033,6 +1042,8 @@ pub fn update_message_content(
     })?;
     mark_story_cache_stale_for_message(&app, &state, &message_id)?;
     mark_segment_stale_for_message(&app, &state, &message_id)?;
+    // Content changed in place — re-anchor or orphan this message's marks (Doc 30 §8).
+    crate::commands::marks::reeval_marks_for_message(&app, &state, &message_id)?;
     Ok(())
 }
 

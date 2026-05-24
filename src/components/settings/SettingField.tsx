@@ -1,7 +1,7 @@
 import { RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { validateField } from '@/lib/settingsSchema';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -58,7 +58,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
     (next: string) => {
       const save = chapter === 'world' ? saveWorld : saveApp;
       void save(spec.key, next).catch((e) => {
-        toast.error(e instanceof Error ? e.message : 'Could not save setting');
+        surfaceError(e, 'Could not save setting');
       });
     },
     [chapter, saveApp, saveWorld, spec.key],
@@ -91,7 +91,7 @@ export function SettingField({ spec, chapter }: SettingFieldProps) {
   function handleRevert() {
     if (timerRef.current) clearTimeout(timerRef.current);
     void clearOverride(spec.key).catch((e) => {
-      toast.error(e instanceof Error ? e.message : 'Could not revert override');
+      surfaceError(e, 'Could not revert override');
     });
   }
 

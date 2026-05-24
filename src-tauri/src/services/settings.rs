@@ -39,7 +39,7 @@ pub fn resolve<T: FromSettingValue>(
 /// consumes this object directly (theme, runtime gen params, telemetry-tab
 /// ceilings).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct ResolvedSettings {
     // Gemini
     pub text_model_name: String,
@@ -63,6 +63,7 @@ pub struct ResolvedSettings {
     pub accordion_color: String,
     pub checkpoint_color: String,
     pub feedback_color: String,
+    pub mark_color: String,
     // System Instructions
     pub story_si: String,
     pub handover_si: String,
@@ -73,6 +74,7 @@ pub struct ResolvedSettings {
     pub aux_slot_2_content: String,
     // App-only (world cannot override)
     pub has_api_key: bool,
+    #[ts(type = "number")]
     pub auto_lock_secs: u32,
     pub rate_limit_rpm: u32,
     pub rate_limit_tpm: u32,
@@ -111,6 +113,7 @@ pub fn resolve_all(
         accordion_color: resolve(world_conn, app_conn, K::AccordionColor)?,
         checkpoint_color: resolve(world_conn, app_conn, K::CheckpointColor)?,
         feedback_color: resolve(world_conn, app_conn, K::FeedbackColor)?,
+        mark_color: resolve(world_conn, app_conn, K::MarkColor)?,
         story_si: resolve(world_conn, app_conn, K::StorySi)?,
         handover_si: resolve(world_conn, app_conn, K::HandoverSi)?,
         consulting_si: resolve(world_conn, app_conn, K::ConsultingSi)?,
@@ -156,6 +159,7 @@ pub fn resolve_all_app_only(app_conn: &Connection) -> Result<ResolvedSettings, L
         accordion_color: g(K::AccordionColor)?,
         checkpoint_color: g(K::CheckpointColor)?,
         feedback_color: g(K::FeedbackColor)?,
+        mark_color: g(K::MarkColor)?,
         story_si: g(K::StorySi)?,
         handover_si: g(K::HandoverSi)?,
         consulting_si: g(K::ConsultingSi)?,
@@ -250,7 +254,8 @@ pub fn validate_setting(key: AppSettingKey, value: &str) -> Result<(), LoomError
         | K::GhostwriterColor
         | K::CheckpointColor
         | K::AccordionColor
-        | K::FeedbackColor => {
+        | K::FeedbackColor
+        | K::MarkColor => {
             if is_blank_or_hex(value) {
                 Ok(())
             } else {
@@ -307,7 +312,12 @@ pub fn world_tab_keys(tab: &str) -> &'static [AppSettingKey] {
             K::ContextTokenLimit,
         ],
         "system_instructions" => &[K::StorySi, K::HandoverSi, K::ConsultingSi],
-        "features" => &[K::GhostwriterColor, K::AccordionColor, K::FeedbackColor],
+        "features" => &[
+            K::GhostwriterColor,
+            K::AccordionColor,
+            K::FeedbackColor,
+            K::MarkColor,
+        ],
         _ => &[],
     }
 }
@@ -413,7 +423,7 @@ mod tests {
     #[test]
     fn world_tab_keys_known_and_unknown() {
         assert_eq!(world_tab_keys("appearance").len(), 2);
-        assert_eq!(world_tab_keys("features").len(), 3);
+        assert_eq!(world_tab_keys("features").len(), 4);
         assert!(world_tab_keys("templates").is_empty());
         assert!(world_tab_keys("nonsense").is_empty());
     }

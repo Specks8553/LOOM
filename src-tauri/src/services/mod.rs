@@ -8,6 +8,7 @@ pub mod file_api;
 pub mod gemini;
 pub mod ghostwriter;
 pub mod history;
+pub mod marks;
 pub mod modes;
 pub mod settings;
 pub mod settings_keys;

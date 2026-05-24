@@ -146,9 +146,9 @@ Story cache lives on `cache_state` (one row per story). Consulting cache lives o
 
 Messages are linear, ordered by `created_at`. Edit + regenerate = truncate-and-replace within scope (story-kind for story edits; session-scope for session edits). v2.0 hard-deletes; v2.1 will add reversible undo per `future/undo-redo.md` (D-09).
 
-### 10. All fonts bundled locally
+### 10. All fonts bundled locally; the WebView makes no network requests
 
-No external network requests except to `generativelanguage.googleapis.com`. CSP enforces this (`connect-src 'none'` in the WebView; Doc 04). Fonts are woff2 files in `src/assets/fonts/`.
+The WebView CSP `connect-src` is restricted to `ipc: http://ipc.localhost` — the frontend cannot reach any external host. Every external request the app makes is issued by the **Rust backend** (`reqwest`) to `generativelanguage.googleapis.com`; the frontend always goes through Tauri IPC, never the network directly. This is a platform-level boundary, not a convention (`tauri.conf.json` §security.csp; Doc 04 §Network Boundary). Fonts are woff2 files in `src/assets/fonts/` (`font-src 'self' data:`) — no font CDN.
 
 ---
 
@@ -160,7 +160,7 @@ Cannot be relaxed, deferred, or worked around. Any task that would violate these
 2. **API key** lives only in `AppState.api_key` and `app_settings.db`. Never in `localStorage`, `app_config.json`, frontend memory, URL params, or log output.
 3. **User content** (message text, feedback, document content, draft fields) is never logged. Log only IDs and metadata.
 4. **`app_config.json`** never contains the master key, API key, or any user content. Plaintext but content-empty.
-5. **No external network requests** except to `generativelanguage.googleapis.com`. Enforced by CSP.
+5. **No external network requests** except the Rust backend's calls to `generativelanguage.googleapis.com`. The WebView CSP `connect-src ipc: http://ipc.localhost` blocks all frontend network access (no external host reachable from JS).
 6. **New PBKDF2 salt + new key sentinel** generated on every password change. (200,000 iterations, 32-byte salt, HMAC-SHA256.)
 7. **Atomic file writes** for all config files (write `.tmp`, then `fs::rename`).
 

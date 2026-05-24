@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { createStoryCache, deleteStoryCache } from '@/lib/tauriApi/cache';
 import { getItemContent } from '@/lib/tauriApi/vault';
 import { formatTtl, useCacheStore } from '@/stores/cacheStore';
@@ -92,7 +93,7 @@ export function CacheContentsModal({ storyId, onClose }: CacheContentsModalProps
       await createStoryCache(storyId);
       toast.success('Cache refreshed');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not refresh cache');
+      surfaceError(e, 'Could not refresh cache');
     } finally {
       setBusy(false);
     }
@@ -105,7 +106,7 @@ export function CacheContentsModal({ storyId, onClose }: CacheContentsModalProps
       toast.success('Cache deleted');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete cache');
+      surfaceError(e, 'Could not delete cache');
     } finally {
       setBusy(false);
     }

@@ -1,7 +1,8 @@
 # 05 — Backend Modules
 
 > **Status:** Complete
-> **Last updated:** 2026-05-04 — D-18 (Coding Standards) propagation: cross-references to Doc 24 added for the `with_*` access helpers (SB-5), the typed `AppSettingKey` / `StoryStateKey` settings access (SB-1), the numbered-migrations system (SB-6), and the `tracing` logging crate. Doc 05 owns the canonical contracts; Doc 24 owns the rules. Full SB-4 (cancellation lifecycle) and SB-5 (helper signatures) subsections are scheduled for a dedicated Doc 05 amendment pass.
+> **Last updated:** 2026-05-23 — Phase 12.5 (HB-01): `LoomError` §updated to the **adjacently-tagged** serde representation (`#[serde(tag="kind", content="message")]`); the prior internally-tagged form could not serialize the ten newtype-of-`String` variants across IPC. `Validation` field renamed `kind` → `validation_kind` to match code. ts-rs now generates the consumed `src/lib/types.generated.ts` (SB-01) and CI diffs it (SB-02).
+> **Earlier:** 2026-05-04 — D-18 (Coding Standards) propagation: cross-references to Doc 24 added for the `with_*` access helpers (SB-5), the typed `AppSettingKey` / `StoryStateKey` settings access (SB-1), the numbered-migrations system (SB-6), and the `tracing` logging crate. Doc 05 owns the canonical contracts; Doc 24 owns the rules. Full SB-4 (cancellation lifecycle) and SB-5 (helper signatures) subsections are scheduled for a dedicated Doc 05 amendment pass.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: `services/cache.rs` and `services/file_api.rs` added to module map (HB-7); `services/settings.rs` export contract documented (HB-7); `LoomError` enum extended with `Forbidden` and `CacheCreate` variants (HB-6); structured `Validation { kind, key, reason }` payload via `ValidationKind` enum covers `ProtectedSentinel`, `InvalidSettingValue`, `NoBaseline` (HB-6).
 > **Earlier:** 2026-04-27 — consultant pass: `services/generation.rs` expanded into `services/generation/` submodule (one file per provider)
 
@@ -113,7 +114,7 @@ Defined in `error.rs`. The single error type for all Tauri commands. External er
 
 ```rust
 #[derive(Debug, thiserror::Error, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", content = "message", rename_all = "snake_case")]  // HB-01: adjacently tagged
 pub enum LoomError {
     #[error("Crypto error: {0}")]
     Crypto(String),           // key derivation, sentinel, AES-GCM failures
@@ -124,9 +125,9 @@ pub enum LoomError {
     #[error("Not found: {0}")]
     NotFound(String),         // requested ID does not exist
 
-    #[error("Validation error: {0}")]
+    #[error("Validation error: {reason}")]
     Validation {
-        kind: ValidationKind, // structured discriminator — see below
+        validation_kind: ValidationKind, // structured discriminator — see below
         key: Option<String>,  // setting key, item id, etc. — when applicable
         reason: String,       // human-readable explanation
     },
@@ -180,7 +181,7 @@ pub enum ValidationKind {
 - `serde_json::Error` → `LoomError::Serialization`
 - `reqwest::Error` → `LoomError::ApiError`
 
-Every Tauri command returns `Result<T, LoomError>`. The `thiserror` + `serde::Serialize` derive ensures the error message crosses the IPC boundary as a plain string the frontend can display. The frontend maps error variants to display rules per Doc 12 (Empty States and Errors).
+Every Tauri command returns `Result<T, LoomError>`. **Serde representation (HB-01):** the enum is **adjacently tagged** — `#[serde(tag = "kind", content = "message")]` — so it crosses IPC as `{ "kind": "<snake_case_variant>", "message": <payload> }`. The String variants put their text in `message` (`{ "kind": "rate_limited", "message": "…" }`); the one struct variant nests its fields (`{ "kind": "validation", "message": { "validation_kind", "key", "reason" } }`). **Internal tagging (`tag = "kind"` alone) was the prior form and is forbidden here:** serde cannot serialize an internally-tagged newtype variant wrapping a bare `String`, so ten of the eleven variants failed to serialize at runtime and the structured error never reached the frontend. The frontend reads `.kind` and maps to display rules per Doc 12 §Error Display Hierarchy §0. A per-variant serialization test in `error.rs` locks this contract; the type is ts-rs-generated into `src/lib/types.generated.ts` and CI-drift-checked.
 
 ---
 

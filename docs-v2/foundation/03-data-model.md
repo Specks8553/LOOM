@@ -1,7 +1,10 @@
 # 03 — Data Model
 
 > **Status:** Complete
-> **Last updated:** 2026-05-16 — Phase 11 reconciliation: the six visual colour keys (`bubble_user_color`, `bubble_ai_color`, `ghostwriter_color`, `checkpoint_color`, `accordion_color`, `feedback_color`) are now full `app_settings` keys *and* world-overridable — they were previously listed world-only, which contradicted Doc 20 §Features ("App + World") and `ResolvedSettings`'s cascade resolution. The cascade is uniform for every visual key; empty feature/bubble colours are resolved by `applyTheme` (feature → accent, bubble → token default; `feedback_color` defaults to a literal `#f59e0b`).
+> **Last updated:** 2026-05-23 — D-25 (Marks): new `important_marks` table — verbatim-quote "mark as important" annotations on story user/model bubbles that all summary AIs (accordion, handover, future) must preserve. Adds `mark_color` to `app_settings` + the world-overridable list; `ImportantMark` interface; `mark_color` on `ResolvedSettings`. See Doc 30.
+> **Earlier:** 2026-05-23 — D-24 accordion collapse/summary addendum: `accordion_segments.is_collapsed` / `use_summary` comments (SQL + TS) clarified — collapse is now valid regardless of summary presence; fake-pair is used iff `(is_collapsed OR use_summary) AND summary IS NOT NULL`, so a collapsed-no-summary segment sends full bubbles. **No DDL change.**
+> **Earlier:** 2026-05-23 — Phase 12.5 (SB-01 / SB-02 / HB-01): §IPC Payload and Result Types now points at the split artefact — ts-rs generates `src/lib/types.generated.ts` (CI-drift-checked), re-exported through the hand-written barrel `src/lib/types.ts`; and records that `LoomError` crosses IPC adjacently-tagged as `{ "kind", "message" }`.
+> **Earlier:** 2026-05-16 — Phase 11 reconciliation: the six visual colour keys (`bubble_user_color`, `bubble_ai_color`, `ghostwriter_color`, `checkpoint_color`, `accordion_color`, `feedback_color`) are now full `app_settings` keys *and* world-overridable — they were previously listed world-only, which contradicted Doc 20 §Features ("App + World") and `ResolvedSettings`'s cascade resolution. The cascade is uniform for every visual key; empty feature/bubble colours are resolved by `applyTheme` (feature → accent, bubble → token default; `feedback_color` defaults to a literal `#f59e0b`).
 > **Earlier:** 2026-05-16 — D-21: `inline_context_fallback` app-settings key added (default `false`) — controls cache-create-failure behaviour (Doc 22 §Delivery Model).
 > **Earlier:** 2026-05-04 — Feedback design pass (D-17): `feedback_color` added to world-overridable `settings` keys and to `ResolvedSettings`; default `#f59e0b`. Drives the `--color-feedback` triad per Doc 28.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution batch: `attachment_history.action` renamed to `event` and `reason TEXT NULL` column added (HB-2); `prompt_handover_seed` and `prompt_consulting_seed` added to `app_settings` keys (HB-5); `ghostwriter_frame_color` renamed to `ghostwriter_color` (CD-2); `story_state.active_session_id` known-key added (CD-9); `WorldMetaPatch`, `ResolvedSettings`, `Telemetry`, `AliveCacheRow`, `UnlockResult`, `GhostwriterResponse`, `RevertResult` TypeScript interfaces added (IP-3, IP-9 — annotated as ts-rs-generated authoritative); `GhostwriterEdit` interface shape updated to match Doc 17 (HB-1); `MessageBlock` flagged v2.1-reserved (SD-6).
@@ -199,11 +202,15 @@ CREATE TABLE accordion_segments (
     end_cp_id       TEXT NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
     summary         TEXT,               -- AI-generated or manually-edited; NULL = not yet generated
     is_collapsed    INTEGER NOT NULL DEFAULT 0,
-                      -- UI state: 1 = banner shows summary card; 0 = expanded (bubbles visible)
+                      -- UI state: 1 = banner folded (summary card if a summary exists,
+                      -- else a "summary needed" card); 0 = expanded (bubbles visible).
+                      -- Valid regardless of summary presence (D-24) — folding without a
+                      -- summary is a pure visual declutter with no API/cache effect.
     use_summary     INTEGER NOT NULL DEFAULT 1,
                       -- API state: 1 = history assembly substitutes the fake-pair; 0 = full bubbles sent.
-                      -- When is_collapsed = 1, fake-pair is forced regardless of this value
-                      -- (see Doc 16 §History Assembly).
+                      -- Fake-pair is used iff (is_collapsed OR use_summary) AND summary IS NOT NULL.
+                      -- So a collapsed segment with summary IS NULL still sends full bubbles
+                      -- (see Doc 16 §History Assembly / §Banner state matrix).
     is_stale        INTEGER NOT NULL DEFAULT 0, -- 1 = summary outdated; needs regeneration
     summarised_at   TEXT,               -- ISO 8601; NULL = never summarised
     created_at      TEXT NOT NULL,
@@ -212,6 +219,35 @@ CREATE TABLE accordion_segments (
 ```
 
 **v2.0 changes from v1.0:** `branch_leaf_id` removed (no branching). `use_summary` added to decouple UI collapse from API substitution — writers can read raw bubbles in the Theater while still saving tokens, or vice versa. See Doc 16 §Banners for the full state matrix.
+
+---
+
+### `important_marks`
+
+Writer "mark as important" annotations on individual story bubbles. A mark is a verbatim passage the writer selected inside a story user or model bubble; **all summary AIs (accordion summarisation, handover, and any future summary feature) are instructed to preserve marked passages**. Marks are surfaced to those AIs only — they are never injected into normal story or session sends, so they have **no cache impact** on the story cache. Owned by Doc 30.
+
+```sql
+CREATE TABLE important_marks (
+    id           TEXT PRIMARY KEY,    -- UUID
+    story_id     TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    message_id   TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    quoted_text  TEXT NOT NULL,       -- verbatim marked span; the SOURCE OF TRUTH for the
+                                       -- summary handoff and for re-find highlighting
+    note         TEXT,                -- optional writer note; rendered into the manifest line
+    char_start   INTEGER,             -- rendering hint into messages.content (story/session AI
+    char_end     INTEGER,             -- bubbles only). NULL for story-user bubbles (multi-field
+                                       -- render, no single-string offset) and for orphaned marks
+    is_orphaned  INTEGER NOT NULL DEFAULT 0,
+                                       -- 1 = host message content mutated and quoted_text no
+                                       -- longer matches; the mark is EXCLUDED from the handoff
+                                       -- manifest and surfaced as a warning on the bubble dot
+                                       -- until the writer re-marks or removes it (Doc 30 §Orphaning)
+    created_at   TEXT NOT NULL,
+    modified_at  TEXT NOT NULL
+);
+```
+
+A mark belongs to exactly one message. Hard-deleting the message (story edit/regenerate truncation cascade, or explicit delete) drops its marks via `ON DELETE CASCADE`. In-place content mutation of the host message (Ghostwriter accept, model-message edit, user-message edit-without-regenerate) does **not** delete the mark — it sets `is_orphaned = 1` (Doc 30 §Orphaning). Adding, removing, or orphaning a mark inside a closed accordion segment marks that segment stale (Doc 16 §Stale Triggers).
 
 ---
 
@@ -247,6 +283,7 @@ CREATE TABLE app_settings (
 | `checkpoint_color` | `""` | Checkpoint marker colour; empty tracks the accent |
 | `accordion_color` | `""` | Accordion card colour; empty tracks the accent |
 | `feedback_color` | `#f59e0b` | Feedback annotation colour (Doc 28); does **not** track the accent |
+| `mark_color` | `#ec4899` | Mark highlight + indicator-dot colour (Doc 30); does **not** track the accent. ⚠️ provisional — must not collide with feedback-amber (`#f59e0b`) or warning-red, since the same dot renders a warning state when a mark is orphaned |
 | `auto_lock_secs` | `900` | Auto-lock timer in seconds (15 min default) |
 | `rate_limit_rpm` | `10` | Requests per minute limit |
 | `rate_limit_tpm` | `250000` | Tokens per minute limit |
@@ -307,6 +344,7 @@ CREATE TABLE settings (
 | `checkpoint_color` | ✅ | Checkpoint marker color |
 | `accordion_color` | ✅ | Accordion card color |
 | `feedback_color` | ✅ | Feedback annotation colour. Drives `--color-feedback` and its derived `-hover` / `-subtle` tokens. Default `#f59e0b` (Doc 28). |
+| `mark_color` | ✅ | Mark colour. Drives `--color-mark` and its derived `-hover` / `-subtle` tokens. Default `#ec4899` (Doc 30). |
 | `story_si` | ✅ | World story mode system instruction |
 | `handover_si` | ✅ | World handover mode system instruction |
 | `consulting_si` | ✅ | World consulting mode system instruction |
@@ -621,8 +659,8 @@ interface AccordionSegment {
   start_cp_id: string;
   end_cp_id: string;
   summary: string | null;
-  is_collapsed: boolean;          // UI: 1 = banner shows summary card; 0 = bubbles visible
-  use_summary: boolean;           // API: 1 = inject fake-pair; 0 = full bubbles. Forced ON when is_collapsed=1.
+  is_collapsed: boolean;          // UI: true = banner folded (summary card, or "summary needed" card when summary===null); false = bubbles visible
+  use_summary: boolean;           // API: fake-pair iff (is_collapsed || use_summary) && summary !== null; else full bubbles
   is_stale: boolean;
   summarised_at: string | null;
   created_at: string;
@@ -632,6 +670,25 @@ interface AccordionSegment {
 interface AccordionState {
   checkpoints: Checkpoint[];
   segments: AccordionSegment[];   // closed segments only
+}
+```
+
+### Marks
+
+```typescript
+// A "mark as important" annotation on a story user/model bubble. Owned by Doc 30.
+// Rust source: db/marks.rs::ImportantMark.
+interface ImportantMark {
+  id: string;
+  story_id: string;
+  message_id: string;
+  quoted_text: string;            // verbatim marked passage — source of truth for handoff + highlight
+  note: string | null;            // optional writer note
+  char_start: number | null;      // offsets into messages.content (AI bubbles); null for user bubbles / orphaned
+  char_end: number | null;
+  is_orphaned: boolean;           // host message changed; excluded from handoff, shown as a dot warning
+  created_at: string;
+  modified_at: string;
 }
 ```
 
@@ -706,7 +763,7 @@ interface ConversationSession {
 
 ### IPC Payload and Result Types
 
-These TypeScript interfaces describe the shapes that cross the Tauri IPC boundary as Tauri command results, command arguments, or event payloads. **Authoritative source: the Rust struct in the named module — generated to TypeScript via `ts-rs`.** The shapes below are documentation; the build-time-generated `src/lib/types.ts` is the consumed artefact. CI verifies the two match.
+These TypeScript interfaces describe the shapes that cross the Tauri IPC boundary as Tauri command results, command arguments, or event payloads. **Authoritative source: the Rust struct in the named module — generated to TypeScript via `ts-rs`.** The shapes below are documentation; the build-time-generated **`src/lib/types.generated.ts`** is the consumed artefact, re-exported through the hand-written barrel `src/lib/types.ts` (which adds the few frontend-only types ts-rs can't generate — event payloads emitted via inline JSON, TEXT-stored string unions, and the diff/selection helpers). CI runs the ts-rs export then `git diff --exit-code src/lib/types.generated.ts` to verify Rust and TS match (SB-01 / SB-02). The command error type `LoomError` crosses IPC adjacently-tagged as `{ "kind", "message" }` (Doc 05 §LoomError, HB-01).
 
 ```typescript
 // Returned by `update_world_meta`; Rust source: db/vault.rs::WorldMetaPatch
@@ -743,6 +800,7 @@ interface ResolvedSettings {
   accordion_color: string;
   checkpoint_color: string;
   feedback_color: string;
+  mark_color: string;
   // System Instructions
   story_si: string;
   handover_si: string;
@@ -820,6 +878,7 @@ interface RevertResult {
 - A `conversation_sessions` row with `kind = 'handover'` always has `cache_name`, `cache_expiry_at` NULL and `cache_is_stale = 0` (handover never caches).
 - A consulting session has at most one cache alive at any time. Switching away from a consulting session drops its cache; re-entering rebuilds from `entry_snapshot`.
 - `cache_state.last_cached_message_id`, when non-NULL, references a `kind='story'` message in the same story (enforced by application logic — SQLite FK does not constrain on `kind`).
+- `important_marks.quoted_text` is never empty. `char_start` / `char_end`, when non-NULL, satisfy `0 <= char_start < char_end` and index into the host message's `content`; they are NULL for story-user-bubble marks and for any mark with `is_orphaned = 1`. An orphaned mark is never emitted into a summary handoff manifest (Doc 30).
 
 ---
 

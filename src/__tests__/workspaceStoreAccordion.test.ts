@@ -86,13 +86,18 @@ describe('workspaceStore — accordion actions (Doc 16)', () => {
     expect(useWorkspaceStore.getState().summarisingSegmentIds.has('seg-1')).toBe(false);
   });
 
-  it('summariseSegment clears the in-flight id even when the call rejects', async () => {
+  it('summariseSegment surfaces the error and clears in-flight state on rejection', async () => {
     vi.mocked(tauriCore.invoke).mockImplementation((cmd: string) => {
       if (cmd === 'summarise_segment') return Promise.reject(new Error('boom'));
       return Promise.resolve(undefined);
     });
-    await expect(useWorkspaceStore.getState().summariseSegment('seg-1')).rejects.toThrow('boom');
+    // CQ-11: summarise now routes failures through surfaceError and resolves
+    // null (AccordionBanner does not catch — swallowing avoids an unhandled
+    // rejection). The in-flight id and the global isGenerating flag both clear.
+    const result = await useWorkspaceStore.getState().summariseSegment('seg-1');
+    expect(result).toBeNull();
     expect(useWorkspaceStore.getState().summarisingSegmentIds.has('seg-1')).toBe(false);
+    expect(useWorkspaceStore.getState().isGenerating).toBe(false);
   });
 
   it('clear() drops accordion state', () => {

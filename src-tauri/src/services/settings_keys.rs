@@ -28,6 +28,7 @@ pub enum AppSettingKey {
     CheckpointColor,
     AccordionColor,
     FeedbackColor,
+    MarkColor,
     AutoLockSecs,
     RateLimitRpm,
     RateLimitTpm,
@@ -87,6 +88,7 @@ impl AppSettingKey {
             Self::CheckpointColor => "checkpoint_color",
             Self::AccordionColor => "accordion_color",
             Self::FeedbackColor => "feedback_color",
+            Self::MarkColor => "mark_color",
             Self::AutoLockSecs => "auto_lock_secs",
             Self::RateLimitRpm => "rate_limit_rpm",
             Self::RateLimitTpm => "rate_limit_tpm",
@@ -134,6 +136,9 @@ impl AppSettingKey {
             // Feedback uses a stable amber by default — it does not track
             // accent (Doc 28 / Doc 20 §Features).
             Self::FeedbackColor => "#f59e0b",
+            // Mark colour: a stable rose; does not track accent and must not
+            // collide with feedback-amber or warning-red (Doc 30 §12). ⚠️ provisional.
+            Self::MarkColor => "#ec4899",
             Self::AutoLockSecs => "900",
             Self::RateLimitRpm => "10",
             Self::RateLimitTpm => "250000",
@@ -192,6 +197,7 @@ impl AppSettingKey {
         Self::CheckpointColor,
         Self::AccordionColor,
         Self::FeedbackColor,
+        Self::MarkColor,
         Self::AutoLockSecs,
         Self::RateLimitRpm,
         Self::RateLimitTpm,

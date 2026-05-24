@@ -180,23 +180,73 @@ pub fn set_app_phase(state: &AppState, phase: AppPhase) -> Result<(), LoomError>
     Ok(())
 }
 
-/// Install a fresh cancellation token, returning a clone for the worker.
-/// Any previously-installed token is dropped; cancelling it after this point
-/// is a no-op (SB-4 — Doc 05 §Cancellation Lifecycle).
-pub fn install_cancel_token(state: &AppState) -> Result<CancellationToken, LoomError> {
-    let token = CancellationToken::new();
+/// Install a fresh cancellation token for a new generation, returning a clone
+/// for the worker. **Rejects if a generation is already in flight** (CQ-03 —
+/// Architecture Wall #6: one model call at a time across the whole app). A
+/// token is installed iff a generation is running: every generation path clears
+/// it on completion (`clear_cancel_token`, called by streaming workers and by
+/// the `GenerationGuard` for in-command generations).
+pub fn try_install_cancel_token(state: &AppState) -> Result<CancellationToken, LoomError> {
     let mut guard = state.cancel_tx.lock().map_err(poison)?;
+    if guard.is_some() {
+        return Err(LoomError::Validation {
+            validation_kind: ValidationKind::Generic,
+            key: Some("cancel_tx".into()),
+            reason: "A generation is already in progress.".into(),
+        });
+    }
+    let token = CancellationToken::new();
     *guard = Some(token.clone());
     Ok(token)
 }
 
-/// Signal cancellation on the currently-installed token, if any.
+/// Clear the installed cancellation token, releasing the in-flight slot so the
+/// next generation may start. Idempotent. Called by streaming workers at the end
+/// of `run_stream` (all outcomes) and by `GenerationGuard::drop`.
+pub fn clear_cancel_token(state: &AppState) -> Result<(), LoomError> {
+    let mut guard = state.cancel_tx.lock().map_err(poison)?;
+    *guard = None;
+    Ok(())
+}
+
+/// Signal cancellation on the currently-installed token, if any. Does not clear
+/// the slot — the in-flight worker clears it when it observes the cancellation
+/// and finalises.
 pub fn cancel_current(state: &AppState) -> Result<(), LoomError> {
     let guard = state.cancel_tx.lock().map_err(poison)?;
     if let Some(token) = guard.as_ref() {
         token.cancel();
     }
     Ok(())
+}
+
+/// RAII guard for a generation that runs entirely within a command's scope
+/// (non-streaming: ghostwriter, accordion summarise). Installs a cancellation
+/// token on creation — rejecting if one is already in flight (Wall #6) — and
+/// clears it on drop, so every return path (including `?` and early returns)
+/// releases the in-flight slot.
+pub struct GenerationGuard<'a> {
+    state: &'a AppState,
+    token: CancellationToken,
+}
+
+impl GenerationGuard<'_> {
+    /// A clone of the installed token, to hand to the Gemini call.
+    pub fn token(&self) -> CancellationToken {
+        self.token.clone()
+    }
+}
+
+impl Drop for GenerationGuard<'_> {
+    fn drop(&mut self) {
+        let _ = clear_cancel_token(self.state);
+    }
+}
+
+/// Begin a scoped (in-command) generation. Errors if one is already in flight.
+pub fn begin_generation(state: &AppState) -> Result<GenerationGuard<'_>, LoomError> {
+    let token = try_install_cancel_token(state)?;
+    Ok(GenerationGuard { state, token })
 }
 
 #[cfg(test)]
@@ -240,22 +290,47 @@ mod tests {
     #[test]
     fn install_then_cancel_marks_token_cancelled() {
         let state = AppState::default();
-        let token = install_cancel_token(&state).unwrap();
+        let token = try_install_cancel_token(&state).unwrap();
         assert!(!token.is_cancelled());
         cancel_current(&state).unwrap();
         assert!(token.is_cancelled());
     }
 
     #[test]
-    fn new_token_supersedes_old_one() {
+    fn second_install_is_rejected_while_one_in_flight() {
+        // CQ-03 — Wall #6: a second generation while one is in flight is rejected
+        // server-side, not silently superseded.
         let state = AppState::default();
-        let first = install_cancel_token(&state).unwrap();
-        let second = install_cancel_token(&state).unwrap();
-        cancel_current(&state).unwrap();
-        // Cancel hits the *current* token, which is `second`. The first is
-        // already dropped from state and unaffected.
-        assert!(second.is_cancelled());
-        assert!(!first.is_cancelled());
+        let _first = try_install_cancel_token(&state).unwrap();
+        let err = try_install_cancel_token(&state).unwrap_err();
+        match err {
+            LoomError::Validation { key, reason, .. } => {
+                assert_eq!(key.as_deref(), Some("cancel_tx"));
+                assert!(reason.contains("already in progress"));
+            }
+            other => panic!("expected Validation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clear_releases_the_in_flight_slot() {
+        let state = AppState::default();
+        let _first = try_install_cancel_token(&state).unwrap();
+        clear_cancel_token(&state).unwrap();
+        // Slot released — a fresh generation may install again.
+        assert!(try_install_cancel_token(&state).is_ok());
+    }
+
+    #[test]
+    fn generation_guard_clears_on_drop() {
+        let state = AppState::default();
+        {
+            let _guard = begin_generation(&state).unwrap();
+            // Second begin rejected while the guard is alive.
+            assert!(begin_generation(&state).is_err());
+        }
+        // Guard dropped → slot released.
+        assert!(begin_generation(&state).is_ok());
     }
 
     #[test]

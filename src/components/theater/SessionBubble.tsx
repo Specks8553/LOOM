@@ -1,6 +1,10 @@
+import { Copy, Sparkles, Undo2 } from 'lucide-react';
+
+import { useContextMenu } from '@/components/shared/ContextMenu';
 import { GhostwriterBubble } from '@/components/theater/GhostwriterBubble';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+import type { MenuItem } from '@/components/shared/ContextMenu';
 import type { ChatMessage } from '@/lib/types';
 
 interface SessionBubbleProps {
@@ -35,6 +39,7 @@ export function SessionBubble({ message, streaming = false }: SessionBubbleProps
   const enterGhostwriter = useWorkspaceStore((s) => s.enterGhostwriter);
   const revertGhostwriter = useWorkspaceStore((s) => s.revertGhostwriter);
   const isGenerating = useWorkspaceStore((s) => s.isGenerating);
+  const { showContextMenu } = useContextMenu();
 
   const isUser = message.role === 'user';
   const showThinkingHint = streaming && message.content.length === 0;
@@ -55,8 +60,35 @@ export function SessionBubble({ message, streaming = false }: SessionBubbleProps
     enterGhostwriter(message.id);
   }
 
+  function handleContextMenu(e: React.MouseEvent) {
+    // Doc 11 §Menu — session user bubbles have no menu; streaming suppressed.
+    if (isUser || streaming) return;
+    const items: MenuItem[] = [];
+    if (!isBlocks) {
+      items.push({ label: 'Ghostwriter…', icon: Sparkles, onClick: handleGhostwriter });
+    }
+    items.push({
+      label: 'Copy text',
+      icon: Copy,
+      onClick: () => void navigator.clipboard.writeText(message.content),
+    });
+    if (historyLen > 0) {
+      items.push({ label: '', separator: true, onClick: () => {} });
+      items.push({
+        label: 'Revert Ghostwriter',
+        icon: Undo2,
+        disabled: isGenerating,
+        onClick: () => void revertGhostwriter(message.id),
+      });
+    }
+    showContextMenu(e, items);
+  }
+
   return (
-    <div className="group relative mx-auto w-full max-w-[80%] py-2">
+    <div
+      onContextMenu={handleContextMenu}
+      className="group relative mx-auto w-full max-w-[80%] py-2"
+    >
       <div
         className={`rounded-md border border-[var(--color-border)] p-3 text-[14px] leading-relaxed ${
           isUser
@@ -67,7 +99,13 @@ export function SessionBubble({ message, streaming = false }: SessionBubbleProps
         {showThinkingHint ? (
           <span className="text-[var(--color-text-muted)]">…</span>
         ) : (
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div
+            data-loom-selectable={isUser || isBlocks ? undefined : message.id}
+            data-loom-bubble-kind={isUser || isBlocks ? undefined : 'session-ai'}
+            className="whitespace-pre-wrap"
+          >
+            {message.content}
+          </div>
         )}
         {streaming && message.content.length > 0 && (
           <span

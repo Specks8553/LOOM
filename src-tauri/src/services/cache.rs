@@ -28,7 +28,8 @@ use crate::db::messages::{list_story_messages, ChatMessage};
 use crate::db::vault::VaultItemMeta;
 use crate::error::LoomError;
 use crate::services::history::{
-    append_feedback, build_history_with_accordion, render_user_content, GeminiContent, UserContent,
+    append_feedback, build_history_with_accordion, render_user_content, GeminiContent, MarksLookup,
+    UserContent,
 };
 use crate::services::settings::resolve;
 use crate::services::settings_keys::AppSettingKey;
@@ -71,12 +72,13 @@ pub struct CacheRecord {
 /// Story rows have `session_id = None`; consulting rows (added in 6C) carry
 /// the active session id + name.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AliveCacheRow {
     pub story_id: String,
     pub story_name: String,
     pub session_id: Option<String>,
     pub session_name: Option<String>,
+    #[ts(type = "number")]
     pub total_tokens: i64,
     pub expiry_at: String,
     pub is_stale: bool,
@@ -299,11 +301,15 @@ pub fn build_story_prefix(inputs: StoryPrefixInputs<'_>) -> Result<CachePrefix, 
     //    §History Assembly). The high-water id is still the chronologically
     //    last underlying message, not the fake-pair, so cached-prefix
     //    overlap checks line up with what's actually persisted.
+    // Cache prefixes never carry marks — marks are summary-only and must leave
+    // the story cache byte-identical (Doc 30 §6/§9). Consulting (the one cached
+    // summary mode) is deferred for v2.0 to keep the prefix hash deterministic.
     let history_contents = build_history_with_accordion(
         inputs.history,
         inputs.segments,
         inputs.checkpoints,
         inputs.fake_user_prompt,
+        &MarksLookup::default(),
     )?;
     contents.extend(history_contents);
     let last_id = inputs.history.last().map(|m| m.id.clone());
@@ -462,7 +468,7 @@ pub fn build_cache_prefix(
 /// the prefix is still returned, and the caller surfaces these via a
 /// `session_cache_diverged` event for the frontend toast.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct SessionDivergence {
     pub kind: SessionDivergenceKind,
     /// The id of the message / doc / segment in question. Empty for
@@ -472,7 +478,7 @@ pub struct SessionDivergence {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub enum SessionDivergenceKind {
     /// The snapshot referenced a story-kind message that no longer exists
     /// (writer hard-deleted it via the cached-message warning path).
@@ -1106,12 +1112,21 @@ mod tests {
         cache_name: Option<&str>,
     ) {
         let snap_json = serde_json::to_string(snapshot).unwrap();
+        // Anchor to the snapshot's last story message only if it still exists —
+        // the `entry_message_id` FK (ON DELETE SET NULL) forbids a dangling
+        // reference. A snapshot pointing at a since-deleted message would have a
+        // NULL anchor in production; divergence detection reads the snapshot
+        // JSON, not this column.
+        let entry_message_id = snapshot.story_message_ids.last().cloned().filter(|mid| {
+            c.query_row("SELECT 1 FROM messages WHERE id = ?1", [mid], |_| Ok(()))
+                .is_ok()
+        });
         let row = crate::db::conversation_sessions::ConversationSession {
             id: id.into(),
             story_id: "story1".into(),
             kind: "consulting".into(),
             name: format!("Consulting {id}"),
-            entry_message_id: snapshot.story_message_ids.last().cloned(),
+            entry_message_id,
             entry_snapshot: snap_json,
             is_collapsed: false,
             cache_name: cache_name.map(str::to_owned),

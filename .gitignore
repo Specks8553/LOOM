@@ -34,5 +34,10 @@ Thumbs.db
 app_config.json
 *.loom-backup
 
+# local tool state (not part of the repo)
+.claude/worktrees/
+.serena/
+*.tsbuildinfo
+
 # Real production icons land in Phase 13 (Doc 26). The placeholder
 # `src-tauri/icons/icon.ico` IS committed so tauri-build runs out of the box.

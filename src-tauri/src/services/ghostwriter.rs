@@ -24,7 +24,7 @@ use crate::db::messages::{
 };
 use crate::error::LoomError;
 use crate::services::history::{
-    build_history_with_accordion, render_message_into, AssembledRequest, GeminiContent,
+    build_history_with_accordion, render_message_into, AssembledRequest, GeminiContent, MarksLookup,
 };
 
 /// Default system instruction baseline. Used when `app_settings.prompt_ghostwriter`
@@ -52,7 +52,7 @@ Rules:
 /// Stored as one element in the `messages.ghostwriter_history` JSON array.
 /// Wire-equivalent name in IPC payloads is `GhostwriterEditRecord` (IP-5).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct GhostwriterEdit {
     pub edited_at: String,
     pub original_content: String,
@@ -182,7 +182,15 @@ fn assemble_story_prefix(
         .collect();
     let segments = db_accordion::list_segments(conn, &edited.story_id)?;
     let checkpoints = db_accordion::list_checkpoints(conn, &edited.story_id)?;
-    build_history_with_accordion(&truncated, &segments, &checkpoints, fake_user_prompt)
+    // Ghostwriter is a targeted-revision AI, not a summary AI — marks are not
+    // injected (Doc 30 §1/§6). Pass an empty lookup.
+    build_history_with_accordion(
+        &truncated,
+        &segments,
+        &checkpoints,
+        fake_user_prompt,
+        &MarksLookup::default(),
+    )
 }
 
 /// Session-kind history: story-up-to-`entry_message_id` (with accordion
@@ -210,8 +218,13 @@ fn assemble_session_prefix(
     let story_history = list_story_messages_up_to(conn, &session.story_id, boundary.as_deref())?;
     let segments = db_accordion::list_segments(conn, &session.story_id)?;
     let checkpoints = db_accordion::list_checkpoints(conn, &session.story_id)?;
-    let mut contents =
-        build_history_with_accordion(&story_history, &segments, &checkpoints, fake_user_prompt)?;
+    let mut contents = build_history_with_accordion(
+        &story_history,
+        &segments,
+        &checkpoints,
+        fake_user_prompt,
+        &MarksLookup::default(),
+    )?;
 
     let session_history = list_session_messages(conn, session_id)?;
     for msg in &session_history {
@@ -222,7 +235,8 @@ fn assemble_session_prefix(
         }
         // Session bubbles render plain text (Doc 23 — handover/consulting use a
         // single free-text field). Feedback append still applies to model turns.
-        render_message_into(msg, &mut contents)?;
+        // No marks on session bubbles, and Ghostwriter isn't a summary AI.
+        render_message_into(msg, &[], &mut contents)?;
     }
     Ok(contents)
 }
