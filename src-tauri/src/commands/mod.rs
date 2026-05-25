@@ -10,6 +10,7 @@ pub mod auth;
 pub mod cache;
 pub mod conversation;
 pub mod ghostwriter;
+pub mod marks;
 pub mod modes;
 pub mod settings;
 pub mod vault;

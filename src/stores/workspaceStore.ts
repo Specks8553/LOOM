@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { diffWords } from '@/lib/diff';
+import { errorMessage, surfaceError, surfaceGenerationError } from '@/lib/errors';
 import {
   clearSegmentSummary as ipcClearSegmentSummary,
   createCheckpoint as ipcCreateCheckpoint,
@@ -33,6 +34,12 @@ import {
   sendGhostwriterRequest as ipcSendGhostwriter,
 } from '@/lib/tauriApi/ghostwriter';
 import {
+  addMark as ipcAddMark,
+  listMarks as ipcListMarks,
+  removeMark as ipcRemoveMark,
+  updateMarkNote as ipcUpdateMarkNote,
+} from '@/lib/tauriApi/marks';
+import {
   cancelSessionGeneration as ipcCancelSessionGeneration,
   sendSessionMessage as ipcSendSessionMessage,
 } from '@/lib/tauriApi/modes';
@@ -50,6 +57,7 @@ import type {
   DiffSpan,
   GhostwriterEdit,
   GhostwriterSelection,
+  ImportantMark,
   InputDraft,
   TokenEstimate,
   UserContent,
@@ -153,6 +161,11 @@ interface WorkspaceState {
    *  the `FeedbackStrip` component. */
   feedbackEditingMessageId: string | null;
 
+  // --- Phase 14: Marks (Doc 30) ---
+  /** Every mark for the active story (both roles, including orphaned). Loaded
+   *  with messages; per-bubble rendering filters by `message_id`. */
+  marks: ImportantMark[];
+
   // --- Actions ---
   setIsGenerating(val: boolean): void; // legacy seam — Phase 3 keeps it for any non-IPC callers
   setActiveStory(storyId: string | null): Promise<void>;
@@ -195,10 +208,11 @@ interface WorkspaceState {
   setSegmentCollapsed(segmentId: string, collapsed: boolean): Promise<void>;
   setSegmentUseSummary(segmentId: string, useSummary: boolean): Promise<void>;
   clearSegmentSummary(segmentId: string): Promise<void>;
-  /** Triggers a non-streaming Gemini summarisation. Sets the segment id in
-   *  `summarisingSegmentIds`; the global `isGenerating` flag is NOT raised by
-   *  the frontend (the backend gates this via the cancellation token install).
-   *  Resolves to the new summary, or `null` on cancellation. */
+  /** Triggers a non-streaming Gemini summarisation. Raises the global
+   *  `isGenerating` flag (Architecture Wall #6 — one model call at a time;
+   *  CQ-11) in addition to adding the segment id to `summarisingSegmentIds`
+   *  for the per-segment spinner. No-op if a generation is already in flight.
+   *  Resolves to the new summary, or `null` on cancellation / when gated out. */
   summariseSegment(segmentId: string): Promise<string | null>;
 
   // --- Phase 8: Ghostwriter (Doc 17) ---
@@ -233,6 +247,22 @@ interface WorkspaceState {
   /** Persist a feedback value via `update_feedback`, then close the editor.
    *  Callers resolve the cached-message guard (Doc 22) beforehand. */
   commitFeedbackEdit(messageId: string, value: string): Promise<void>;
+
+  // --- Phase 14: Marks (Doc 30) ---
+  /** Re-fetch all marks for the active story. Called on story activation and
+   *  from the `marks_changed` listener. */
+  loadMarks(): Promise<void>;
+  /** Create a mark on a story bubble. `offsets` are present for AI bubbles and
+   *  `null` for user bubbles (no single-string mapping). Not gated by
+   *  `isGenerating` — a pure DB write (Doc 30 §3). */
+  addMark(
+    messageId: string,
+    quotedText: string,
+    offsets: { start: number; end: number } | null,
+    note?: string | null,
+  ): Promise<void>;
+  removeMark(markId: string): Promise<void>;
+  updateMarkNote(markId: string, note: string | null): Promise<void>;
 
   // --- Event handlers (called by useWorkspaceEvents) ---
   onMessageChunk(storyId: string, chunk: string): void;
@@ -361,6 +391,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   ghostwriter: null,
   feedbackEditingMessageId: null,
 
+  marks: [],
+
   setIsGenerating(val) {
     set({ isGenerating: val });
   },
@@ -389,6 +421,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         summarisingSegmentIds: new Set<string>(),
         ghostwriter: null,
         feedbackEditingMessageId: null,
+        marks: [],
       });
       return;
     }
@@ -406,13 +439,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       summarisingSegmentIds: new Set<string>(),
       ghostwriter: null,
       feedbackEditingMessageId: null,
+      marks: [],
     });
 
-    const [messages, draft, attached, accordion] = await Promise.all([
+    const [messages, draft, attached, accordion, marks] = await Promise.all([
       ipcLoadMessages(storyId),
       ipcGetDraft(storyId),
       ipcListAttachedDocs(storyId),
       ipcGetAccordionState(storyId),
+      ipcListMarks(storyId),
     ]);
 
     // Only commit if this is still the active story (guard against rapid switches).
@@ -424,6 +459,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         contextDocIds: attached.map((d) => d.id),
         checkpoints: accordion.checkpoints,
         segments: accordion.segments,
+        marks,
       });
     }
   },
@@ -472,9 +508,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         generationStatus: {
           kind: 'stopped',
           finishReason: 'ERROR',
-          detail: e instanceof Error ? e.message : String(e),
+          detail: errorMessage(e),
         },
       });
+      surfaceError(e, 'Could not send your message.');
       throw e;
     }
 
@@ -536,9 +573,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         generationStatus: {
           kind: 'stopped',
           finishReason: 'ERROR',
-          detail: e instanceof Error ? e.message : String(e),
+          detail: errorMessage(e),
         },
       });
+      surfaceError(e, 'Could not send your message.');
       throw e;
     }
 
@@ -576,9 +614,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         generationStatus: {
           kind: 'stopped',
           finishReason: 'ERROR',
-          detail: e instanceof Error ? e.message : String(e),
+          detail: errorMessage(e),
         },
       });
+      surfaceError(e, 'Could not send your message.');
       throw e;
     }
 
@@ -628,9 +667,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         generationStatus: {
           kind: 'stopped',
           finishReason: 'ERROR',
-          detail: e instanceof Error ? e.message : String(e),
+          detail: errorMessage(e),
         },
       });
+      surfaceError(e, 'Could not send your message.');
       throw e;
     }
 
@@ -798,19 +838,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   async summariseSegment(segmentId) {
-    // The backend gates concurrent generations via its cancellation token;
-    // the per-segment spinner is purely visual.
+    // Architecture Wall #6 (CQ-11): summarisation is a real model call, so it
+    // participates in the single global in-flight flag. The backend now also
+    // rejects concurrent generations (CQ-03), but the frontend gate keeps the
+    // UI honest (Send/regenerate/ghostwriter disabled while summarising). The
+    // per-segment spinner (`summarisingSegmentIds`) is purely visual.
+    if (get().isGenerating) return null;
     const nextSet = new Set(get().summarisingSegmentIds);
     nextSet.add(segmentId);
-    set({ summarisingSegmentIds: nextSet });
+    set({ summarisingSegmentIds: nextSet, isGenerating: true });
     try {
       const result = await ipcSummariseSegment(segmentId);
       await get().loadAccordionState();
       return result;
+    } catch (e) {
+      surfaceError(e, "Couldn't summarise this section.");
+      return null;
     } finally {
       const after = new Set(get().summarisingSegmentIds);
       after.delete(segmentId);
-      set({ summarisingSegmentIds: after });
+      set({ summarisingSegmentIds: after, isGenerating: false });
     }
   },
 
@@ -877,11 +924,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (cur !== null && cur.activeMessageId === gw.activeMessageId) {
         set({ ghostwriter: { ...cur, phase: 'composing' } });
       }
-      void import('sonner').then(({ toast }) => {
-        toast.error("Couldn't generate revision", {
-          description: e instanceof Error ? e.message : String(e),
-        });
-      });
+      surfaceError(e, "Couldn't generate revision.");
       return;
     }
 
@@ -928,11 +971,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       await ipcSaveGhostwriter(gw.activeMessageId, gw.pendingNewContent, record);
     } catch (e) {
       console.error('save_ghostwriter_edit failed', e);
-      void import('sonner').then(({ toast }) => {
-        toast.error("Couldn't save revision", {
-          description: e instanceof Error ? e.message : String(e),
-        });
-      });
+      surfaceError(e, "Couldn't save revision.");
       return;
     }
 
@@ -959,11 +998,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       await ipcRevertGhostwriter(messageId);
     } catch (e) {
       console.error('revert_ghostwriter_edit failed', e);
-      void import('sonner').then(({ toast }) => {
-        toast.error("Couldn't revert revision", {
-          description: e instanceof Error ? e.message : String(e),
-        });
-      });
+      surfaceError(e, "Couldn't revert revision.");
       return;
     }
     const storyId = get().activeStoryId;
@@ -991,6 +1026,55 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     await get().updateFeedback(messageId, value);
     if (get().feedbackEditingMessageId === messageId) {
       set({ feedbackEditingMessageId: null });
+    }
+  },
+
+  // --- Phase 14: Marks (Doc 30) ---
+  // Mutations rely on the backend's `marks_changed` event to refresh state
+  // (the listener calls `loadMarks`) — the same single-update-path discipline
+  // re-anchor / orphan from content-mutation commands also flows through.
+
+  async loadMarks() {
+    const storyId = get().activeStoryId;
+    if (storyId === null) return;
+    try {
+      const marks = await ipcListMarks(storyId);
+      if (get().activeStoryId === storyId) set({ marks });
+    } catch (e) {
+      console.error('list_marks failed', e);
+    }
+  },
+
+  async addMark(messageId, quotedText, offsets, note) {
+    try {
+      await ipcAddMark(
+        messageId,
+        quotedText,
+        offsets?.start ?? null,
+        offsets?.end ?? null,
+        note ?? null,
+      );
+    } catch (e) {
+      console.error('add_mark failed', e);
+      surfaceError(e, "Couldn't mark this passage.");
+    }
+  },
+
+  async removeMark(markId) {
+    try {
+      await ipcRemoveMark(markId);
+    } catch (e) {
+      console.error('remove_mark failed', e);
+      surfaceError(e, "Couldn't remove this mark.");
+    }
+  },
+
+  async updateMarkNote(markId, note) {
+    try {
+      await ipcUpdateMarkNote(markId, note);
+    } catch (e) {
+      console.error('update_mark_note failed', e);
+      surfaceError(e, "Couldn't update the note.");
     }
   },
 
@@ -1132,6 +1216,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       userInitiatedCancel: false,
       generationStatus: { kind: 'stopped', finishReason: errorKind, detail: errorDetail },
     });
+    surfaceGenerationError(errorKind);
   },
 
   clear() {
@@ -1165,6 +1250,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       summarisingSegmentIds: new Set<string>(),
       ghostwriter: null,
       feedbackEditingMessageId: null,
+      marks: [],
     });
   },
 
@@ -1308,6 +1394,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       userInitiatedCancel: false,
       generationStatus: { kind: 'stopped', finishReason: errorKind, detail: errorDetail },
     });
+    surfaceGenerationError(errorKind);
   },
 }));
 

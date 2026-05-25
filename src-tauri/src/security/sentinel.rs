@@ -18,7 +18,7 @@ const KNOWN_PLAINTEXT: &[u8] = b"LOOM_KEY_CHECK";
 
 /// Sentinel payload stored in `app_config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct Sentinel {
     pub nonce_hex: String,
     pub ciphertext_hex: String,

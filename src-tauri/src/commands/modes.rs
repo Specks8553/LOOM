@@ -382,7 +382,7 @@ pub async fn exit_session(app: tauri::AppHandle, session_id: String) -> Result<(
 /// `SendMessageResult` from `commands/conversation.rs` so the frontend can
 /// reuse the pairing logic.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct SendSessionMessageResult {
     pub user_message_id: String,
     pub model_message_id: String,
@@ -524,7 +524,7 @@ pub async fn send_session_message(
         None
     };
 
-    let cancel_token = access::install_cancel_token(&state)?;
+    let cancel_token = access::try_install_cancel_token(&state)?;
     let user_message_id = user_id;
     let model_message_id = model_id;
 
@@ -664,6 +664,9 @@ async fn run_session_stream(
             e,
         ),
     }
+
+    // Release the in-flight slot for the next generation (CQ-03).
+    let _ = access::clear_cancel_token(&state);
 }
 
 async fn spawn_session_cache_refresh(
@@ -860,7 +863,7 @@ pub fn delete_session(app: tauri::AppHandle, session_id: String) -> Result<(), L
 /// `set_story_active_mode` from `modeStore` actions and reads via
 /// `get_story_active_mode` on story open.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct StoryActiveMode {
     pub active_mode: String,
     pub active_session_id: Option<String>,

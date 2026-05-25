@@ -15,7 +15,7 @@ use crate::error::LoomError;
 /// etc. The schema's `content` column is fetched separately (only relevant
 /// for SourceDocument bodies — Phase 5).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct VaultItemMeta {
     pub id: String,
     pub parent_id: Option<String>,
@@ -23,6 +23,7 @@ pub struct VaultItemMeta {
     pub item_subtype: Option<String>,
     pub name: String,
     pub description: Option<String>,
+    #[ts(type = "number")]
     pub sort_order: i64,
     pub created_at: String,
     pub modified_at: String,
@@ -36,9 +37,11 @@ pub struct VaultItemMeta {
 
 /// Per Doc 03 §IPC Payload and Result Types. Image item metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct ImageAssetMeta {
+    #[ts(type = "number")]
     pub width: i64,
+    #[ts(type = "number")]
     pub height: i64,
     pub mime_type: String,
 }

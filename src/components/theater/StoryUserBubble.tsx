@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
+import { useContextMenu } from '@/components/shared/ContextMenu';
 import { BubbleActionRow } from '@/components/theater/BubbleActions';
 import { InputArea } from '@/components/theater/InputArea';
+import { MarkDot } from '@/components/theater/MarkDot';
+import { useMarkHighlight } from '@/components/theater/markHighlight';
 import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+import type { MenuItem } from '@/components/shared/ContextMenu';
 import type { ChatMessage, UserContent } from '@/lib/types';
 
 interface StoryUserBubbleProps {
@@ -26,6 +31,16 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   const deleteExchange = useWorkspaceStore((s) => s.deleteExchange);
   const deleteFrom = useWorkspaceStore((s) => s.deleteFrom);
   const { modal: cachedGuardModal, guard: guardCachedMessage } = useCachedMessageGuard();
+  const { showContextMenu } = useContextMenu();
+  const allMarks = useWorkspaceStore((s) => s.marks);
+  const marks = useMemo(
+    () => allMarks.filter((m) => m.message_id === message.id),
+    [allMarks, message.id],
+  );
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Doc 30 §5 — best-effort re-find highlight (user bubbles carry no offsets).
+  useMarkHighlight(message.id, contentRef, marks, false);
 
   const parsed = safeParse(message.content);
 
@@ -52,6 +67,34 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
     }
   }
 
+  function handleContextMenu(e: React.MouseEvent) {
+    // Doc 11 §Menu contents — story user bubble. Mirrors the hover row.
+    const items: MenuItem[] = [
+      {
+        label: 'Edit',
+        icon: Pencil,
+        disabled: isGenerating,
+        onClick: () => void handleEditClick(),
+      },
+      { label: '', separator: true, onClick: () => {} },
+      {
+        label: 'Delete exchange',
+        icon: Trash2,
+        destructive: true,
+        disabled: isGenerating,
+        onClick: () => void handleDelete('exchange'),
+      },
+      {
+        label: 'Delete from here',
+        icon: Trash2,
+        destructive: true,
+        disabled: isGenerating,
+        onClick: () => void handleDelete('from'),
+      },
+    ];
+    showContextMenu(e, items);
+  }
+
   if (editing) {
     return (
       <div className="mx-auto w-full max-w-[80%] py-2">
@@ -66,8 +109,16 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
   }
 
   return (
-    <div className="group ml-auto flex w-fit max-w-[65%] flex-col items-end py-2">
-      <div className="rounded-bubble border bg-[var(--bubble-user-bg)] px-4 py-3 [border-color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]">
+    <div
+      onContextMenu={handleContextMenu}
+      className="group ml-auto flex w-fit max-w-[65%] flex-col items-end py-2"
+    >
+      <div
+        ref={contentRef}
+        data-loom-selectable={message.id}
+        data-loom-bubble-kind="story-user"
+        className="relative rounded-bubble border bg-[var(--bubble-user-bg)] px-4 py-3 [border-color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]"
+      >
         {parsed.plot_direction.trim().length > 0 && (
           <Field label="Plot Direction">
             <p className="whitespace-pre-wrap text-[13px] leading-normal text-[var(--color-text-primary)]">
@@ -101,6 +152,7 @@ export function StoryUserBubble({ message }: StoryUserBubbleProps) {
             </p>
           </Field>
         )}
+        <MarkDot marks={marks} />
       </div>
       <BubbleActionRow
         align="right"

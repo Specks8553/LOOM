@@ -1,5 +1,7 @@
 # LOOM 2.0 — Pre-Implementation Audit
 
+> **⚠️ IMMUTABLE — historical record (frozen 2026-05-23, AUDIT-2026-05 decision D2).** This file is the planning-phase reconciliation checklist. It is **no longer maintained as a live tracker** and no longer reflects current provisional status (e.g. NB-1 partially resolved by Doc 08's 2026-05-17 sweep; the post-audit CSP red-line drift is not recorded here — see AUDIT-2026-05 CD-03/CD-32). Do not flip boxes here going forward. Remaining `⚠️` provisionals (NB-1..NB-4) are tracked in `IMPLEMENTATION-PLAN.md` Phase 12 (step `12-Z`); all other open drift is tracked in `docs-v2/audit/AUDIT-2026-05.md` and routed into Phase 12.5 / `IMPROVEMENT-BACKLOG.md` R20–R29. `/audit-resolve` still operates on this file for any historical HB/CD/SD/IP item not yet ticked, but the ⚠️ provisional rows are now informational only.
+
 > **Created:** 2026-05-03 — cross-doc audit performed at the close of the planning phase, before any LOOM 2.0 code is written.
 > **Purpose:** Inventory every contradiction, drift, and gap found between the 23 spec docs in `docs-v2/`. Each item is actionable and has an owner-doc that must change.
 > **How to use this file:** Treat it as a checklist. When you resolve an item, flip `- [ ]` to `- [x]` and append `(YYYY-MM-DD — <one-line note: which doc was edited, which D-NN was added/amended>)`. Do not delete resolved items — they form the audit trail.

@@ -17,6 +17,7 @@ export interface ThemeSnapshot {
   accordion: string;
   checkpoint: string;
   feedback: string;
+  mark: string;
   bubbleUser: string;
   bubbleAi: string;
   /** A CSS `font-family` stack — drives `--font-theater-body`. */
@@ -175,6 +176,7 @@ export function snapshotFromResolved(r: ResolvedSettings): ThemeSnapshot {
     accordion: r.accordion_color || accent,
     checkpoint: r.checkpoint_color || accent,
     feedback: r.feedback_color || '#f59e0b',
+    mark: r.mark_color || '#ec4899',
     bubbleUser: r.bubble_user_color || triad(accent, accent).subtle,
     bubbleAi: r.bubble_ai_color || '#1d1b16',
     bodyFont: bodyFontStack(r.body_font),
@@ -212,6 +214,12 @@ export function applyTheme(snapshot: ThemeSnapshot): void {
   set('--color-feedback', fb.base);
   set('--color-feedback-hover', fb.hover);
   set('--color-feedback-subtle', fb.subtle);
+
+  // Marks (Doc 30 §12) — stable rose default, does NOT track accent.
+  const mk = triad(snapshot.mark, '#ec4899');
+  set('--color-mark', mk.base);
+  set('--color-mark-hover', mk.hover);
+  set('--color-mark-subtle', mk.subtle);
 
   set('--bubble-user-bg', snapshot.bubbleUser);
   set('--bubble-ai-bg', snapshot.bubbleAi);

@@ -1,6 +1,6 @@
 # LOOM 2.0 — Implementation Plan
 
-> **Status:** In progress — drafted 2026-05-05; Phases 0–11 implemented; Phase 12 (Visual Design Pass) re-scoped and started 2026-05-17.
+> **Status:** In progress — drafted 2026-05-05; Phases 0–11 implemented; Phase 12 (Visual Design Pass) re-scoped and started 2026-05-17. **2026-05-23: Phase 12.5 (Audit Remediation) and Phase 12.6 (World Backup) added** from the AUDIT-2026-05 remediation proposal (decisions D1–D6); both gate Phase 13. **2026-05-23: Phase 14 (Marks) added** from D-25; independent of 12.x/13, does not gate the release.
 > **Audience:** The implementing agent (and any human reviewing). This is the canonical phase ledger. Read this *after* `00-INDEX.md`; read it *before* opening any feature spec.
 > **How to use:** Each phase below has a `Status:` line, a Goal, Inputs, Scope, Testable Checkpoints (`- [ ]` boxes), Out of Scope, and a `Resumption notes:` subsection. Tick checkpoints as you complete them. **Update `Resumption notes:` live, not at session end** — sessions end abruptly. Do not start phase N+1 until phase N is `/phase-verify`-clean.
 > **Authority:** `00-INDEX.md` D-NN entries are canonical for architectural decisions. `PRE-IMPLEMENTATION-AUDIT.md` is canonical for known drift. This file owns the **order and gating** of implementation work, nothing else. Cross-references point at the spec doc that owns the surface — never duplicate spec content here.
@@ -38,6 +38,7 @@
 | 11 | Settings & Themes | Full-surface Settings; cascade UX; theme tokens; applyTheme |
 | 12 | Visual polish & copy pass | NB-1..NB-4 resolved or intentionally deferred |
 | 13 | Build, Release & Doc 26 | First signed build for all three platforms |
+| 14 | Marks (Mark as Important) | Mark a passage; summary AIs preserve it; dot + highlight + orphan-warn |
 
 ---
 
@@ -865,6 +866,108 @@
   - `12-2B` `InputArea`: rebuilt as a single `--color-bg-pane` rounded card — Plot Direction always visible, `+ Fields` / `− Fields` toggle reveals Background/Modificators/Constraints with hairline dividers; borderless transparent textareas; 9px field labels. Bottom bar carries a mono token meter (left) + Send/Cancel (right). NB-3: the 500 ms-debounced `get_token_count` pre-flight is now wired (default mode only) → `workspaceStore.tokenEstimate`, which also feeds the existing `StatusSection` readout.
   - Gates: tsc, eslint (0 warnings), 37 vitest, `vite build` all green.
 - **Next:** `12-3A`+ once external canvases land. Manual visual pass (`/phase-verify`) still pending for all applied steps.
+- **2026-05-23: AUDIT-2026-05 findings folded into this phase's remaining scope (Bucket 2).** The audit found 13 UI/empty-state/interaction defects that fall inside Phase 12's own `12-3A`+ / `12-Z` scope. `/phase-verify` for Phase 12 must now check against them:
+  - **Empty states** (`12-1B`, `12-3A`–`12-3C`, `12-Z` copy pass): CD-13 (5 drifted/absent empty states — recents list, No Source Documents, No Attached Documents, No Search Results, Handover/Consulting), CD-34 (No Worlds/No Stories/Trash Empty drop the spec'd icon; No Stories omits its [New story] action).
+  - **Theater** (`12-2A`/`12-2D`, `12-5B`): CD-14 (consulting re-entry greying unimplemented), CD-15 (story user-bubble labels shortened + AI-bubble Markdown not implemented though Doc 27 asserts both).
+  - **Escape chain + focus** (`12-Z`, NB-4): CD-12 (centralised Escape-chain handler unbuilt — 12 components register their own), DG-05 (`useFocusTrap.ts` + shadcn-based focus restoration absent).
+  - **Styled modals** (`12-Z` component pass): CQ-04 (native `window.confirm()` in AccordionBanner/StoryAIBubble/SessionPartition → Doc 12 styled modal).
+  - **Layout** (`12-1A`): CD-11 (phantom "Settings" right-pane section in Doc 10), DG-04 (`viewportWatcher.ts` + `appStore.viewport` referenced but absent).
+  - **Token/shadcn/shared-component reconciliation** (`12-0D` / `12-Z` doc cleanup): CD-09 (`--bubble-user-bg` literal vs token), CD-10 (Doc 09 enumerates 7 shadcn components, none installed), DG-02 (shadcn override tokens absent from globals.css), DG-03 (shared-component inventory drift — TagInput/Lightbox/InlineImage never built, LoadingDots inlined, ErrorBoundary absent, SelectionToolbar undocumented).
+  - Evidence for each is in `docs-v2/audit/AUDIT-2026-05.md`. These do **not** require a separate phase — they are Phase 12's unfinished work.
+
+**Testable Checkpoint (added 2026-05-23):**
+- [ ] Bucket-2 audit findings above resolved or explicitly deferred (with `(YYYY-MM-DD — deferred to <where>)`); verified at Phase 12 `/phase-verify`.
+
+---
+
+## Phase 12.5 — Audit Remediation
+
+**Status:** Complete (2026-05-23)
+
+> **Added 2026-05-23** from the AUDIT-2026-05 Pass C2 remediation proposal (approved with decisions D1–D6). Pure remediation — no new features. This phase clears every correctness / security-red-line / architectural-invariant defect the audit found, so the v2.0 build Phase 13 ships is sound. **Gated before Phase 13** because Phase 13's own goal already depends on the CSP cluster (12.5-B).
+
+**Goal:** Resolve the 10 ship-blocking findings the audit isolated from Phase 12's visual scope: the IPC error contract, the CSP red line, the concurrency Wall #6 hole, and schema integrity. By phase end every structured `LoomError` crosses IPC intact and routes to a Doc 12 display surface; the CSP claim in the docs matches `tauri.conf.json`; no second model call can run concurrently; and the `entry_message_id` FK exists.
+
+**Inputs:**
+- `docs-v2/audit/AUDIT-2026-05.md` §Synthesis (Pass C) — full evidence for every finding below.
+- `src-tauri/src/error.rs`, `src-tauri/src/lib/types.ts` (ts-rs ref) + `src/lib/types.ts` (consumed), `.github/workflows/ci.yml:59-63`, `src-tauri/tests/ts_rs_export.rs`.
+- `design/12-empty-states-and-errors.md` §Error Display Hierarchy (DG-06 — matrix to write).
+- `architecture/04-system-overview.md` §Network Boundary; `CLAUDE.md` §10; `tauri.conf.json:26`.
+- `state/access.rs` (concurrency install sites); `workspaceStore.ts`; `AccordionBanner.tsx`.
+- `db/migrations/world/001_initial.sql:33`; Doc 03 §conversation_sessions.
+
+**Clusters (each a Testable Checkpoint group):**
+
+**12.5-A — IPC error contract** *(the audit's headline chain)*. Resolve in order:
+1. Point the app at ts-rs–generated types so `src/lib/types.ts` is no longer hand-maintained — [SB-01].
+2. Fix the CI drift gate to `git diff` the generated path it actually writes — [SB-02].
+3. Switch `LoomError` to an adjacently-tagged serde representation (`#[serde(tag="kind", content="message")]` or enum-of-structs) so all 11 variants serialize across IPC — [HB-01].
+4. Build the Doc 12 error-display routing on the frontend (read `.kind`, map to surface + copy; remove the dead `instanceof Error` branch) — [CD-33].
+5. Write the variant↔display-rule matrix into Doc 12 — [DG-06].
+
+**12.5-B — CSP red line** [CD-03, CD-32]. Decide the policy (recommended: tighten `tauri.conf.json` `connect-src` to drop the Gemini host, since all HTTP is in Rust — which makes the docs true), then reconcile Doc 04 §Network Boundary + CLAUDE.md §10 + Phase 13's own goal/deliverable wording to match. **Must precede Phase 13**, whose goal states "CSP `connect-src 'none'` verified".
+
+**12.5-C — Concurrency Wall #6** [CQ-03, CQ-11]. Add a backend concurrent-generation guard (reject a 2nd in-flight model call server-side, not just via the frontend `isGenerating` flag) and bring accordion summarisation under the same gate. Closes the summarise→send double-call hole.
+
+**12.5-D — Schema integrity** [SD-01, decision D3]. Add migration `world/002_*.sql` restoring the `entry_message_id` FK (`REFERENCES messages(id) ON DELETE SET NULL`). SQLite requires table-recreate to add the FK; follow the R18 migration runner pattern.
+
+**Testable Checkpoints:**
+- [x] **12.5-A:** consumed types are ts-rs–generated — `src/lib/types.generated.ts` (raw ts-rs, CI-drift-checked) re-exported through the hand-written barrel `src/lib/types.ts`; CI drift gate fails on a deliberate Rust-struct change (proven with a temporary `#[ts(rename)]`); all 11 `LoomError` variants serialize to `{kind,message}` across IPC verified by `error::tests`; frontend catch sites read `.kind` via `surfaceError()` and route per Doc 12; Doc 12 §0 carries the variant↔display matrix. *(2026-05-23)*
+- [x] **12.5-B:** `tauri.conf.json` CSP (`connect-src ipc: http://ipc.localhost`), Doc 04 §Network Boundary, CLAUDE.md §10 + Red Line #5, and Phase 13's goal/deliverable/checkpoint wording all agree on the IPC-only WebView policy. *(2026-05-23 — runtime fetch-block confirmation deferred to a `/phase-verify` dev run; CSP is declarative in `tauri.conf.json`.)*
+- [x] **12.5-C:** a second generation while one is in flight is rejected by the backend (`access::tests::second_install_is_rejected_while_one_in_flight`); ghostwriter + accordion-summarise use the same `GenerationGuard`; the frontend `summariseSegment` now raises `isGenerating` (CQ-11) — no concurrent model call possible. *(2026-05-23)*
+- [x] **12.5-D:** migration `world/002_session_entry_fk.sql` applied; `entry_message_id` FK present with `ON DELETE SET NULL` (`migration_002_restores_entry_message_id_fk`); runner now toggles `PRAGMA foreign_keys` around the rebuild so a populated-DB upgrade can't cascade-delete messages. *(2026-05-23)*
+- [x] All gates green: `cargo build`/`clippy`/`fmt` 0 warn, `tsc` 0 err, `pnpm lint` 0, `pnpm format:check`, `pnpm test` 37 + `cargo test` 232 pass. *(2026-05-23)*
+
+**Out of scope:** Phase 12 visual findings (Bucket 2, above); non-blocking drift (`IMPROVEMENT-BACKLOG.md` R20–R29).
+
+**Resumption notes:**
+- 2026-05-23 — Phase drafted from AUDIT-2026-05 Pass C2 Bucket 1. Not started. Headline chain (12.5-A) is the single most important item: SB-01 → SB-02 → HB-01 → (CD-33 + DG-06).
+- 2026-05-23 — Owner approved CSP option (a) for 12.5-B: tighten `tauri.conf.json` to drop the Gemini host; reconcile docs to the real ipc-only policy.
+- 2026-05-23 — **ts-rs path resolution clarified (load-bearing for SB-01/SB-02).** ts-rs resolves `export_to` relative to `src-tauri/src/`, so `../X` lands in `src-tauri/src/lib/` (the backend tree, NOT where the frontend imports). The old setup wrote the generated reference to `src-tauri/src/lib/types.ts`, while the frontend consumed a *hand-maintained* repo-root `src/lib/types.ts` — and the CI gate diffed the repo-root file the export never touched (always-clean no-op = SB-02). Fix: all 34 `#[ts(export_to)]` attrs now point at `"../../src/lib/types.generated.ts"` → lands at repo-root `src/lib/types.generated.ts`.
+- 2026-05-23 — **SB-01 done.** Architecture = generated file + hand-written barrel (audit's SB-02 lean option a). `src/lib/types.generated.ts` is pure ts-rs (35 types: 24 prior + 11 added — accordion/cache/ghostwriter/session-cache that have a Rust SoT). `src/lib/types.ts` rewritten as a barrel: `export * from './types.generated'` + the 14 frontend-only types ts-rs can't generate (6 event payloads emitted via inline `json!`, 5 string-unions stored as TEXT, DiffSpan/GhostwriterSelection/InputDraft). All 40 frontend importers keep `@/lib/types` unchanged — zero churn. `tsc --noEmit` clean. Stale `src-tauri/src/lib/types.ts` deleted; `ts_rs_export.rs` export list + doc-comment updated.
+- 2026-05-23 — **SB-02 done.** CI `ci.yml` ts-rs drift step + `package.json check:types` now `git diff --exit-code` the generated path (`src/lib/types.generated.ts`). Gate becomes real once the generated file is committed (git diff ignores untracked) — staged with the phase commit.
+- 2026-05-23 — **HB-01 done.** `error.rs` switched to `#[serde(tag="kind", content="message")]` (adjacently tagged). Generated TS now `{ "kind":"crypto", "message": string } | … | { "kind":"validation", "message": { validation_kind, key, reason } }`. Contract locked by two `error::tests`. Representation recorded in Docs 03 §IPC, 05 §LoomError (incl. `kind`→`validation_kind` field rename), 07 §LoomError→Frontend Mapping (added forbidden/cache_create rows). All date-stamped.
+- 2026-05-23 — **DG-06 done.** Doc 12 §Error Display Hierarchy gained "§0 — `LoomError` → display rule": variant→surface→copy for all 11 kinds + 4 validation_kinds. `forbidden` row corrected (uses backend message, not "Invalid API key").
+- 2026-05-23 — **CD-33 done.** New `src/lib/errors.ts`: `surfaceError(e, fallback)` parses the `{kind,message}` wire shape and routes to toast / persistent-toast / blocking-modal per Doc 12 §0; `surfaceGenerationError(kind)` for the event-path; `errorMessage(e)` for inline/diagnostic. New `errorModalStore` + `<ErrorModal />` (mounted in App.tsx) = the blocking-modal tier (Doc 12 §3, no backdrop/Escape dismiss). Replaced ~30 dead `toast.error(e instanceof Error ? e.message : '…')` sites across 11 components + workspaceStore ghostwriter/send/regenerate catches + both `generation_failed` handlers + OnboardingShell inline. Removed the dynamic `import('sonner')` ghostwriter toasts.
+- 2026-05-23 — **12.5-B done (CD-03, CD-32).** Verified no frontend code references the Gemini host or does direct HTTP. Tightened `tauri.conf.json` `connect-src` to `ipc: http://ipc.localhost` (dropped the Gemini host). Reconciled the four claim sites: Doc 04 §Network Boundary, CLAUDE.md §10 + Red Line #5, and Phase 13 goal/deliverable-2/checkpoint wording — all now describe the IPC-only WebView policy with Gemini HTTP living in the Rust backend. Runtime CSP check deferred to `/phase-verify` (`tauri dev` — confirm a frontend `fetch` is blocked).
+- 2026-05-23 — **bigint→number reconciliation (SB-01 follow-through).** Switching the frontend to generated types exposed that ts-rs renders `i64`/`u64` as `bigint`, but Tauri's JSON IPC actually delivers JS `number` (what the old hand types + all frontend arithmetic assumed). Annotated the 14 exported integer fields with `#[ts(type = "number")]` / `"number | null"` (UnlockResult, GhostwriterResponse, CacheStatus, ChatMessage, Template, VaultItemMeta, ImageAssetMeta, AliveCacheRow, TokenEstimate, ResolvedSettings). Also collapsed `WorldMetaPatch.cover_image_path` (`Option<Option<String>>` → `string | null` via `#[ts(type)]`, was `string | null | null`). Generated file now has zero `bigint`. `.prettierignore` now lists `src/lib/types.generated.ts` (raw ts-rs output is not prettier-styled; the git-diff gate keeps it honest); the hand-written barrel `src/lib/types.ts` is now prettier-checked. **12.5-A complete:** tsc/eslint(0)/prettier/vitest 37 all green; **SB-02 gate proven** — a temporary `#[ts(rename)]` on a struct field made `git diff --exit-code src/lib/types.generated.ts` fail (reverted).
+- 2026-05-23 — **12.5-D done (SD-01).** `world/002_session_entry_fk.sql` recreates `conversation_sessions` with `entry_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL` (table-rebuild: create-new / copy / drop / rename / re-index). Registered as version 2. **Discovered FK enforcement is ON by default in this SQLCipher build** (a cache test failed on a now-enforced FK) — so `DROP TABLE` during a rebuild would implicitly DELETE rows and cascade into `messages`. Fixed the migration runner to `PRAGMA foreign_keys=OFF` around the apply loop (outside the per-migration tx, since the pragma is a no-op inside one) and restore ON after — the SQLite-documented rebuild procedure. New test `migration_002_restores_entry_message_id_fk` asserts the FK via `pragma_foreign_key_list`. Fixed two cache tests whose "missing message" simulation inserted a dangling `entry_message_id` (now FK-rejected) — the helper anchors only to messages that exist.
+- 2026-05-23 — **12.5-C done (CQ-03, CQ-11).** Backend: `install_cancel_token` → `try_install_cancel_token` (rejects `Validation "A generation is already in progress."` if a token is installed); added `clear_cancel_token` + a `GenerationGuard` RAII (`begin_generation`) that installs-and-clears for in-command generations. Streaming workers (`run_stream`, `run_session_stream`) clear at the end of all outcomes; ghostwriter + accordion-summarise use the guard. The 5 install sites updated; access tests replaced (`second_install_is_rejected_while_one_in_flight`, `clear_releases_the_in_flight_slot`, `generation_guard_clears_on_drop`). Frontend: `summariseSegment` now gates on + raises the global `isGenerating` (was the one bypass — CQ-11), routes failures through `surfaceError`, and the two stale "backend gates this" comments are corrected. **12.5-C complete:** cargo test 232, clippy/fmt clean.
+- 2026-05-23 — **Phase 12.5 complete.** All four clusters done; full gate sweep green (cargo build/clippy/fmt/test 232; tsc 0 / eslint 0 / prettier / vitest 37). Only deferred item: a runtime CSP confirmation (load a dev build, confirm a frontend `fetch` is blocked) — recommended at `/phase-verify`; the config + four doc claims already agree.
+
+---
+
+## Phase 12.6 — World Backup
+
+**Status:** Not started
+
+> **Added 2026-05-23** per AUDIT-2026-05 decision D1 (CD-19): World Backup is **in scope for v2.0**. The Doc 14 self-contradiction (Out-of-Scope vs a full §World Backup spec) was resolved in favour of shipping; Doc 14 §Out of Scope amended 2026-05-23. This is a feature phase, not remediation.
+
+**Goal:** Ship the World Backup feature already specified in Doc 14 §World Backup — `.loom-backup` zip export/import of an entire world (encrypted `loom.db` + `assets/`), so a writer can move a world between machines, archive it, or restore after disk loss.
+
+**Inputs:**
+- `features/14-vault-and-worlds.md` §World Backup (format, export flow, import flow — authoritative spec).
+- `architecture/05-backend-modules.md` (where `export_world` / `import_world` live).
+- `architecture/07-ipc-contracts.md` (command registration — also see R20 IPC reconciliation).
+- Related vault gaps in `IMPROVEMENT-BACKLOG.md` R25 (export UI placement CD-20 overlaps this phase).
+
+**Scope / Deliverables:**
+1. Backend `export_world(dest_path)` — SQLite Online Backup API to a temp copy, recursive `assets/` copy, `deflate` zip to `<dest>.loom-backup`, staging cleanup. (Doc 14 §Export flow.)
+2. Backend `import_world(src_path, name)` — archive validation, new `world_id` UUID, `world_meta.json` regeneration. (Doc 14 §Import flow.)
+3. Export UI in **Settings → World → Export world** (resolves CD-20, which placed it in the World Picker card); Import UI in the World Picker Modal alongside Create world.
+4. Both commands registered in `lib.rs` `invoke_handler!` and documented in Doc 07; typed wrappers in `src/lib/tauriApi/`.
+5. The export-dialog encryption caveat surfaced (Doc 14 §Format).
+
+**Testable Checkpoints:**
+- [ ] Export a world to a `.loom-backup` file; the archive contains an encrypted `loom.db` + `assets/` and excludes `world_meta.json`.
+- [ ] Import the `.loom-backup` into the same vault; it gets a fresh `world_id`, regenerates `world_meta.json`, and opens with the master password.
+- [ ] Export UI lives in Settings → World (not the World Picker card); Import UI in the World Picker.
+- [ ] `export_world` / `import_world` registered + in Doc 07 + typed wrappers; gates green.
+
+**Out of scope:** Narrative export (story → PDF/HTML/Markdown) is Doc 21 (v2.1). Per-asset encryption inside the archive (zip is protected only by filesystem permissions — caveat surfaced).
+
+**Resumption notes:**
+- 2026-05-23 — Phase drafted from decision D1. Doc 14 §World Backup is the full spec; CD-20 (export UI placement) folds in here. Not started.
 
 ---
 
@@ -872,7 +975,7 @@
 
 **Status:** Not started
 
-**Goal:** Doc 26 lands; first signed build for Windows, macOS, and Linux ships; CSP `connect-src 'none'` verified in `tauri.conf.json`.
+**Goal:** Doc 26 lands; first signed build for Windows, macOS, and Linux ships; CSP `connect-src ipc: http://ipc.localhost` (no external host reachable from the WebView) verified in `tauri.conf.json`. *(Policy settled in Phase 12.5-B; the frontend makes no network requests — all Gemini HTTP is in the Rust backend.)*
 
 **Inputs:**
 - `dev/26-build-and-release.md` (current stub).
@@ -884,7 +987,7 @@
 **Scope / Deliverables:**
 
 1. Doc 26 written end-to-end (ST-4 closes).
-2. `tauri.conf.json` capabilities locked; CSP `connect-src https://generativelanguage.googleapis.com 'self'` (or per Doc 04 final wording); verified at runtime.
+2. `tauri.conf.json` capabilities locked; CSP `connect-src ipc: http://ipc.localhost` per Doc 04 §Network Boundary (settled Phase 12.5-B); verified at runtime.
 3. Windows code-signing pipeline; macOS notarization; Linux package format chosen and built (.deb / AppImage).
 4. Icon source files; generation script.
 5. Release checklist: version bump, changelog, backup-format compatibility test, smoke-test matrix.
@@ -894,13 +997,61 @@
 - [ ] Fresh Windows machine installs the signed `.exe` / `.msi`; first-run onboarding completes; cache create/refresh/delete works against the live Gemini API.
 - [ ] Fresh macOS install (signed + notarised) does not Gatekeeper-warn; same smoke test passes.
 - [ ] Linux artifact installs and runs; same smoke test passes.
-- [ ] Frontend cannot make HTTP requests to any host other than `generativelanguage.googleapis.com` (CSP-violation logged on attempt).
+- [ ] Frontend cannot make HTTP requests to any external host (WebView `connect-src` is IPC-only; CSP-violation logged on a deliberate `fetch` attempt). Gemini reachability is verified via a backend command, not a frontend request.
 - [ ] PRE-IMPLEMENTATION-AUDIT.md ST-4 ticked.
 
 **Out of scope:** Auto-update (v2.0.x); telemetry (never).
 
 **Resumption notes:**
 *(empty — phase not started)*
+
+---
+
+## Phase 14 — Marks (Mark as Important)
+
+**Status:** In progress (last touched 2026-05-24) — backend + frontend code-complete; static gates green (cargo test, tsc, eslint, prettier, vitest, ts-rs drift). Runtime checkpoints below await `/phase-verify` in the Tauri app.
+
+> **Added 2026-05-23** per D-25. A net-new v2.0 feature designed after the original 0–13 plan. It is **independent of Phases 12.x and 13** (does not gate the release) but depends on Accordion (Phase 7), Modes (Phase 4), Ghostwriter (Phase 8), Settings/Themes (Phase 11), and the Selection Popup (shipped 2026-05-19) — all complete.
+
+**Goal:** A writer selects a passage inside a story user/model bubble and marks it important; every summary AI (accordion summarisation, handover, consulting) receives the marked passages verbatim under a `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` manifest and is instructed to preserve them. Marks never enter normal story/session sends (zero story-cache impact). Marked bubbles show a dot + hover popover and an in-place highlight; marks orphan-and-warn when the host message content changes.
+
+**Inputs:**
+- `features/30-marks.md` (Complete — design pass; authoritative spec).
+- `foundation/03-data-model.md` §`important_marks`, §`app_settings` (`mark_color`), §Marks interface (all amended for D-25).
+- `features/29-selection-popup.md` — the create surface (resolver action).
+- `features/16-context-compression.md` §Stale Triggers; `services/history.rs` (`render_message_into`, `append_feedback` — the rail `render_marks` rides).
+- `features/23-modes.md` / `features/22-context-caching.md` — handover/consulting delivery + consulting snapshot freezing.
+- `features/17-ghostwriter.md` — accept must re-evaluate marks.
+- `design/20-settings-and-themes.md` §`applyTheme` / Features tab; `design/08-design-tokens.md` — `--color-mark` triad.
+
+**Scope / Deliverables:**
+
+1. **Backend `db/marks.rs` + `commands/marks.rs`** — `ImportantMark` (ts-rs exported), `list_marks` / `add_mark` / `remove_mark` / `update_mark_note`; `marks_changed` event. Migration `world/00N_important_marks.sql` (R18 runner). Defence-in-depth story-kind validation.
+2. **`render_marks` helper in `services/history.rs`** — appends the `[MARKED IMPORTANT]` block after feedback, called from both arms of `render_message_into`; non-orphaned marks only. Reaches accordion / handover / consulting automatically.
+3. **Orphan / re-anchor step** wired into the existing content-mutation commands (`update_message_content`, `edit_user_message`, Ghostwriter accept, regenerate): re-evaluate the message's marks (re-anchor if `quoted_text` survives, else `is_orphaned=1`), emit `marks_changed`. Truncation-class deletes rely on `ON DELETE CASCADE`.
+4. **SI-clause** appended to the resolved summary SI at request-build time when a request carries marks (`history.rs::append_marks_clause`, gated on `MarksLookup::is_empty()`) — **not** baked into the baseline constants. Override-safe and zero-cost when no marks. Applies to all three summary personas (`prompt_accordion_summarise`, `prompt_handover_seed`, `prompt_consulting_seed`). (Doc 30 §7, reconciled 2026-05-24.)
+5. **Accordion stale triggers** — add-mark / remove-mark / note-edit inside a closed segment stales it (Doc 16).
+6. **Frontend** — `workspaceStore.marks` + actions + `loadStory` fetch + `marks_changed` listener; `tauriApi/marks.ts`; the **Mark important / Unmark / Edit note** resolver entries in the Selection Popup (`selectionMenu.ts`); the **mark dot + hover popover** on `StoryAIBubble` / `StoryUserBubble`; the **in-place CSS Custom Highlight** (offset-based on AI bubbles, best-effort re-find on user bubbles).
+7. **Theme** — `mark_color` in `applyTheme` snapshot + Settings → Features; `--color-mark` triad in Doc 08 / `globals.css`.
+
+**Testable Checkpoints:**
+- [ ] Select a passage in a story AI bubble → Selection Popup offers `Mark important` → mark persists; dot appears; passage highlighted in place; reload restores it.
+- [ ] Mark a passage in a story **user** bubble (offsets null) → mark persists; dot appears; manifest carries the verbatim quote. (Highlight best-effort; dot-only fallback acceptable when ambiguous.)
+- [ ] Summarise a segment containing a marked message → the Gemini request's rendered segment contains a `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` block with the quote (and note if set); the SI clause is present. (Assert on the assembled request, not model output.)
+- [ ] Normal story send with marks present → assembled `contents` contain **no** `[MARKED IMPORTANT]` block (summary-only); story cache not stale-flagged by add/remove mark.
+- [ ] Ghostwriter-accept (or model edit) over a marked passage → mark orphans: excluded from manifest, dot shows warning state, hover explains. Re-marking clears it.
+- [ ] Add a mark inside a closed accordion segment → segment marked stale.
+- [ ] `mark_color` overridden at world scope → dot/highlight recolour via `applyTheme`; no collision with feedback/warning.
+- [ ] All `features/30` Testable Checkpoints pass; gates green (`cargo build`/`clippy`/`fmt`, `tsc`, `eslint`, `prettier`, `cargo test`, `vitest`, ts-rs drift).
+
+**Out of scope:** Marks on session / `blocks` bubbles (v2.1); marks influencing normal generation; merging overlapping marks; cross-story marks panel; per-mark colours; automatic fuzzy re-anchor of orphans; marks in export (Doc 21, v2.0.x).
+
+**Resumption notes:**
+- 2026-05-23 — Phase drafted from D-25. Doc 30 is the full spec; Doc 03 schema half already landed. Delivery rides the `append_feedback` rail in `services/history.rs` — keep `render_marks` adjacent and call it from both arms of `render_message_into`. The `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` heading is a contract shared with the SI clause (Doc 30 §6/§7) — change both together.
+- 2026-05-24 — **Backend was found already code-complete** (uncommitted): `db/marks.rs`, `commands/marks.rs`, `services/marks.rs`, migration `world/004_important_marks.sql`, `append_marks`/`MarksLookup`/`MARKS_HEADING` in `history.rs`, orphan re-anchor wired into `conversation.rs` (`edit_user_message`, `update_message_content`) + `ghostwriter.rs` (accept/revert), accordion stale-on-mark in `commands/marks.rs`. 14 backend tests pass.
+- 2026-05-24 — **Deviation from spec, approved by owner:** the SI preserve-clause is appended dynamically at request-build (`append_marks_clause`, gated on `MarksLookup::is_empty()`) rather than edited into the three baseline constants. Doc 30 §7 + §13 and scope item 4 above reconciled to match. The implemented clause wording (`MARKS_PRESERVE_CLAUSE`) is now the canonical wording in Doc 30 §7.
+- 2026-05-24 — **Frontend built this session:** `lib/tauriApi/marks.ts`; `workspaceStore` gained `marks` + `loadMarks`/`addMark`/`removeMark`/`updateMarkNote`, wired into `setActiveStory` (Promise.all load + resets) and `clear`; `marks_changed` listener in `useWorkspaceEvents` (reloads via `loadMarks`); Selection Popup `Mark important`/`Unmark`/`Edit note` in `selectionMenu.ts` + `SelectionToolbar.tsx` (Edit note uses `window.prompt`; the richer inline editor lives in the dot popover); `MarkDot.tsx` (dot + hover popover + note editor, warning treatment for orphans via `--color-warning`); `markHighlight.ts` (CSS Custom Highlight API manager + `useMarkHighlight` hook — AI offset-based with `range.toString()===quoted_text` validation + re-find fallback for the char-count/UTF-16 drift in `services/marks.rs::locate`; user-bubble best-effort single-match re-find); theme `mark` triad in `theme.ts` + static defaults + `::highlight(loom-mark)` rule in `globals.css`; `mark_color` Features field in `settingsSchema.ts`. Regenerated `types.generated.ts` (ResolvedSettings was stale, missing `mark_color`).
+- 2026-05-24 — **Not yet done:** (1) runtime `/phase-verify` — needs the Tauri app; the 8 Testable Checkpoints are coded but unverified in-app (can't drive Tauri IPC from a plain browser here). (2) Nothing committed yet — backend + frontend + doc edits are all uncommitted. (3) Consider a vitest for `selectionMenu` mark resolver (containment gating) and for `markHighlight` range-building.
 
 ---
 

@@ -6,6 +6,8 @@ import { RightPane } from '@/components/layout/RightPane';
 import { Theater } from '@/components/layout/Theater';
 import { Navigator } from '@/components/navigator/Navigator';
 import { Settings } from '@/components/settings/Settings';
+import { ContextMenuProvider } from '@/components/shared/ContextMenu';
+import { SelectionToolbar } from '@/components/shared/SelectionToolbar';
 import { CacheSection } from '@/components/theater/CacheSection';
 import { ContextDocsSection } from '@/components/theater/ContextDocsSection';
 import { DocEditor } from '@/components/theater/DocEditor';
@@ -157,63 +159,66 @@ export function WorkspaceShell() {
   }
 
   return (
-    <main className="flex h-full w-full overflow-hidden bg-[var(--color-bg-base)]">
-      <LeftPane width={leftWidth}>
-        <Navigator
-          onLock={() => void handleLock()}
-          onOpenWorldPicker={handleOpenWorldPicker}
-          onOpenSettings={openSettings}
+    <ContextMenuProvider>
+      <main className="flex h-full w-full overflow-hidden bg-[var(--color-bg-base)]">
+        <LeftPane width={leftWidth}>
+          <Navigator
+            onLock={() => void handleLock()}
+            onOpenWorldPicker={handleOpenWorldPicker}
+            onOpenSettings={openSettings}
+          />
+        </LeftPane>
+        <PaneDivider
+          side="left"
+          width={leftWidth}
+          min={LEFT_MIN}
+          max={LEFT_MAX}
+          onResize={setLeftWidth}
+          onResizeEnd={(w) => writeWidth(LEFT_LS_KEY, w)}
         />
-      </LeftPane>
-      <PaneDivider
-        side="left"
-        width={leftWidth}
-        min={LEFT_MIN}
-        max={LEFT_MAX}
-        onResize={setLeftWidth}
-        onResizeEnd={(w) => writeWidth(LEFT_LS_KEY, w)}
-      />
-      {settingsOpen ? (
-        // Doc 10 §Theater Content Switching priority (CD-5):
-        // Settings > activeDocId > activeStoryId. Settings is a full-surface
-        // view — ModeSwitcher and right pane hidden, Navigator stays visible.
-        <Theater>
-          <Settings />
-        </Theater>
-      ) : activeDocId !== null ? (
-        // Doc 18 §Mode-Switcher Interplay: DocEditor takes the main + right
-        // region. ModeSwitcher and right pane are hidden; Navigator stays
-        // visible.
-        <Theater>
-          <DocEditor docId={activeDocId} />
-        </Theater>
-      ) : (
-        <>
+        {settingsOpen ? (
+          // Doc 10 §Theater Content Switching priority (CD-5):
+          // Settings > activeDocId > activeStoryId. Settings is a full-surface
+          // view — ModeSwitcher and right pane hidden, Navigator stays visible.
           <Theater>
-            <TheaterBody />
+            <Settings />
           </Theater>
-          {!rightCollapsed && (
-            <PaneDivider
-              side="right"
-              width={rightWidth}
-              min={RIGHT_MIN}
-              max={RIGHT_MAX}
-              onResize={setRightWidth}
-              onResizeEnd={(w) => writeWidth(RIGHT_LS_KEY, w)}
-            />
-          )}
-          <RightPane width={rightWidth}>
-            <div className="flex h-full flex-col">
-              <div className="flex-1" />
-              <ContextDocsSection />
-              <CacheSection />
-              <StatusSection />
-            </div>
-          </RightPane>
-        </>
-      )}
+        ) : activeDocId !== null ? (
+          // Doc 18 §Mode-Switcher Interplay: DocEditor takes the main + right
+          // region. ModeSwitcher and right pane are hidden; Navigator stays
+          // visible.
+          <Theater>
+            <DocEditor docId={activeDocId} />
+          </Theater>
+        ) : (
+          <>
+            <Theater>
+              <TheaterBody />
+            </Theater>
+            {!rightCollapsed && (
+              <PaneDivider
+                side="right"
+                width={rightWidth}
+                min={RIGHT_MIN}
+                max={RIGHT_MAX}
+                onResize={setRightWidth}
+                onResizeEnd={(w) => writeWidth(RIGHT_LS_KEY, w)}
+              />
+            )}
+            <RightPane width={rightWidth}>
+              <div className="flex h-full flex-col">
+                <div className="flex-1" />
+                <ContextDocsSection />
+                <CacheSection />
+                <StatusSection />
+              </div>
+            </RightPane>
+          </>
+        )}
 
-      <WorldPickerModal open={pickerOpen} onOpenChange={setPickerOpen} />
-    </main>
+        <WorldPickerModal open={pickerOpen} onOpenChange={setPickerOpen} />
+        <SelectionToolbar />
+      </main>
+    </ContextMenuProvider>
   );
 }

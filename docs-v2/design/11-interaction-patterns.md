@@ -1,7 +1,9 @@
 # 11 — Interaction Patterns
 
 > **Status:** Complete — keyboard shortcuts still deferred (see IMPL-NOTES.md).
-> **Last updated:** 2026-05-04 — Feedback design pass (D-17): full Escape Chain rewrite (CD-6 closed); Settings full-surface entry added at priority 2 (Doc 20); Feedback edit state added at priority 5 (Doc 28); Ghostwriter `reviewing`-phase nuance noted; stale "Feedback panel expanded" reference removed.
+> **Last updated:** 2026-05-19 — Selection Popup pass (D-23): §"Text selection inside AI bubbles" renamed to §"Text selection inside bubbles" and rewritten — selection-first is now a sanctioned Ghostwriter entry path via the Doc 29 Selection Popup, alongside the two mode-first entries; LOOM still never intercepts native selection.
+> **Earlier:** 2026-05-19 — Context-menu contents pass (D-22): §Context Menus trigger rules updated (checkpoint-marker trigger dropped from v2.0; Navigator empty-tree-area and `⋮`-button triggers added); new §Menu contents by target — per-target item tables for the Navigator and Theater resolvers, the multi-select intersection rule, and editable-text passthrough.
+> **Earlier:** 2026-05-04 — Feedback design pass (D-17): full Escape Chain rewrite (CD-6 closed); Settings full-surface entry added at priority 2 (Doc 20); Feedback edit state added at priority 5 (Doc 28); Ghostwriter `reviewing`-phase nuance noted; stale "Feedback panel expanded" reference removed.
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: removed the DocEditor "Discard unsaved changes?" entry from the Escape Chain and the corresponding row from the Confirmation Dialogs table — Doc 18 specifies debounced auto-save with `flushDocSave()` on close/lock/world-switch, so there are no unsaved changes to guard (HB-3).
 > **Earlier:** 2026-04-29 — Doc 17 design pass: Text-selection-Ghostwriter-trigger section reworded for mode-first activation (Doc 11 previously said selection-first, which conflicted with Doc 17's mode-first model)
 > **Earlier:** 2026-04-26
@@ -109,10 +111,11 @@ Text color on hover: `--color-text-primary` (if currently muted), no change (if 
 ## Context Menus
 
 ### Trigger rules
-- Right-click on vault tree items (stories, folders, docs, images)
-- Right-click on message bubbles (AI and user)
-- Right-click on checkpoint markers
-- No context menu on: pane backgrounds, disabled elements, input fields
+- Right-click on a vault tree row — story, folder, source document, image
+- Right-click on the Navigator's empty tree area — offers item creation at the vault root
+- Right-click on a Theater message bubble — story and session, AI and user
+- The `⋮` row-actions button on a vault row opens the **same** menu as right-click
+- No context menu on: the Theater scroll surface, the right pane, disabled elements. Editable fields keep the native browser menu (see §Menu contents by target — Editable text)
 
 ### Standard item shape
 
@@ -132,6 +135,71 @@ Destructive context menu items (Delete, Permanently Delete) use `--color-error` 
 - Only one context menu open at a time — opening a new one closes any existing one
 - Closes on: item click, click outside, Escape key
 - Escape from context menu does NOT propagate to the Escape chain
+
+### Menu contents by target
+
+The menu is **resolved on every right-click** from the target and the current
+state — items appear only when they apply ("intelligent menu"). There are two
+resolvers: one for the Navigator vault tree, one for Theater bubbles. Each is a
+pure function `(target, state) → MenuItem[]`; no menu logic lives inside the
+row or bubble components.
+
+A separator (`—` in the tables below) marks a group boundary. Items in
+*italics* are conditional.
+
+#### Navigator
+
+| Target | Items |
+|---|---|
+| Empty tree area | New Story · New Folder · New Source Document *(created at the vault root)* |
+| Folder row | New Story · New Folder · New Source Document *(created inside; the folder auto-expands)* — Rename — Delete to Trash *(disabled while the folder is non-empty — `delete_item` rejects non-empty folders)* |
+| Story row | *Open (omitted when this is already the active story)* — Rename — Delete to Trash |
+| Source Document / Image row | Open — Rename — *Attach to story / Detach from story (only while a story is active; "Attach" when unattached, "Detach" when attached)* — Delete to Trash |
+| Trash row | Restore — Delete permanently *(destructive)* |
+
+"Delete to Trash" is a soft delete — no confirmation, undo toast instead (see
+§Confirmation Dialogs). "Delete permanently" is destructive and confirmed.
+
+#### Theater bubbles
+
+| Target | Items |
+|---|---|
+| Story user bubble | Edit — Delete exchange · Delete from here *(both destructive)* |
+| Story AI bubble — prose | *Ghostwriter… · Add feedback / Edit feedback* — Edit · *Regenerate (last AI bubble only)* · Insert checkpoint here · Copy text — *Revert Ghostwriter (only when accepted edits exist)* — Delete exchange *(destructive)* |
+| Story AI bubble — `blocks` content | Edit · Insert checkpoint here · Copy text — Delete exchange *(destructive)*. Ghostwriter and Feedback are unavailable on `blocks` content |
+| Session AI bubble — prose | *Ghostwriter…* · Copy text — *Revert Ghostwriter (only when accepted edits exist)* |
+| Session AI bubble — `blocks` content | Copy text |
+| Session user bubble | *(no menu — session-message editing is out of v2.0 scope, Doc 23)* |
+
+The bubble menu and the below-bubble hover action row (Doc 27) are two
+presentations of **one set of handlers**. The menu is the superset — it carries
+every action the hover row offers plus menu-only actions (Insert checkpoint,
+Copy text). All mutating items are disabled while `workspaceStore.isGenerating`
+is true; Copy text stays enabled.
+
+No menu opens on a streaming bubble, a bubble currently in Ghostwriter mode, or
+a bubble being edited in place.
+
+#### Multi-select (Navigator)
+
+When the right-clicked row is part of a multi-selection (see §Selection
+Patterns), the menu acts on the **whole selection**:
+
+- If the right-clicked row is **not** in the current selection, the selection
+  first collapses to that single row, then the single-row menu opens.
+- If it **is** in the selection, the menu shows only the **intersection** of
+  actions valid for every selected item — realistically "Delete N items to
+  Trash" (and "Attach N documents to story" when every selected item is a
+  document/image and a story is active). Rename and Open are single-item only
+  and do not appear.
+- The count appears in the label: "Delete 3 items to Trash".
+
+#### Editable text
+
+Right-click inside an editable field — InputArea, SessionInputArea, DocEditor,
+the inline rename input — is **not** intercepted; the native browser menu
+(cut / copy / paste / spellcheck) shows. Custom menus apply only to tree rows
+and bubbles.
 
 ---
 
@@ -176,8 +244,10 @@ Click on an item → select it, deselect previous. Opens the item in the Theater
 - Clicking empty space in the Navigator → deselect all
 - Multi-select activates the BulkActionBar (replaces Navigator header)
 
-### Text selection inside AI bubbles
-Outside Ghostwriter mode, text selection in an AI bubble is **standard browser selection** (copy, search, etc.) — LOOM does not intercept it. To revise a passage, the writer enters Ghostwriter mode first via the bubble's action row `✦ Ghostwriter` button or right-click → Ghostwriter; only **inside** Ghostwriter mode does the bubble's selection drive the Ghostwriter target passage. See Doc 17 §Mode-First Activation.
+### Text selection inside bubbles
+Text selection in any bubble is **standard browser selection** (copy, search, etc.) — LOOM never intercepts it. On top of the native selection, a **Selection Popup** (Doc 29) — a floating toolbar — appears above a non-empty selection made in a story AI, session AI, or story user bubble. The popup is a pure observer of the native selection; it adds actions, it does not alter selection behaviour.
+
+The popup is a **selection-first** entry into Ghostwriter: selecting a passage and clicking `Ghostwriter` in the popup enters Ghostwriter mode pre-seeded with that passage. This sits alongside the two **mode-first** entries — the bubble's action-row `✦ Ghostwriter` button and right-click → Ghostwriter — where the writer enters the mode first and selects the passage afterwards. All three are sanctioned (Doc 17, Doc 29 §7).
 
 Inside Ghostwriter mode the selection must be:
 - At least 1 word

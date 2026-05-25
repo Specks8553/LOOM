@@ -1,4 +1,4 @@
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronsDown, ChevronsUp, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -52,6 +52,12 @@ export function AccordionBanner({
   const isStale = segment !== null && segment.is_stale;
   const isSummarising = segment !== null && summarisingIds.has(segment.id);
 
+  // D-24 "Collapse previous": a remote control for the segment ENDING at this
+  // checkpoint (the chapter above). Hidden on the start sentinel (no previous
+  // chapter); present and active on the open-segment banner — where it is the
+  // entry point to the summarise workflow.
+  const prevCollapsed = previousSegment !== null && previousSegment.is_collapsed;
+
   // Close menu on outside click / escape.
   useEffect(() => {
     if (menuPos === null) return;
@@ -75,12 +81,15 @@ export function AccordionBanner({
   }
 
   function toggleCollapse() {
+    // D-24: collapse no longer requires a summary. The open segment (segment
+    // null) has no row to collapse; everything else folds freely.
     if (segment === null) return;
-    if (!hasSummary) {
-      // Doc 16 §Banner state matrix: collapse forbidden without a summary.
-      return;
-    }
     void setSegmentCollapsed(segment.id, !segment.is_collapsed);
+  }
+
+  function togglePreviousCollapse() {
+    if (previousSegment === null) return;
+    void setSegmentCollapsed(previousSegment.id, !previousSegment.is_collapsed);
   }
 
   async function handleGenerateSummary() {
@@ -146,6 +155,10 @@ export function AccordionBanner({
       // Provisional — real "tokens saved" needs a count helper.
       return `${segmentMessageCount} messages compressed`;
     }
+    if (segment.is_collapsed && segment.summary === null) {
+      // D-24: folded but unsummarised — full content still sent, no savings.
+      return `~${segmentMessageCount} messages · summary needed`;
+    }
     return `~${segmentMessageCount} messages`;
   })();
 
@@ -173,7 +186,7 @@ export function AccordionBanner({
         <button
           type="button"
           onClick={toggleCollapse}
-          disabled={!hasSummary}
+          disabled={segment === null}
           aria-label={isCollapsed ? 'Expand chapter' : 'Collapse chapter'}
           className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-30"
         >
@@ -182,6 +195,17 @@ export function AccordionBanner({
             className={`transition-transform ${!isCollapsed ? 'rotate-90' : ''}`}
           />
         </button>
+        {previousSegment !== null && (
+          <button
+            type="button"
+            onClick={togglePreviousCollapse}
+            aria-label={prevCollapsed ? 'Expand previous chapter' : 'Collapse previous chapter'}
+            title={prevCollapsed ? 'Expand previous chapter' : 'Collapse previous chapter'}
+            className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          >
+            {prevCollapsed ? <ChevronsDown size={14} /> : <ChevronsUp size={14} />}
+          </button>
+        )}
         <div className="flex-1 truncate text-[12px]">
           {renameValue === null ? (
             label
@@ -216,6 +240,23 @@ export function AccordionBanner({
         <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-[14px] text-[var(--color-text-primary)]">
           <div className="whitespace-pre-wrap">{segment.summary}</div>
         </div>
+      )}
+
+      {/* D-24: collapsed with no summary → "summary needed" card. The whole
+       *  card is a click-to-generate target (same as the header button). */}
+      {segment !== null && isCollapsed && !hasSummary && (
+        <button
+          type="button"
+          onClick={() => void handleGenerateSummary()}
+          disabled={isGenerating}
+          title={isGenerating && !isSummarising ? 'Generation already in progress' : undefined}
+          className="flex w-full items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-left text-[13px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span>{isSummarising ? 'Summarising…' : 'Summary needed'}</span>
+          {!isSummarising && (
+            <span className="text-[11px] text-[var(--color-text-muted)]">Click to generate</span>
+          )}
+        </button>
       )}
 
       {/* Inline summary editor — shown after `Edit summary` in the menu. */}
@@ -266,24 +307,25 @@ export function AccordionBanner({
           {segment !== null && hasSummary && (
             <MenuItem onClick={() => handleEditSummary(segment)}>Edit summary</MenuItem>
           )}
-          {previousSegment !== null && previousSegment.summary === null && (
+          {previousSegment !== null && (
             <MenuItem
-              onClick={() => void handleSummariseSegment(previousSegment)}
-              disabled={isGenerating}
+              onClick={() => {
+                setMenuPos(null);
+                togglePreviousCollapse();
+              }}
             >
-              Summarise previous chapter
+              {prevCollapsed ? 'Expand previous chapter' : 'Collapse previous chapter'}
             </MenuItem>
           )}
-          {previousSegment !== null && previousSegment.summary !== null && (
+          {segment !== null && (
             <MenuItem
-              onClick={() => void handleSummariseSegment(previousSegment)}
-              disabled={isGenerating}
+              onClick={() => {
+                setMenuPos(null);
+                toggleCollapse();
+              }}
             >
-              Re-summarise previous chapter
+              {isCollapsed ? 'Expand' : 'Collapse'}
             </MenuItem>
-          )}
-          {segment !== null && hasSummary && (
-            <MenuItem onClick={toggleCollapse}>{isCollapsed ? 'Expand' : 'Collapse'}</MenuItem>
           )}
           <MenuItem
             onClick={() => {

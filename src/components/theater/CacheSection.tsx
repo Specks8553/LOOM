@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { CacheContentsModal } from '@/components/theater/CacheContentsModal';
+import { surfaceError } from '@/lib/errors';
 import { createStoryCache, deleteStoryCache } from '@/lib/tauriApi/cache';
 import { formatTtl, ttlColorToken, useCacheStore } from '@/stores/cacheStore';
 
@@ -103,7 +104,7 @@ function CacheRow({ row, onClick }: CacheRowProps) {
     try {
       await deleteStoryCache(row.story_id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not delete cache');
+      surfaceError(err, 'Could not delete cache');
     }
   }
 
@@ -157,7 +158,7 @@ export function CreateCacheButton({ storyId }: { storyId: string }) {
       await createStoryCache(storyId);
       toast.success('Cache created');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create cache');
+      surfaceError(e, 'Could not create cache');
     } finally {
       setBusy(false);
     }

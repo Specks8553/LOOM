@@ -1,0 +1,18 @@
+# Per-developer cargo config — copy to `.cargo/config.toml` (gitignored).
+#
+# WHY THIS IS NOT TRACKED: rusqlite's `bundled-sqlcipher` feature builds
+# SQLCipher against OpenSSL. On Windows there is no system OpenSSL, so the
+# build needs OPENSSL_DIR pointing at a local OpenSSL install. That path is
+# machine-specific — committing it forces a non-existent path onto
+# Linux/macOS and CI, where `libsqlite3-sys`'s build script then panics with
+# "OpenSSL include directory does not exist". So each Windows dev keeps their
+# own untracked copy here.
+#
+# macOS / Linux / CI: do NOT create this file. Leave OPENSSL_DIR unset so the
+# build finds the system OpenSSL via pkg-config (install libssl-dev on Debian/
+# Ubuntu; `brew install openssl@3` on macOS).
+#
+# Windows: install OpenSSL (e.g. `scoop install openssl`) and point at it:
+
+[env]
+OPENSSL_DIR = { value = "C:/Users/<you>/scoop/apps/openssl/current", force = false, relative = false }

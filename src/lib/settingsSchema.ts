@@ -200,6 +200,14 @@ const FEATURE_FIELDS: FieldSpec[] = [
     allowEmpty: true,
     hint: 'Empty resets to the default amber (does not track accent).',
   },
+  {
+    key: 'mark_color',
+    label: 'Mark colour',
+    kind: 'hex',
+    worldOverridable: true,
+    allowEmpty: true,
+    hint: 'Empty resets to the default rose (does not track accent).',
+  },
 ];
 
 const GENERAL_FIELDS: FieldSpec[] = [

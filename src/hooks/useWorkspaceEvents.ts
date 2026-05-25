@@ -165,6 +165,13 @@ export function useWorkspaceEvents(): void {
       },
     );
 
+    // --- Marks (Phase 14, Doc 30) ---
+    track<{ story_id: string; message_id: string | null }>('marks_changed', (p) => {
+      const ws = useWorkspaceStore.getState();
+      if (ws.activeStoryId !== p.story_id) return;
+      void ws.loadMarks().catch(console.error);
+    });
+
     track<{ story_id: string; reason: string }>('cache_unavailable', (p) => {
       // Imported lazily to avoid a top-level cycle through the toast lib.
       void import('sonner').then(({ toast }) => {

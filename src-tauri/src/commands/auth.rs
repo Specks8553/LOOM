@@ -23,9 +23,10 @@ use crate::state::AppState;
 
 /// Result returned by `unlock_vault`.
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct UnlockResult {
     pub has_api_key: bool,
+    #[ts(type = "number")]
     pub auto_lock_secs: u64,
 }
 

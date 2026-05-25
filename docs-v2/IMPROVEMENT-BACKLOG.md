@@ -336,6 +336,152 @@ Heuristics that often resolve oversize components:
 
 ---
 
+## R20 — Architecture-doc reconciliation (Docs 04–07)
+
+**Problem (AUDIT-2026-05, systemic):** Docs 04–07 were never re-verified against code after the implementation phases (2–12) shipped. Module trees, folder maps, AppState type signatures, and command tables are all stale.
+
+**Action:** regenerate the stale maps against the real codebase. Covers:
+- **CD-04** — Doc 05 §Module Structure predates Phases 2–12 (missing files, `schema.rs`→`migrations.rs` rename, misplaced `state`, unimplemented `generation/` + `rate_limiter.rs`).
+- **CD-05** — Doc 05 §AppState `cancel_tx` type drift vs `state/mod.rs:24`.
+- **CD-06** — Doc 06 §File and Folder Structure vs `src/components/` (incl. `Workspace.tsx`→`WorkspaceShell.tsx`).
+- **CD-07** — Doc 06 §Tauri IPC Conventions: `tauriApi/` wrapper inventory missing four files.
+- **CD-08** — Doc 07: `list_templates` listed under both `vault` and `settings` domains.
+- **IP-01** — Doc 07 missing the entire `app_phase` command domain (2 commands).
+- **IP-03** — Doc 07 missing several implemented commands across domains.
+- **CQ-01** — `db/settings.rs` imports from `services/` (the one real Doc 05 dependency-rule / layering inversion).
+- **CQ-06** — `db/settings.rs` header overclaims it is the "only place" running `SELECT … FROM story_state` (`vault.rs` also does, via typed key).
+
+*Note:* IP-02 (4 unregistered commands) overlaps the rate-limiter deferral (R29) and World Backup (Phase 12.6 registers `export_world`/`import_world`); reconcile Doc 07 once those land.
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R21 — Foundation doc/code drift
+
+**Problem (AUDIT-2026-05):** Small, isolated drift in the foundation layer.
+
+**Action:**
+- **CD-01** — atomic temp-file uses `with_extension("tmp")` → `app_config.tmp` not the spec'd `app_config.json.tmp` (`services/config.rs:88`, `services/world.rs:118`). Trivial code fix to match the spec.
+- **CD-02** — Doc 03 §app_settings default `accent_color` `#7c3aed` disagrees with code + Doc 08 (`#6b9f78` Sage). Fix Doc 03.
+- **DG-01** — `onboarding_complete` localStorage flag is specified (Doc 03/04) but never read/written; the file-existence check is the real trigger. Drop the dead flag from the docs.
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R22 — Lint-enforcement restoration
+
+**Problem (AUDIT-2026-05):** Doc 24 mandates lint rules that the config dropped or never had — so the token rule is unenforced and raw colour classes crept in.
+
+**Action:**
+- **CD-27** — re-add or replace `eslint-plugin-tailwindcss` (Doc 24 mandates it for token enforcement; it was dropped, tier downgrade unacknowledged). Re-establishing it makes CQ-02 mechanically detectable.
+- **CD-28** — add `import/no-default-export` for `src/components/**` (Doc 24 mandates; absent from `eslint.config.js`).
+- **CD-29** — set `react-hooks/exhaustive-deps` to `error` (Doc 24 claims `error`; config inherits plugin default `warn`).
+- **CQ-02** — fix the raw Tailwind colour classes in `WorldPickerModal.tsx`, `OnboardingShell.tsx`, `LockedShell.tsx`, `Navigator.tsx` (Doc 08 token rule). Do this in the same item once CD-27 makes it detectable.
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R23 — Testing-doc reconciliation + coverage
+
+**Problem (AUDIT-2026-05):** Doc 24/25 testing claims drift from reality; "High" frontend targets are untested.
+
+**Action:**
+- **CD-30** — Doc 25 lists `cargo test`/`pnpm test` as pre-commit gates; the hook runs only lint-staged + tsc. Doc 24 is authoritative — fix Doc 25's pre-commit table.
+- **CD-35** — Doc 24 (`:261`, `:906`) twice calls Doc 25 "currently a stub", but Doc 25 is Complete (2026-05-07). Fix Doc 24.
+- **DG-08** — canonical `tests/helpers/mod.rs` (`world_db()`/`app_db()`) from Doc 25 doesn't exist (`canary.rs` duplicates the fixture locally). Add the shared helper.
+- **CQ-12** — Doc 25 "High" frontend targets untested: `applyTheme` (`theme.ts`) + `cn()` (`utils.ts`) have zero tests; 4 of 7 stores (auth/mode/settings/vault) untested. Add tests.
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R24 — Meta-doc currency
+
+**Problem (AUDIT-2026-05):** Process/meta docs are frozen and no longer describe reality.
+
+**Action:**
+- **CD-31** — `IMPLEMENTATION-PLAN.md` header status, Phase 11 status, and Phase 12 "last touched" drift from commit history. (Partially addressed 2026-05-23 by the Phase 12.5/12.6 header update; Phase 11 status flip still pending.)
+- **DG-09** — `IMPL-NOTES.md` frozen at 2026-04-26; every entry Open; RESOLVED section empty despite landed work. Reconcile.
+- **DG-10** — `HANDOVER.md` frozen at 2026-04-27; describes the planning phase as ongoing. Add an archival banner or rewrite.
+
+*DG-11 (PRE-AUDIT immutable-vs-live) resolved separately by decision D2 — immutability banner landed 2026-05-23.*
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R25 — Vault/Worlds feature completion (Doc 14)
+
+**Problem (AUDIT-2026-05):** Doc 14 specs vault features that are partially built or UI-less.
+
+**Action:**
+- **CD-20** — export UI lives in the World Picker card, not "Settings → World → Export world". *(Folds into Phase 12.6 World Backup, which places it correctly.)*
+- **CD-21** — `BulkActionBar` unimplemented though multi-select state is wired (`Navigator.tsx`, `vaultStore.ts`).
+- **CD-22** — "Move to…" folder-picker overlay missing — drag-only (`Navigator.tsx`).
+- **CD-23** — "Empty Trash" button missing; backend command exists, UI absent (`vault.ts:88-90`).
+- **CQ-08** — `Navigator.tsx` 629 lines > R19 600-cap; decompose while implementing CD-21/CD-22/CD-23 (same file).
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.) CD-21 + CD-22 are one multi-select/move surface — batch.
+
+---
+
+## R26 — Auth/onboarding drift (Doc 13)
+
+**Problem (AUDIT-2026-05):** Doc 13 auth/auto-lock behaviour drifts from the implementation.
+
+**Action:**
+- **CD-16** — wire "reset auto-lock timer on completed AI generation" (`workspaceStore.ts`, `App.tsx:61-84`).
+- **CD-17** — *decision D6: the doc is right; fix the code.* On auto-lock-timer expiry during an in-flight generation, **wait for generation to finish, then lock** (current code cancels). Rework the auto-lock path (`authStore.ts:46-51`, `auth.rs:170-189`).
+- **CD-18** — align the on-lock store-reset list with the actual clear set (`App.tsx:36-48`).
+- **DG-07** — `authStore` interface drifts from Doc 13 spec (action names + responsibilities). Reconcile.
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R27 — Backend code hygiene
+
+**Problem (AUDIT-2026-05):** Forbidden-pattern + substrate-hygiene residue.
+
+**Action:**
+- **CQ-07** — `AppState::drop` locks `master_key`/`api_key` directly (undocumented SB-5 exception). Document it + widen the grep gate to catch `self.`-style locks (`state.` prefix misses them).
+- **CQ-09** — remove `// Phase N` provenance comments (5 production + 2 test sites); especially the 2 `///` doc-comments baking temporal coupling into API docs (`world.rs:401`, `db/messages.rs:427`).
+- **CQ-10** — replace the 2 production `.unwrap()`s (`auth.rs:85`, `conversation.rs:292`) with `?` / proper error handling (both currently low panic-risk).
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3.)
+
+---
+
+## R28 — Theater scroll behaviour (Doc 15)
+
+**Problem (AUDIT-2026-05, decision D4):** Scroll-state findings are behaviour, which Phase 12 declares out-of-scope (visual only) — so they land here, not in Phase 12.
+
+**Action:**
+- **CD-24** — move `scrollState` + `pauseAutoFollow`/`resumeAutoFollow` from local component state (`TheaterBody.tsx:44,79,86`) to `workspaceStore` as Doc 15 specifies.
+- **CD-25** — implement the edit-mode scroll freeze (Doc 15 §Theater Scrolling rule 5).
+
+**Status:** Open. (AUDIT-2026-05 Bucket 3 / decision D4.)
+
+---
+
+## R29 — Rate limiter (deferred to v2.1)
+
+**Problem (AUDIT-2026-05, decision D5):** The rate-limiter subsystem is entirely unimplemented. Phase 11 already deferred the Settings tab; v2.0 ships **without** it. The docs, however, still imply it exists.
+
+**Action (v2.0 — doc reconciliation only):**
+- **CD-26** — reconcile Doc 20 to mark the "Rate Limits" tab + its 3 commands as v2.1-deferred (stop implying the tab exists).
+- **IP-02** — drop `reset_rate_limiter` (+ the other unregistered commands) from Doc 07's list, or mark them v2.1 — see R20.
+
+**Action (v2.1 — build):**
+- **CQ-05** — implement `services/rate_limiter.rs`, raise `LoomError::RateLimited`, register commands, add the Settings tab, add its test fixture. Tracked as a v2.1 feature.
+
+**Status:** Open (doc reconciliation, v2.0). CQ-05 build deferred to v2.1. (AUDIT-2026-05 Bucket 3 / decision D5.)
+
+---
+
 ## Resolution Log
 
 - **2026-05-04 — R3 closed.** Doc 24 §No Cross-Store Imports (SB-2) is the rule home; ESLint `import/no-restricted-paths` config snippet inline; CI fails on violation.

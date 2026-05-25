@@ -15,7 +15,9 @@ use uuid::Uuid;
 use crate::db::accordion::{self as db_accordion, AccordionSegment, AccordionState, Checkpoint};
 use crate::db::messages::{self, ChatMessage};
 use crate::error::{LoomError, ValidationKind};
-use crate::services::history::{render_message_into, AssembledRequest, GeminiContent};
+use crate::services::history::{
+    append_marks_clause, render_message_into, AssembledRequest, GeminiContent, MarksLookup,
+};
 
 /// Single source of truth for ISO 8601 timestamps in this module.
 pub fn now_iso() -> String {
@@ -350,12 +352,21 @@ pub fn build_summarise_request(
     if messages.is_empty() {
         return Err(LoomError::validation("Cannot summarise an empty segment."));
     }
+    // Marks on the segment's messages ride the summarise call as a per-message
+    // `[MARKED IMPORTANT]` manifest, and the SI gains the preserve-clause when
+    // any are present (Doc 30 §6/§7).
+    let marks = MarksLookup::load(conn, &seg.story_id)?;
     let mut contents: Vec<GeminiContent> = Vec::with_capacity(messages.len());
     for msg in &messages {
-        render_message_into(msg, &mut contents)?;
+        render_message_into(msg, marks.for_message(&msg.id), &mut contents)?;
     }
+    let system_instruction = if marks.is_empty() {
+        system_instruction.to_owned()
+    } else {
+        append_marks_clause(system_instruction)
+    };
     Ok(AssembledRequest {
-        system_instruction: system_instruction.to_owned(),
+        system_instruction,
         contents,
         cached_content_name: None,
     })

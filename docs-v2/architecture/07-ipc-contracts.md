@@ -1,7 +1,8 @@
 # 07 — IPC Contracts
 
 > **Status:** Format complete — command signatures populated as feature docs are written (see IMPL-NOTES.md IN-07)
-> **Last updated:** 2026-05-04 — Feedback design pass (D-17): `update_feedback` row annotated with Doc 28 server-side preconditions (rejects non-story-kind messages with `Validation`; cache + accordion stale rules apply per Doc 22 / Doc 16).
+> **Last updated:** 2026-05-23 — Phase 12.5 (HB-01): §LoomError → Frontend Mapping records the adjacently-tagged `{ kind, message }` wire shape, adds the missing `forbidden` / `cache_create` rows, points at Doc 12 §0; `Validation` field `kind` → `validation_kind` to match code.
+> **Earlier:** 2026-05-04 — Feedback design pass (D-17): `update_feedback` row annotated with Doc 28 server-side preconditions (rejects non-story-kind messages with `Validation`; cache + accordion stale rules apply per Doc 22 / Doc 16).
 > **Earlier:** 2026-05-03 — pre-implementation audit resolution: accordion command names + events rewritten to match Doc 16 — `load_accordion` → `get_accordion_state`, `edit_segment_summary` → `update_segment_summary`, `cancel_summarise_segment` removed (covered by `cancel_generation`), `clear_segment_summary` added, the four `accordion_summarise_*` streaming events removed (summarisation is non-streaming), `accordion_state_changed` payload narrowed to `{ story_id, segment_id?, checkpoint_id? }` (HB-4).
 > **Earlier:** 2026-05-03 — Doc 20 design pass: `commands/settings.rs` populated (15 commands, 2 events); `get_story_settings` / `save_story_setting` dropped (no story scope per D-03-A); `restore_prompt_default` enum widened to include `prompt_handover_seed` and `prompt_consulting_seed`
 > **Earlier:** 2026-04-29 — Doc 19 design pass: vault commands `upload_image`, `export_world`, `import_world` flipped from skeleton to specified
@@ -213,7 +214,7 @@ Full signatures are authoritative in Doc 16 §Backend API. This table is the ind
 | `get_accordion_state` | ✅ Specified | Returns `{ segments, checkpoints }` for the active story |
 | `create_checkpoint` | ✅ Specified | Args: `after_message_id`, `name`. Splits the enclosing segment if one existed; new segments default `summary = NULL`, `is_collapsed = 0`, `use_summary = 1` |
 | `rename_checkpoint` | ✅ Specified | Args: `checkpoint_id`, `name`. Updates `modified_at`; never marks segments stale |
-| `delete_checkpoint` | ✅ Specified | Merges adjacent segments per Doc 16 §Cascade. Rejected on the start sentinel (`is_start = 1`) with `LoomError::Validation { kind: ProtectedSentinel, … }` |
+| `delete_checkpoint` | ✅ Specified | Merges adjacent segments per Doc 16 §Cascade. Rejected on the start sentinel (`is_start = 1`) with `LoomError::Validation { validation_kind: ProtectedSentinel, … }` |
 | `summarise_segment` | ✅ Specified | Non-streaming Gemini call; sets `summary` + `summarised_at`; clears `is_stale`. Subject to `isGenerating` global lock (Doc 15). Cancelled via the global `cancel_generation` (no separate cancel command) |
 | `update_segment_summary` | ✅ Specified | Args: `segment_id`, `summary`. Manual override; bumps `modified_at`; clears `is_stale` |
 | `clear_segment_summary` | ✅ Specified | Args: `segment_id`. Sets `summary = NULL`; sets `use_summary = 0`; if `is_collapsed = 1`, also sets `is_collapsed = 0` (cannot show a banner with no summary). Bumps `modified_at` |
@@ -390,16 +391,18 @@ Unless a command explicitly states otherwise, these apply to every command:
 
 ## LoomError → Frontend Mapping (summary)
 
-Full display rules are in Doc 12. Quick reference:
+`LoomError` crosses IPC **adjacently-tagged** — `{ "kind": "<snake_case>", "message": <payload> }` (Doc 05 §LoomError, HB-01). The frontend's `surfaceError()` reads `.kind` and routes. Full display rules (all 11 variants + the four `validation_kind` sub-cases) are in Doc 12 §Error Display Hierarchy §0. Quick reference:
 
 | Variant | Typical cause | Display rule |
 |---|---|---|
-| `Crypto` | Wrong password, corrupt sentinel | Blocking modal |
-| `Database` | DB write failure, corrupt DB | Blocking modal |
-| `NotFound` | Stale ID reference | Toast (error) |
-| `Validation` | Bad input, missing precondition | Inline or toast |
-| `ApiError` | Gemini 4xx / 5xx | Toast (error) with detail |
-| `RateLimited` | RPM / TPM / RPD exceeded | Toast (warning) with reset time |
-| `Io` | File system failure | Toast (error) |
-| `Serialization` | Corrupt stored data | Toast (error) |
-| `Internal` | Unexpected failure | Toast (error) |
+| `crypto` | Wrong password, corrupt sentinel | Blocking modal (unlock screen → inline) |
+| `database` | DB write failure, corrupt DB | Blocking modal |
+| `not_found` | Stale ID reference | Toast (error) |
+| `validation` | Bad input, missing precondition | Inline or toast (by `message.validation_kind`) |
+| `forbidden` | Prohibited op (built-in delete, invalid API key) | Toast |
+| `api_error` | Gemini 4xx / 5xx | Toast (error) with detail |
+| `cache_create` | Gemini cache POST/PATCH failed | Toast (quiet) — inline-assembly fallback (Doc 22) |
+| `rate_limited` | RPM / TPM / RPD exceeded | Toast (persistent) with reset time |
+| `io` | File system failure | Toast (error) / inline |
+| `serialization` | Corrupt stored data | Toast (error) |
+| `internal` | Unexpected failure | Toast (error) |

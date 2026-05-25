@@ -1,7 +1,9 @@
 # 16 — Context Compression (Accordion)
 
 > **Status:** Complete
-> **Last updated:** 2026-04-29 — first full design pass; checkpoints become banners (one banner per checkpoint); inverted naming ("name what comes next"); `is_collapsed` and `use_summary` decoupled; per-banner button-slot state machine; v1 fake-pair injection retained
+> **Last updated:** 2026-05-23 — D-25 (Marks): §Stale Marking gains a trigger — adding / removing / note-editing a "mark as important" (Doc 30) inside a closed segment marks it stale (the summary no longer reflects the importance signal). Marks also ride the summarise call: the segment's messages are rendered with their `[MARKED IMPORTANT — PRESERVE FAITHFULLY]` manifest (via `render_message_into`), and `prompt_accordion_summarise` gains a preserve-clause. Lands in Phase 14.
+> **Earlier:** 2026-05-23 — D-24 collapse/summary addendum: collapse no longer requires a summary (collapse-without-summary is a pure visual fold — full bubbles still sent, zero token/cache impact); collapsed-but-unsummarised segments show a "summary needed" card that is itself a click-to-generate trigger; new per-banner **Collapse previous** control (additive to the chevron) lets the writer fold the chapter above without scrolling to its banner; summarising is **downward-only** — the "Summarise previous chapter" / "Re-summarise previous chapter" right-click actions are removed (a chapter is always summarised from the banner that owns it).
+> **Earlier:** 2026-04-29 — first full design pass; checkpoints become banners (one banner per checkpoint); inverted naming ("name what comes next"); `is_collapsed` and `use_summary` decoupled; per-banner button-slot state machine; v1 fake-pair injection retained
 > **Scope:** Compressing earlier chapters of a story into AI-generated summaries that replace the original messages in API history — reducing token consumption while preserving narrative context. The writer controls when to summarise, what gets collapsed, and can expand any segment to read the full text.
 
 Accordion is LOOM's context-window-management feature. With branching removed in v2.0 the model is materially simpler than v1's: segments are linear, never fork-spanning, and a single `use_summary` flag on each segment drives history assembly. Banners are unified with the partition pattern from Doc 27.
@@ -61,31 +63,48 @@ The banner's header carries one button whose appearance and behaviour depend on 
 | Segment state | Button | Click |
 |---|---|---|
 | No segment yet (open segment — most recent checkpoint) | None / disabled | — |
-| `summary IS NULL` and segment is closed | "Generate summary" | Calls `summarise_segment` |
+| `summary IS NULL`, segment closed (collapsed **or** expanded) | "Generate summary" | Calls `summarise_segment` |
 | Generation in flight for this segment | Animated loading indicator | Cancels generation |
 | Generation in flight elsewhere | "Generate summary" greyed; tooltip `"Generation already in progress"` | — |
 | `summary IS NOT NULL`, `is_collapsed = 0` | "Use summary" toggle, default ON | Edits `use_summary` |
 | `summary IS NOT NULL`, `is_collapsed = 1` | Toggle hidden (forced-on by collapse) | — |
 | `is_stale = 1` (any of the above) | Plus a `⚠` badge | Right-click → re-summarise |
 
-The chevron is independent and toggles `is_collapsed`. It's always present.
+When a segment is **collapsed with no summary** (`is_collapsed = 1`, `summary IS NULL`), the body renders a "summary needed" card (see §Banner state matrix) and the button slot still offers "Generate summary". The "summary needed" card is **itself a click-to-generate target** — clicking it fires `summarise_segment`, the same as the header button — so the writer can summarise without first locating the header control. (This does not violate "never auto-summarise": generation is still an explicit click.)
 
-### Banner state matrix (`is_collapsed` × `use_summary`)
+The chevron is independent and toggles `is_collapsed`. It's always present — collapse no longer requires a summary (D-24).
 
-| `is_collapsed` | `use_summary` | Theater | API History |
-|---|---|---|---|
-| 1 | * | Banner shows summary card (bubbles hidden) | Fake-pair |
-| 0 | 1 | Banner expanded; bubbles visible; toggle ON | Fake-pair |
-| 0 | 0 | Banner expanded; bubbles visible; toggle OFF | Full bubbles |
+### Collapse-previous control
 
-Invariant in code: when collapsing (`is_collapsed → 1`), the assembly forces fake-pair regardless of `use_summary`. The two fields are stored independently; the OR-rule lives in history assembly:
+Each banner additionally carries a **Collapse previous** control that folds the chapter *ending* at this checkpoint (the segment immediately above, owned by the previous checkpoint's banner). It is purely a remote control for that segment's `is_collapsed` — equivalent to clicking the previous banner's chevron, but reachable without scrolling up to it.
+
+Its purpose is the summarise workflow: parked at the story tail, the writer clicks **Collapse previous** on the open-segment banner; the just-finished chapter folds to a single row, its owning banner snaps into view directly above, and the "summary needed" card (or "Generate summary" button) there is one click from generating. Summarising is always done *from the banner that owns the chapter* — never backward — which is why the old "Summarise previous chapter" right-click shortcuts are removed (see §Banner right-click menu).
+
+Availability:
+- **Hidden on the start sentinel** (no chapter above it).
+- **Present and active on the open-segment banner** even though that banner's own chevron and button slot are inert (the open segment has no row) — this is the primary entry point for the workflow.
+- There is no "collapse next" control; folding the chapter *below* a banner is what that banner's own chevron already does.
+
+### Banner state matrix (`is_collapsed` × `summary` × `use_summary`)
+
+| `is_collapsed` | `summary` | `use_summary` | Theater | API History |
+|---|---|---|---|---|
+| 1 | present | * | Summary card (bubbles hidden) | Fake-pair |
+| 1 | NULL | * | **"Summary needed" card** (bubbles hidden) | **Full bubbles** |
+| 0 | present | 1 | Expanded; bubbles visible; toggle ON | Fake-pair |
+| 0 | present | 0 | Expanded; bubbles visible; toggle OFF | Full bubbles |
+| 0 | NULL | * | Expanded; bubbles visible; "Generate summary" button | Full bubbles |
+
+The two fields are stored independently; the OR-rule lives in history assembly and is **unchanged** by D-24:
 
 ```rust
 let use_fake_pair = (segment.is_collapsed || segment.use_summary)
                  && segment.summary.is_some();
 ```
 
-If `summary IS NULL`, fake-pair is impossible. The button slot then offers "Generate summary" instead of the toggle, and `is_collapsed` is forbidden (collapse requires a summary — see User Flows).
+If `summary IS NULL`, fake-pair is impossible — so a **collapsed-but-unsummarised** segment still sends its full bubbles to the API. Collapse without a summary is therefore a **pure visual fold**: it declutters the Theater but saves no tokens and never touches the cache (the existing "chevron is UI-only" rule, see §Accordion + Cache Interaction, holds — and is now obviously correct, since collapse-no-summary changes nothing in the request). The Theater shows a "summary needed" card in place of the summary, signalling "folded, but still costing full context"; the button slot offers "Generate summary".
+
+The only change from the prior design is the removal of the old guard: collapsing **no longer requires a summary** (D-24). The formula above is untouched.
 
 ### Banner naming
 
@@ -100,19 +119,19 @@ Right-click → `Rename` opens an inline editor on the banner.
 | `Summarise this chapter` | When the segment starting here is closed (a later checkpoint exists) and has no summary |
 | `Re-summarise this chapter` | When the segment starting here is closed and has a summary |
 | `Edit summary` | When the segment starting here has a summary |
-| `Summarise previous chapter` | When this is not the start sentinel (i.e. a previous chapter exists) — summarises the segment **ending** at this checkpoint |
-| `Re-summarise previous chapter` | Same as above, when previous segment already has a summary |
-| `Collapse` / `Expand` | Mirrors the chevron; available when the segment starting here has a summary |
+| `Collapse previous chapter` / `Expand previous chapter` | When this is not the start sentinel — mirrors the **Collapse previous** header control; folds/unfolds the segment **ending** at this checkpoint |
+| `Collapse` / `Expand` | Mirrors the chevron; folds/unfolds the segment starting here (available regardless of summary state — D-24) |
 | `Rename` | Always (renames this checkpoint) |
 | `Delete checkpoint` | Available except on the start sentinel — triggers segment merge |
 
-The "previous chapter" actions are a discoverability convenience: when the user just finishes writing Chapter 1 and creates the Chapter 2 checkpoint, their natural mental flow is "summarise what I just finished." That action lives on the new banner (Chapter 2) even though it operates on the previous segment (Chapter 1's). The same actions are also available on Chapter 1's banner via "Summarise this chapter."
+**Summarising is downward-only.** A banner only ever summarises the chapter that *starts* at it (the chapter rendered below it). There is no "summarise the chapter above" action — the old "Summarise previous chapter" / "Re-summarise previous chapter" shortcuts are removed (D-24). The replacement for the "I just finished a chapter, summarise it" flow is the **Collapse previous** control: from the open-segment banner at the story tail, fold the chapter above; its owning banner then sits directly above with its "summary needed" card (click-to-generate) or "Generate summary" button in reach. This trades the prior one-click shortcut for a single consistent rule (summary belongs to the owning banner) plus a declutter side-effect.
 
 ### Token impact display
 
 Banner tail shows:
 - Closed segment with summary collapsed: `Chapter 2 · 1,247 tok saved`
 - Closed segment with summary, expanded: `Chapter 2 · ~12 messages`
+- Closed segment collapsed with **no** summary: `Chapter 2 · ~12 messages · summary needed` (folded but still sending full content — no tokens saved)
 - Open segment (most recent banner): `Chapter 5 · 8 messages so far`
 - Stale: any of the above + `⚠`
 
@@ -195,7 +214,7 @@ The user can re-populate the segment (write more messages between the checkpoint
 
 ### Trigger
 
-User clicks the banner's "Generate summary" button, or right-clicks → `Summarise this chapter` / `Summarise previous chapter`. The relevant segment is identified by `segment_id`.
+User clicks the banner's "Generate summary" button, clicks the "summary needed" card on a collapsed-unsummarised banner, or right-clicks → `Summarise this chapter`. The relevant segment is identified by `segment_id`.
 
 ### Pre-flight
 
@@ -353,6 +372,7 @@ A segment is `is_stale = 1` whenever its underlying content drifts from what its
 | Hard-delete a message inside the segment (without cascading the whole segment away) | Doc 15 §Deletion |
 | Ghostwriter accept on a model message inside the segment | Doc 17 |
 | Update feedback on a model message inside the segment | Doc 15 §Feedback |
+| Add / remove / note-edit a mark on a message inside the segment | Doc 30 §Interactions — the manifest fed to a re-summary changed. (Orphaning a mark needs no separate trigger: it is caused by a content edit, which already stales the segment.) |
 | Inserting a new checkpoint inside the segment | Doc 16 §Inserting a checkpoint inside an existing closed segment — note: this *splits* the segment rather than marking it stale; the new segments are born clean (no summary) |
 
 A re-summarisation clears `is_stale` (writes a fresh summary). A manual `Edit summary` also clears `is_stale` — the user has just curated the summary themselves and implicitly accepted the current content as a baseline.
@@ -442,8 +462,16 @@ The user can then re-summarise via the banner button or right-click menu.
 ### Collapse / expand without changing API behaviour
 
 1. Click the chevron — `is_collapsed` flips.
-2. Theater re-renders (bubbles ↔ summary card).
-3. **No** cache change (because `use_summary` is independent and unchanged). Subsequent sends behave identically.
+2. Theater re-renders (bubbles ↔ summary card, or ↔ "summary needed" card when no summary exists).
+3. **No** cache change (because `use_summary` is independent and unchanged; and a collapse-without-summary changes nothing in the request). Subsequent sends behave identically.
+
+### Fold a finished chapter and summarise it (the primary summarise workflow)
+
+1. The writer is parked at the story tail (the open-segment banner).
+2. Click **Collapse previous** on that banner. The chapter above (the just-finished one) folds; `is_collapsed = 1` on the segment that ends at this checkpoint.
+3. That chapter's owning banner is now directly above, compact, showing a "summary needed" card.
+4. Click the "summary needed" card (or the banner's "Generate summary" button) → `summarise_segment` fires.
+5. On success the card becomes a real summary card; the segment is **not** auto-collapsed-with-summary beyond the fold already applied, and `use_summary` defaults ON, so the next send substitutes the fake-pair. (Folding earlier saved nothing; summarising is what actually reduces tokens.)
 
 ### Delete a checkpoint
 
@@ -480,7 +508,11 @@ update_segment_summary(segment_id: String, summary: String) -> Result<()>
   // Manual edit. Sets is_stale = 0, summarised_at = now().
 
 set_segment_collapsed(segment_id: String, collapsed: bool) -> Result<()>
-  // UI-only state. Does NOT mark cache stale.
+  // UI-only state. Does NOT mark cache stale. Valid regardless of summary
+  // presence (D-24): collapsing a segment with summary IS NULL renders the
+  // "summary needed" card and leaves the API request unchanged (full bubbles).
+  // The "Collapse previous" banner control calls this on the segment ending at
+  // the clicked checkpoint; no separate command is needed.
 
 set_segment_use_summary(segment_id: String, use_summary: bool) -> Result<()>
   // Marks cache stale if the segment is in the cached prefix.
@@ -504,7 +536,7 @@ The frontend's `workspaceStore` listens and re-fetches `get_accordion_state` to 
 
 | Variant | When |
 |---|---|
-| `LoomError::Validation` | Vault locked, story not active, segment empty (summarise), already-collapsed-with-no-summary, generation in flight |
+| `LoomError::Validation` | Vault locked, story not active, segment empty (summarise), generation in flight |
 | `LoomError::RateLimited` | Rate limit hit during summarise |
 | `LoomError::ApiError` | Gemini 4xx/5xx during summarise |
 | `LoomError::Database` | DB failure |
@@ -584,3 +616,4 @@ Listener for `accordion_state_changed` lives in the workspace events hook; on pa
 - **Doc 22** — Cache stale-trigger rules; cached-message edit/delete protection; consulting session snapshot freezes accordion state at session creation.
 - **Doc 23** — Mode interaction: handover and story sends use Accordion substitution; consulting uses snapshot-frozen accordion state.
 - **Doc 27** — Banner visuals (chevron, button slot, name, token-impact display, `⚠` stale badge).
+- **Doc 30** — Marks. The summarise call renders each message with its `[MARKED IMPORTANT]` manifest; mark-set changes inside a closed segment are a stale trigger.

@@ -6,6 +6,7 @@ pub mod attachment_history;
 pub mod cache_state;
 pub mod connection;
 pub mod conversation_sessions;
+pub mod marks;
 pub mod messages;
 pub mod migrations;
 pub mod settings;

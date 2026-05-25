@@ -7,9 +7,10 @@ import {
   MoreVertical,
   Paperclip,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { renameItem } from '@/lib/tauriApi/vault';
+import { useVaultStore } from '@/stores/vaultStore';
 
 import type { VaultItemMeta } from '@/lib/types';
 
@@ -79,6 +80,17 @@ export function VaultTreeRow({
 }: VaultTreeRowProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.name);
+
+  // Doc 11 §Context Menus — the menu's "Rename" action signals through the
+  // store; the matching row enters inline-rename and clears the request.
+  const pendingRenameId = useVaultStore((s) => s.pendingRenameId);
+  const clearRenameRequest = useVaultStore((s) => s.clearRenameRequest);
+  useEffect(() => {
+    if (pendingRenameId !== item.id) return;
+    setDraft(item.name);
+    setEditing(true);
+    clearRenameRequest();
+  }, [pendingRenameId, item.id, item.name, clearRenameRequest]);
 
   function startRename() {
     setDraft(item.name);

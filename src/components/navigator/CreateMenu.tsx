@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
+import { surfaceError } from '@/lib/errors';
 import { createItem } from '@/lib/tauriApi/vault';
 import { useVaultStore } from '@/stores/vaultStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -63,7 +63,7 @@ export function CreateMenu({ open, onOpenChange, parentId, trigger }: CreateMenu
         useWorkspaceStore.getState().openDoc(created.id);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create item');
+      surfaceError(e, 'Could not create item');
     } finally {
       setBusy(false);
     }

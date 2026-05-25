@@ -20,12 +20,13 @@ use crate::error::LoomError;
 /// IPC payload per Doc 03 §TypeScript Interfaces §Context Caching.
 /// Returned by `get_cache_state` and embedded in `cache_state_changed` events.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct CacheStatus {
     pub cache_name: Option<String>,
     pub expiry_at: Option<String>,
     pub is_stale: bool,
     pub last_cached_message_id: Option<String>,
+    #[ts(type = "number | null")]
     pub total_token_count: Option<i64>,
     /// `doc_id -> SHA-256 hex` map. Empty when no cache is active.
     pub doc_snapshots: BTreeMap<String, String>,
@@ -53,7 +54,7 @@ impl CacheStatus {
 /// Populated only for consulting sessions; handover always has all fields
 /// NULL/false (table CHECK enforces).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct SessionCacheStatus {
     pub cache_name: Option<String>,
     pub expiry_at: Option<String>,

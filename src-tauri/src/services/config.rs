@@ -25,7 +25,7 @@ const CONFIG_FILE: &str = "app_config.json";
 /// `worlds` array, so `world_meta_path` defaults to empty string for forward
 /// compatibility (no world entries existed in those files).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct WorldEntry {
     pub id: String,
     pub name: String,
@@ -36,7 +36,7 @@ pub struct WorldEntry {
 
 /// Full `app_config.json` payload.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AppConfig {
     pub worlds: Vec<WorldEntry>,
     pub active_world_id: Option<String>,

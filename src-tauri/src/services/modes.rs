@@ -23,7 +23,7 @@ use crate::error::LoomError;
 /// session kind — story is the implicit thread on the story item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub enum SessionKind {
     Handover,
     Consulting,
@@ -49,7 +49,7 @@ impl SessionKind {
 /// `conversation_sessions.entry_snapshot`. Phase 4 captures it; Phase 6 reads
 /// it on re-entry to rebuild the consulting cache prefix.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct SessionSnapshot {
     pub schema_version: u32,
     pub system_instruction: String,
@@ -62,7 +62,7 @@ pub struct SessionSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AccordionSnapshotEntry {
     pub segment_id: String,
     pub is_collapsed: bool,
@@ -71,7 +71,7 @@ pub struct AccordionSnapshotEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct AttachedDocEntry {
     pub doc_id: String,
     pub content_hash: String,

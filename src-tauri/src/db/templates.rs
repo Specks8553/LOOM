@@ -18,7 +18,7 @@ use crate::error::LoomError;
 
 /// Doc 03 §`templates`. A source-document template — built-in or user-created.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../src/lib/types.ts")]
+#[ts(export, export_to = "../../src/lib/types.generated.ts")]
 pub struct Template {
     pub id: String,
     pub slug: String,
@@ -29,6 +29,7 @@ pub struct Template {
     /// v2.0's Settings UI (Doc 20 §Templates).
     pub creator_instructions: String,
     pub is_builtin: bool,
+    #[ts(type = "number")]
     pub sort_order: i64,
     pub created_at: String,
     pub modified_at: String,

@@ -8,7 +8,6 @@
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
-use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::db::accordion::{AccordionState, Checkpoint};
@@ -290,9 +289,12 @@ pub async fn summarise_segment(
         Ok((model_name, req, params))
     })?;
 
-    let cancel_token: CancellationToken = access::install_cancel_token(&state)?;
+    // Scoped guard installs the in-flight token (rejecting a concurrent
+    // generation — Wall #6 / CQ-03, fixing the summarise→send double-call hole)
+    // and clears it on every return path.
+    let gen = access::begin_generation(&state)?;
     let outcome =
-        gemini::generate_content(&api_key, &model_name, &request, &params, cancel_token).await?;
+        gemini::generate_content(&api_key, &model_name, &request, &params, gen.token()).await?;
 
     if outcome.cancelled {
         info!(segment_id = %segment_id, "summarise_segment cancelled");

@@ -90,6 +90,11 @@
   --color-feedback-hover: #d98c0a;
   --color-feedback-subtle: rgba(245, 158, 11, 0.06);
 
+  /* Mark triad (Doc 30) — stable rose default, does NOT track accent */
+  --color-mark: #ec4899;
+  --color-mark-hover: #db2777;
+  --color-mark-subtle: rgba(236, 72, 153, 0.1);
+
   /* Message bubble backgrounds — runtime-overridable */
   --bubble-user-bg: #161f18;
   --bubble-ai-bg: #1d1b16;
@@ -148,6 +153,14 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 40%, transparent);
   color: var(--color-text-primary);
+}
+
+/* --- Marks (Doc 30 §5) — in-place highlight via the CSS Custom Highlight API.
+ * Painted background reads as a persistent annotation, distinct from the live
+ * ::selection colour and from Ghostwriter's frame. Ranges are registered in
+ * markHighlight.ts under the `loom-mark` name. */
+::highlight(loom-mark) {
+  background-color: var(--color-mark-subtle);
 }
 
 /* --- Streaming indicator (Doc 09 §LoadingDots, Doc 27 §AI bubble) --- */

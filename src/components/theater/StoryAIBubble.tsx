@@ -1,11 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  Copy,
+  Flag,
+  MessageSquarePlus,
+  Pencil,
+  RotateCw,
+  Sparkles,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
+import { useContextMenu } from '@/components/shared/ContextMenu';
 import { BubbleActionRow, StreamingDots } from '@/components/theater/BubbleActions';
 import { FeedbackStrip } from '@/components/theater/FeedbackStrip';
 import { GhostwriterBubble } from '@/components/theater/GhostwriterBubble';
+import { MarkDot } from '@/components/theater/MarkDot';
+import { useMarkHighlight } from '@/components/theater/markHighlight';
 import { useCachedMessageGuard } from '@/hooks/useCachedMessageGuard';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
+import type { MenuItem } from '@/components/shared/ContextMenu';
 import type { BubbleAction } from '@/components/theater/BubbleActions';
 import type { ChatMessage } from '@/lib/types';
 
@@ -50,34 +64,26 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   const revertGhostwriter = useWorkspaceStore((s) => s.revertGhostwriter);
   const beginFeedbackEdit = useWorkspaceStore((s) => s.beginFeedbackEdit);
   const cancelFeedbackEdit = useWorkspaceStore((s) => s.cancelFeedbackEdit);
+  const allMarks = useWorkspaceStore((s) => s.marks);
+  const marks = useMemo(
+    () => allMarks.filter((m) => m.message_id === message.id),
+    [allMarks, message.id],
+  );
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const { modal: revertGuardModal, guard: revertGuard } = useCachedMessageGuard();
 
   const isGhostwriterActive = ghostwriterActiveId === message.id;
   const isBlocks = message.content_type === 'blocks';
+
+  // Doc 30 §5 — paint this AI bubble's non-orphaned marks in place (offset-based).
+  useMarkHighlight(message.id, contentRef, isBlocks ? [] : marks, true);
   const historyLen = ghostwriterHistoryLength(message.ghostwriter_history);
   const hasFeedback = (message.user_feedback ?? '').length > 0;
 
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (menuPos === null) return;
-    const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuPos(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuPos(null);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [menuPos]);
+  const { showContextMenu } = useContextMenu();
 
   async function handleInsertCheckpoint() {
-    setMenuPos(null);
     // Suggest "Chapter N" where N = (existing non-start checkpoints) + 2.
     const userCpCount = checkpoints.filter((c) => !c.is_start).length;
     const suggestion = `Chapter ${userCpCount + 2}`;
@@ -107,7 +113,6 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
   }
 
   function handleGhostwriter() {
-    setMenuPos(null);
     // Doc 17 §One-bubble-at-a-time — switching off a bubble with a pending
     // diff under review needs an explicit discard confirmation.
     const cur = useWorkspaceStore.getState().ghostwriter;
@@ -141,10 +146,13 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
     message.finish_reason !== 'STOP' &&
     message.finish_reason !== '';
 
+  function handleCopy() {
+    void navigator.clipboard.writeText(message.content);
+  }
+
   function handleContextMenu(e: React.MouseEvent) {
     if (streaming || editing) return;
-    e.preventDefault();
-    setMenuPos({ x: e.clientX, y: e.clientY });
+    showContextMenu(e, buildMenuItems());
   }
 
   if (isGhostwriterActive) {
@@ -153,7 +161,7 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
 
   return (
     <div className="group w-full max-w-[80%] py-2" onContextMenu={handleContextMenu}>
-      <div className="rounded-bubble border border-[var(--color-border-subtle)] bg-[var(--bubble-ai-bg)] px-5 py-4 font-theater-body text-[15px] leading-[1.7] text-[var(--color-text-primary)]">
+      <div className="relative rounded-bubble border border-[var(--color-border-subtle)] bg-[var(--bubble-ai-bg)] px-5 py-4 font-theater-body text-[15px] leading-[1.7] text-[var(--color-text-primary)]">
         {editing ? (
           <div className="flex flex-col gap-2">
             <textarea
@@ -180,7 +188,16 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
           </div>
         ) : (
           <>
-            {!showThinkingHint && <div className="whitespace-pre-wrap">{message.content}</div>}
+            {!showThinkingHint && (
+              <div
+                ref={contentRef}
+                data-loom-selectable={isBlocks ? undefined : message.id}
+                data-loom-bubble-kind={isBlocks ? undefined : 'story-ai'}
+                className="whitespace-pre-wrap"
+              >
+                {message.content}
+              </div>
+            )}
             {streaming && <StreamingDots />}
           </>
         )}
@@ -189,36 +206,9 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
             ⚠ Stopped · {message.finish_reason}
           </div>
         )}
+        {!isBlocks && !streaming && !editing && <MarkDot marks={marks} />}
       </div>
       {!isBlocks && !streaming && <FeedbackStrip message={message} />}
-      {menuPos !== null && (
-        <div
-          ref={menuRef}
-          role="menu"
-          style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 50 }}
-          className="min-w-[200px] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] py-1 text-[12px] text-[var(--color-text-primary)] shadow-lg"
-        >
-          {!isBlocks && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleGhostwriter}
-              className="block w-full px-3 py-1.5 text-left hover:bg-[var(--color-bg-elevated)]"
-            >
-              ✦ Ghostwriter…
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => void handleInsertCheckpoint()}
-            disabled={isGenerating}
-            className="block w-full px-3 py-1.5 text-left hover:bg-[var(--color-bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Insert checkpoint here
-          </button>
-        </div>
-      )}
       {!editing && !streaming && <BubbleActionRow align="left" actions={actionRow()} />}
       {revertGuardModal}
     </div>
@@ -269,5 +259,66 @@ export function StoryAIBubble({ message, streaming = false, isLast = false }: St
       onClick: () => void handleDelete(),
     });
     return actions;
+  }
+
+  /**
+   * Doc 11 §Menu contents by target — the right-click superset. Shares every
+   * handler with `actionRow()`; adds the menu-only actions (Insert checkpoint,
+   * Copy text). `blocks` content drops Ghostwriter / Feedback.
+   */
+  function buildMenuItems(): MenuItem[] {
+    const sep: MenuItem = { label: '', separator: true, onClick: () => {} };
+    const items: MenuItem[] = [];
+    if (!isBlocks) {
+      items.push({ label: 'Ghostwriter…', icon: Sparkles, onClick: handleGhostwriter });
+      items.push({
+        label: hasFeedback ? 'Edit feedback' : 'Add feedback',
+        icon: MessageSquarePlus,
+        onClick: handleFeedback,
+      });
+      items.push(sep);
+    }
+    items.push({
+      label: 'Edit',
+      icon: Pencil,
+      disabled: isGenerating,
+      onClick: () => {
+        setEditValue(message.content);
+        setEditing(true);
+      },
+    });
+    if (isLast) {
+      items.push({
+        label: 'Regenerate',
+        icon: RotateCw,
+        disabled: isGenerating,
+        onClick: () => void handleRegenerate(),
+      });
+    }
+    items.push({
+      label: 'Insert checkpoint here',
+      icon: Flag,
+      disabled: isGenerating,
+      onClick: () => void handleInsertCheckpoint(),
+    });
+    items.push({ label: 'Copy text', icon: Copy, onClick: handleCopy });
+    if (historyLen > 0) {
+      items.push(sep);
+      items.push({
+        label: 'Revert Ghostwriter',
+        icon: Undo2,
+        disabled: isGenerating,
+        onClick: () => void handleRevert(),
+      });
+    }
+    items.push(sep);
+    items.push({
+      label: 'Delete exchange',
+      icon: Trash2,
+      destructive: true,
+      disabled: isGenerating,
+      onClick: () => void handleDelete(),
+    });
+    return items;
   }
 }
