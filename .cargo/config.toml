@@ -1,7 +1,0 @@
-# Windows OpenSSL: SQLCipher's `bundled` feature compiles OpenSSL on first
-# build. The `openssl-sys` crate looks for headers/libs via OPENSSL_DIR.
-# Set per-project here so contributors don't need to manage shell env vars.
-# macOS / Linux: the system openssl is found via pkg-config — these env
-# vars are ignored when the corresponding directory is absent.
-[env]
-OPENSSL_DIR = { value = "C:/Users/Adrian/scoop/apps/openssl/current", force = false, relative = false }

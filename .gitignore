@@ -39,5 +39,10 @@ app_config.json
 .serena/
 *.tsbuildinfo
 
+# Per-developer cargo config (machine-specific OPENSSL_DIR etc.). A hardcoded
+# absolute path here breaks Linux/macOS + CI, so it is NOT tracked. Windows
+# devs: copy .cargo/config.toml.example → .cargo/config.toml and set your path.
+.cargo/config.toml
+
 # Real production icons land in Phase 13 (Doc 26). The placeholder
 # `src-tauri/icons/icon.ico` IS committed so tauri-build runs out of the box.
