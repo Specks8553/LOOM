@@ -48,6 +48,14 @@ jobs:
             exit 1
           fi
 
+      - name: Stub frontend dist for codegen
+        # The Rust job runs clippy/test/codegen only — it never bundles the UI.
+        # `tauri::generate_context!` (lib.rs) still requires `frontendDist`
+        # (../dist) to exist at macro-expansion, so provide a minimal stub.
+        run: |
+          mkdir -p dist
+          printf '<!doctype html><html><head><meta charset="utf-8"><title>stub</title></head><body></body></html>' > dist/index.html
+
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
